@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Listă Învoiri Weekend - {{ current_user.username }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Listă Învoiri Weekend (Vineri-Duminică)</h2>
+        <a href="{{ url_for('add_weekend_leave') }}" class="btn btn-success">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-calendar-week-fill" viewBox="0 0 16 16">
+                <path d="M4 .5a.5.5 0 0 0-1 0V1H2a2 2 0 0 0-2 2v1h16V3a2 2 0 0 0-2-2h-1V.5a.5.5 0 0 0-1 0V1H4V.5zM16 14V5H0v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2zM9.5 7.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm3 0h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zM2 10.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5z"/>
+            </svg>
+            Adaugă Învoire Weekend
+        </a>
+    </div>
+
+    {% macro render_weekend_leaves_table(leaves, table_title) %}
+        {% if leaves %}
+        <h4 class="mt-4">{{ table_title }} ({{ leaves|length }})</h4>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Student</th>
+                        <th>Weekend (Vineri)</th>
+                        <th>Zile și Intervale Selectate</th>
+                        <th>Motiv</th>
+                        <th>Status</th>
+                        <th>Acțiuni</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for leave in leaves %}
+                    <tr class="{{ 'table-success' if leave.is_any_interval_active_now and leave.status == 'Aprobată' else ('table-warning' if leave.is_overall_active_or_upcoming else 'table-secondary') }}">
+                        <td>{{ leave.student.nume }} {{ leave.student.prenume }}</td>
+                        <td>{{ leave.weekend_start_date.strftime('%d-%m-%Y') }}</td>
+                        <td>
+                            {% for interval in leave.get_intervals() %}
+                                <div>
+                                    <strong>{{ interval.day_name }}</strong> ({{ interval.start.strftime('%d.%m') }}):
+                                    {{ interval.start.strftime('%H:%M') }} - {{ interval.end.strftime('%H:%M') }}
+                                    {% if interval.is_active_now and leave.status == 'Aprobată' %}
+                                        <span class="badge bg-success ms-1">Activ acum</span>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                Nespecificat
+                            {% endfor %}
+                        </td>
+                        <td>{{ leave.reason if leave.reason else '-' }}</td>
+                        <td>
+                            {% if leave.status == 'Aprobată' %}
+                                {% if leave.is_overall_past %}
+                                    <span class="badge bg-secondary">Expirată</span>
+                                {% elif leave.is_any_interval_active_now %}
+                                     <span class="badge bg-success">Cel puțin un interval Activ</span>
+                                {% elif leave.is_overall_active_or_upcoming %}
+                                    <span class="badge bg-warning text-dark">Urmează</span>
+                                {% else %}
+                                     <span class="badge bg-info text-dark">Aprobată</span> {# Fallback if logic is tricky #}
+                                {% endif %}
+                            {% elif leave.status == 'Anulată' %}
+                                <span class="badge bg-danger">Anulată</span>
+                            {% else %}
+                                <span class="badge bg-light text-dark">{{ leave.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if leave.status == 'Aprobată' and leave.is_overall_active_or_upcoming %}
+                            <form method="POST" action="{{ url_for('cancel_weekend_leave', leave_id=leave.id) }}" style="display: inline;" onsubmit="return confirm('Ești sigur că vrei să anulezi această învoire de weekend?');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Anulează Învoirea">
+                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-x-circle-fill" viewBox="0 0 16 16">
+                                        <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM5.354 4.646a.5.5 0 1 0-.708.708L7.293 8l-2.647 2.646a.5.5 0 0 0 .708.708L8 8.707l2.646 2.647a.5.5 0 0 0 .708-.708L8.707 8l2.647-2.646a.5.5 0 0 0-.708-.708L8 7.293 5.354 4.646z"/>
+                                    </svg>
+                                    Anulează
+                                </button>
+                            </form>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted"><em>Nu există învoiri de weekend în această categorie.</em></p>
+        {% endif %}
+    {% endmacro %}
+
+    {{ render_weekend_leaves_table(active_or_upcoming_leaves, 'Învoiri de Weekend Active sau Viitoare') }}
+    {{ render_weekend_leaves_table(past_leaves, 'Învoiri de Weekend Trecute/Anulate') }}
+
+    <p class="mt-4">
+        <a href="{{ url_for('gradat_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+            &laquo; Înapoi la Panoul Gradat
+        </a>
+    </p>
+</div>
+{% endblock %}

@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Asignează Serviciu{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Asignează Serviciu Nou</h2>
+    <hr>
+
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-7">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('assign_service') }}" id="assignServiceForm">
+                        <div class="mb-3">
+                            <label for="student_id" class="form-label">Student <span class="text-danger">*</span></label>
+                            <select class="form-select" id="student_id" name="student_id" required>
+                                <option value="" disabled {% if not form_data %}selected{% endif %}>Selectează un student...</option>
+                                {% for student in students %}
+                                    <option value="{{ student.id }}" {% if form_data and form_data.student_id == student.id|string %}selected{% endif %}>
+                                        {{ student.grad_militar }} {{ student.nume }} {{ student.prenume }} (Pluton: {{student.pluton }})
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="service_type" class="form-label">Tip Serviciu <span class="text-danger">*</span></label>
+                            <select class="form-select" id="service_type" name="service_type" required>
+                                <option value="" disabled {% if not form_data %}selected{% endif %}>Selectează tipul...</option>
+                                {% for type in service_types %}
+                                    <option value="{{ type }}" {% if form_data and form_data.service_type == type %}selected{% endif %}>{{ type }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="service_date" class="form-label">Data Serviciului <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="service_date" name="service_date"
+                                   value="{{ form_data.service_date if form_data else today_str }}" required>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="start_time" class="form-label">Ora de Început <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" id="start_time" name="start_time"
+                                       value="{{ form_data.start_time if form_data else '' }}" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="end_time" class="form-label">Ora de Sfârșit <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" id="end_time" name="end_time"
+                                       value="{{ form_data.end_time if form_data else '' }}" required>
+                            </div>
+                        </div>
+                        <small class="form-text text-muted d-block mb-3">
+                            Pentru servicii care trec în ziua următoare (ex: GSS 07:00 - 07:00), asigurați-vă că data serviciului este data la care începe.
+                        </small>
+
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="participates_in_roll_call" id="participates_in_roll_call" value="true"
+                                   {% if form_data and form_data.participates_in_roll_call == 'true' %}checked{% elif not form_data %}checked{% endif %}>
+                            <label class="form-check-label" for="participates_in_roll_call">
+                                Participă la Apelul de Seară
+                            </label>
+                        </div>
+                        <small class="form-text text-muted d-block mb-3">
+                            Debifați dacă studentul nu este prezent fizic în formație la apel (ex: este la postul de GSS, SVM în timpul apelului).
+                        </small>
+
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">Note (Opțional)</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="2">{{ form_data.notes if form_data else '' }}</textarea>
+                        </div>
+
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('list_services') }}" class="btn btn-outline-secondary">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-left-circle" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M1 8a7 7 0 1 0 14 0A7 7 0 0 0 1 8zm15 0A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-4.5-.5a.5.5 0 0 1 0 1H5.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L5.707 7.5H11.5z"/>
+                                </svg>
+                                Anulare
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-shield-check" viewBox="0 0 16 16">
+                                    <path d="M5.338 1.59a61.44 61.44 0 0 0-2.837.856.481.481 0 0 0-.328.39c-.554 4.157.726 7.19 2.253 9.188a10.725 10.725 0 0 0 2.287 2.233c.346.244.652.42.893.533.12.057.218.095.293.118a.55.55 0 0 0 .101.025.615.615 0 0 0 .1-.025c.076-.023.174-.06.294-.118.24-.113.547-.29.893-.533a10.726 10.726 0 0 0 2.287-2.233c1.527-1.997 2.807-5.031 2.253-9.188a.48.48 0 0 0-.328-.39c-.95-.3-2.005-.666-2.837-.855A1.113 1.113 0 0 0 8.338.92H7.662a1.113 1.113 0 0 0-.754.67ZM5.054 1.23A62.725 62.725 0 0 1 8 1c1.178 0 2.242.13 3.226.366C12.136 1.573 13.296 2.796 14 5c.704 2.203.623 4.653-.313 6.566A9.722 9.722 0 0 1 8 14.09a9.722 9.722 0 0 1-5.687-2.524C1.377 9.652 1.296 7.203 2 5c.704-2.203 1.864-3.427 2.77-3.735a1.05 1.05 0 0 1 .283-.035Z"/>
+                                    <path d="M10.854 6.146a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 1 1 .708-.708L7.5 8.793l2.646-2.647a.5.5 0 0 1 .708 0z"/>
+                                  </svg>
+                                Asignează Serviciu
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const serviceTypeSelect = document.getElementById('service_type');
+    const startTimeInput = document.getElementById('start_time');
+    const endTimeInput = document.getElementById('end_time');
+    const participatesCheckbox = document.getElementById('participates_in_roll_call');
+    const serviceDateInput = document.getElementById('service_date');
+
+    // Format: "ServiceType": ["HH:MM_start", "HH:MM_end", participates_default (true/false)]
+    const defaultServiceTimes = {{ default_times | tojson }};
+    const serviceNoRollCall = ["GSS", "SVM", "Intervenție"]; // Tipuri care de obicei nu participă la apel
+
+    if (serviceTypeSelect) {
+        serviceTypeSelect.addEventListener('change', function() {
+            const selectedType = this.value;
+            if (defaultServiceTimes[selectedType]) {
+                startTimeInput.value = defaultServiceTimes[selectedType][0];
+                endTimeInput.value = defaultServiceTimes[selectedType][1];
+                // Default participation in roll call (true unless specified)
+                participatesCheckbox.checked = !serviceNoRollCall.includes(selectedType);
+
+            } else { // Pentru "Altul" sau tipuri nedeclarate
+                startTimeInput.value = '';
+                endTimeInput.value = '';
+                participatesCheckbox.checked = true;
+            }
+        });
+    }
+    // Inițializează valorile la încărcare dacă un tip e deja selectat (ex: la eroare de validare)
+    if (serviceTypeSelect && serviceTypeSelect.value && !startTimeInput.value && !endTimeInput.value) {
+         const event = new Event('change');
+         serviceTypeSelect.dispatchEvent(event);
+    }
+});
+</script>
+{% endblock %}
