@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Situație Pluton - {{ current_user.username }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Situație Pluton ({{ current_user.username }})</h2>
+        <a href="{{ url_for('gradat_dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Panou Gradat</a>
+    </div>
+    <p class="text-muted">Informații actualizate la: {{ current_time_str }}</p>
+    <hr>
+
+    <!-- Efective Curente -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">Efective Curente</h4>
+        </div>
+        <div class="card-body">
+            <p>
+                <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ efectiv_control_now }}</span><br>
+                <strong>Efectiv Prezent Total (Ep):</strong> <span class="badge bg-success fs-6">{{ efectiv_prezent_total_now }}</span>
+                <small class="d-block ms-3">(Din care: În formație: {{ in_formation_now }}, La servicii: {{ on_duty_now_list|length }})</small><br>
+                <strong>Efectiv Absent (Ea):</strong> <span class="badge bg-danger fs-6">{{ efectiv_absent_now_count }}</span>
+            </p>
+            {% if on_duty_now_list %}
+                <h6 class="mt-2">Studenți la Servicii (Acum):</h6>
+                <ul class="list-group list-group-flush list-group-numbered" style="font-size: 0.9em;">
+                    {% for item in on_duty_now_list %}
+                        <li class="list-group-item py-1">{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            {% if absent_now_list %}
+                <h6 class="mt-2">Studenți Absenți/Plecați (Acum):</h6>
+                <ul class="list-group list-group-flush list-group-numbered" style="font-size: 0.9em;">
+                    {% for item in absent_now_list %}
+                        <li class="list-group-item py-1">{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            {% elif efectiv_absent_now_count == 0 and efectiv_control_now > 0 and on_duty_now_list|length == 0 %}
+                 <p class="text-success mt-2 mb-0"><strong>Toți studenții sunt prezenți în formație!</strong></p>
+            {% elif efectiv_control_now == 0 %}
+                 <p class="text-info mt-2 mb-0">Nu aveți studenți în evidență.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Următorul Apel -->
+    {% if next_report_info %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-info text-dark">
+            <h4 class="mb-0">Previziune pentru {{ next_report_info.type }} ({{ next_report_info.time }})</h4>
+        </div>
+        <div class="card-body">
+            <p>
+                <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ next_report_info.ec }}</span><br>
+                <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ next_report_info.ep }}</span>
+                <small class="d-block ms-3">(Din care: În formație: {{ next_report_info.in_formation }}, La servicii: {{ next_report_info.on_duty_list|length }})</small><br>
+                <strong>Efectiv Absent (Ea):</strong> <span class="badge bg-danger fs-6">{{ next_report_info.ea_count }}</span>
+            </p>
+            {% if next_report_info.on_duty_list %}
+                <h6 class="mt-2">Studenți la Servicii (la {{ next_report_info.type }}):</h6>
+                <ul class="list-group list-group-flush list-group-numbered" style="font-size: 0.9em;">
+                    {% for item in next_report_info.on_duty_list %}
+                        <li class="list-group-item py-1">{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            {% if next_report_info.absent_list %}
+                <h6 class="mt-2">Studenți Absenți/Plecați (la {{ next_report_info.type }}):</h6>
+                <ul class="list-group list-group-flush list-group-numbered" style="font-size: 0.9em;">
+                    {% for item in next_report_info.absent_list %}
+                        <li class="list-group-item py-1">{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+
+    <div class="row">
+        <!-- Servicii Planificate -->
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Servicii Planificate</h5>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    <h6>Azi ({{ today.strftime('%d.%m') }}):</h6>
+                    {% if services_today %}
+                        <ul class="list-unstyled">
+                        {% for srv in services_today %}
+                            <li><small><strong>{{ srv.student.nume }} {{ srv.student.prenume }}</strong> ({{ srv.service_type }}: {{ srv.start_datetime.strftime('%H:%M') }}-{{ srv.end_datetime.strftime('%H:%M') }})</small></li>
+                        {% endfor %}
+                        </ul>
+                    {% else %}<p><small class="text-muted">Niciun serviciu azi.</small></p>{% endif %}
+
+                    <h6 class="mt-3">Mâine ({{ tomorrow.strftime('%d.%m') }}):</h6>
+                    {% if services_tomorrow %}
+                        <ul class="list-unstyled">
+                        {% for srv in services_tomorrow %}
+                            <li><small><strong>{{ srv.student.nume }} {{ srv.student.prenume }}</strong> ({{ srv.service_type }}: {{ srv.start_datetime.strftime('%H:%M') }}-{{ srv.end_datetime.strftime('%H:%M') }})</small></li>
+                        {% endfor %}
+                        </ul>
+                    {% else %}<p><small class="text-muted">Niciun serviciu mâine.</small></p>{% endif %}
+
+                    <h6 class="mt-3">Poimâine ({{ day_after_tomorrow.strftime('%d.%m') }}):</h6>
+                    {% if services_day_after %}
+                        <ul class="list-unstyled">
+                        {% for srv in services_day_after %}
+                            <li><small><strong>{{ srv.student.nume }} {{ srv.student.prenume }}</strong> ({{ srv.service_type }}: {{ srv.start_datetime.strftime('%H:%M') }}-{{ srv.end_datetime.strftime('%H:%M') }})</small></li>
+                        {% endfor %}
+                        </ul>
+                    {% else %}<p><small class="text-muted">Niciun serviciu poimâine.</small></p>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Plecări Viitoare -->
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Plecări Viitoare (urm. 48h)</h5>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    {% if upcoming_leaves_list %}
+                        <ul class="list-unstyled">
+                        {% for leave_info in upcoming_leaves_list %}
+                            <li><small>{{ leave_info }}</small></li>
+                        {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p><small class="text-muted">Nicio plecare programată în următoarele 48 de ore.</small></p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

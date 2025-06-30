@@ -4,8 +4,8 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, curren
 from werkzeug.security import generate_password_hash, check_password_hash
 import bcrypt
 import os
-import secrets
-from datetime import datetime, date, time, timedelta
+import secrets 
+from datetime import datetime, date, time, timedelta 
 from sqlalchemy import func, or_
 import re # Pentru extragerea ID-ului din username comandant
 
@@ -25,7 +25,14 @@ login_manager.login_message = "Te rugăm să te autentifici pentru a accesa acea
 # Constante
 SERVICE_TYPES = ["GSS", "SVM", "Planton 1", "Planton 2", "Planton 3", "Intervenție", "Altul"]
 GENDERS = ["Nespecificat", "M", "F"]
-
+KNOWN_RANK_PATTERNS = [ # Mutat aici pentru a fi global
+    re.compile(r"^(Mm V)\s+", re.IGNORECASE), re.compile(r"^(Sd cap)\s+", re.IGNORECASE),
+    re.compile(r"^(Sg Maj)\s+", re.IGNORECASE), re.compile(r"^(Mm IV)\s+", re.IGNORECASE),
+    re.compile(r"^(Sdt\.?)\s+", re.IGNORECASE), re.compile(r"^(Sd\.?)\s+", re.IGNORECASE),
+    re.compile(r"^(Cap\.?)\s+", re.IGNORECASE), re.compile(r"^(Sg\.?)\s+", re.IGNORECASE),
+    re.compile(r"^(Frt\.?)\s+", re.IGNORECASE), re.compile(r"^(Plt\.? Adj\.?)\s+", re.IGNORECASE), 
+    re.compile(r"^(Plt\.? Maj\.?)\s+", re.IGNORECASE), re.compile(r"^(Plt\.?)\s+", re.IGNORECASE),
+]
 
 # Modelul User
 class User(db.Model, UserMixin):
@@ -51,16 +58,15 @@ class Student(db.Model):
     prenume = db.Column(db.String(100), nullable=False)
     grad_militar = db.Column(db.String(50), nullable=False)
     id_unic_student = db.Column(db.String(50), unique=True, nullable=True)
-    pluton = db.Column(db.String(50), nullable=False) # Stocat ca string, ex: "1", "2"
-    companie = db.Column(db.String(50), nullable=False) # Stocat ca string, ex: "1", "2"
-    batalion = db.Column(db.String(50), nullable=False) # Stocat ca string, ex: "1", "2"
-    gender = db.Column(db.String(10), default='Nespecificat', nullable=False)
+    pluton = db.Column(db.String(50), nullable=False) 
+    companie = db.Column(db.String(50), nullable=False) 
+    batalion = db.Column(db.String(50), nullable=False) 
+    gender = db.Column(db.String(10), default='Nespecificat', nullable=False) 
     volunteer_points = db.Column(db.Integer, default=0, nullable=False)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     creator = db.relationship('User', backref=db.backref('students_created', lazy=True))
     def __repr__(self): return f'<Student {self.grad_militar} {self.nume} {self.prenume} - Pluton {self.pluton}>'
 
-# ... (celelalte modele rămân la fel: Permission, DailyLeave, WeekendLeave, VolunteerActivity, ActivityParticipant, ServiceAssignment) ...
 # Modelul Permission
 class Permission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -84,7 +90,7 @@ class Permission(db.Model):
 class DailyLeave(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('student.id', ondelete='CASCADE'), nullable=False)
-    leave_date = db.Column(db.Date, nullable=False)
+    leave_date = db.Column(db.Date, nullable=False) 
     start_time = db.Column(db.Time, nullable=False)
     end_time = db.Column(db.Time, nullable=False)
     reason = db.Column(db.String(255), nullable=True)
@@ -122,7 +128,7 @@ class WeekendLeave(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('student.id', ondelete='CASCADE'), nullable=False)
     weekend_start_date = db.Column(db.Date, nullable=False)
-    day1_selected = db.Column(db.String(10), nullable=True)
+    day1_selected = db.Column(db.String(10), nullable=True) 
     day1_date = db.Column(db.Date, nullable=True)
     day1_start_time = db.Column(db.Time, nullable=True)
     day1_end_time = db.Column(db.Time, nullable=True)
@@ -182,11 +188,11 @@ class ActivityParticipant(db.Model):
 class ServiceAssignment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('student.id', ondelete='CASCADE'), nullable=False)
-    service_type = db.Column(db.String(100), nullable=False)
-    service_date = db.Column(db.Date, nullable=False)
+    service_type = db.Column(db.String(100), nullable=False) 
+    service_date = db.Column(db.Date, nullable=False) 
     start_datetime = db.Column(db.DateTime, nullable=False)
     end_datetime = db.Column(db.DateTime, nullable=False)
-    participates_in_roll_call = db.Column(db.Boolean, default=True)
+    participates_in_roll_call = db.Column(db.Boolean, default=True) 
     notes = db.Column(db.Text, nullable=True)
     student = db.relationship('Student', backref=db.backref('service_assignments', lazy=True, cascade="all, delete-orphan"))
     created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -211,10 +217,42 @@ def init_db():
         else: print("Admin user already exists.")
         print("DB initialized.")
 
-# --- Funcții Helper pentru Conflicte și Prezență ---
-# ... (get_student_status, check_leave_conflict, check_service_conflict_for_student rămân la fel) ...
+# --- Funcții Helper Globale ---
+def get_next_friday(start_date=None):
+    d = start_date if start_date else date.today()
+    while d.weekday() != 4: # Vineri = 4
+        d += timedelta(days=1)
+    return d
+
+def validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj):
+    if leave_date_obj.weekday() > 3: # 0-Luni, ..., 3-Joi
+        return False, "Învoirile zilnice sunt permise doar de Luni până Joi."
+    in_program_start = time(7, 0); in_program_end = time(14, 20)
+    out_program_evening_start = time(22, 0); out_program_morning_end = time(7, 0)
+    is_in_program = (in_program_start <= start_time_obj <= in_program_end and
+                     in_program_start <= end_time_obj <= in_program_end and
+                     start_time_obj < end_time_obj)
+    is_out_program_same_night = (start_time_obj >= out_program_evening_start and 
+                                 end_time_obj > start_time_obj and 
+                                 end_time_obj <= time(23,59,59))
+    is_out_program_overnight = (start_time_obj >= out_program_evening_start and 
+                                end_time_obj < start_time_obj and 
+                                end_time_obj <= out_program_morning_end)
+    is_out_program_early_morning_same_day = (start_time_obj < out_program_morning_end and 
+                                            end_time_obj <= out_program_morning_end and 
+                                            start_time_obj < end_time_obj)
+    is_out_program = is_out_program_same_night or is_out_program_overnight or is_out_program_early_morning_same_day
+    if not is_in_program and not is_out_program:
+        return False, "Interval orar invalid. Permis: 07:00-14:20 sau 22:00-07:00 (poate fi a doua zi)."
+    if is_out_program:
+        if in_program_start <= start_time_obj < in_program_end:
+            return False, "Intervalul 'afară program' nu poate începe în timpul programului (07:00-14:20)."
+        if in_program_start < end_time_obj <= in_program_end and not is_out_program_overnight:
+             return False, "Intervalul 'afară program' nu se poate termina în timpul programului (07:00-14:20)."
+    return True, "Valid"
+
 def get_student_status(student, datetime_check):
-    # 1. Verifică Servicii
+    # Prioritatea 1: Serviciu
     active_service = ServiceAssignment.query.filter(
         ServiceAssignment.student_id == student.id,
         ServiceAssignment.start_datetime <= datetime_check,
@@ -222,13 +260,14 @@ def get_student_status(student, datetime_check):
     ).order_by(ServiceAssignment.start_datetime).first()
     if active_service:
         return {
-            "status_code": "absent_service",
+            "status_code": "on_duty", 
             "reason": f"Serviciu ({active_service.service_type})",
             "until": active_service.end_datetime,
             "details": f"Serviciu: {active_service.service_type}",
-            "object": active_service
+            "object": active_service,
+            "participates_in_roll_call": active_service.participates_in_roll_call 
         }
-    # 2. Verifică Permisii
+    # Prioritatea 2: Permisie
     active_permission = Permission.query.filter(
         Permission.student_id == student.id, Permission.status == 'Aprobată',
         Permission.start_datetime <= datetime_check, Permission.end_datetime >= datetime_check
@@ -238,26 +277,27 @@ def get_student_status(student, datetime_check):
             "status_code": "absent_permission", "reason": "Permisie", "until": active_permission.end_datetime,
             "details": "Permisie", "object": active_permission
         }
-    # 3. Verifică Învoiri Weekend
+    # Prioritatea 3: Învoire Weekend
     weekend_leaves = WeekendLeave.query.filter(WeekendLeave.student_id == student.id, WeekendLeave.status == 'Aprobată').all()
     for wl in weekend_leaves:
         for interval in wl.get_intervals():
             if interval['start'] <= datetime_check <= interval['end']:
                 return {
-                    "status_code": "absent_weekend_leave", "reason": f"Învoire Weekend ({interval['day_name']})",
+                    "status_code": "absent_weekend_leave", "reason": f"Învoire Weekend ({interval['day_name']})", 
                     "until": interval['end'], "details": f"Învoire Weekend: {interval['day_name']}", "object": wl
                 }
-    # 4. Verifică Învoiri Zilnice
+    # Prioritatea 4: Învoire Zilnică
     daily_leaves = DailyLeave.query.filter(DailyLeave.student_id == student.id, DailyLeave.status == 'Aprobată').all()
     for dl in daily_leaves:
         if dl.start_datetime <= datetime_check <= dl.end_datetime:
              return {
-                "status_code": "absent_daily_leave", "reason": f"Învoire Zilnică ({dl.leave_type_display})",
+                "status_code": "absent_daily_leave", "reason": f"Învoire Zilnică ({dl.leave_type_display})", 
                 "until": dl.end_datetime, "details": f"Învoire Zilnică: {dl.leave_type_display}", "object": dl
             }
     return {"status_code": "present", "reason": "Prezent", "until": None, "details": "Prezent", "object": None}
 
 def check_leave_conflict(student_id, leave_start_dt, leave_end_dt, existing_leave_id=None, leave_type=None):
+    # Verifică conflicte cu servicii GSS sau Intervenție
     query_services = ServiceAssignment.query.filter(
         ServiceAssignment.student_id == student_id,
         or_(ServiceAssignment.service_type == 'GSS', ServiceAssignment.service_type == 'Intervenție'),
@@ -265,11 +305,12 @@ def check_leave_conflict(student_id, leave_start_dt, leave_end_dt, existing_leav
     )
     conflicting_service = query_services.first()
     if conflicting_service: return f"serviciu ({conflicting_service.service_type}) pe {conflicting_service.service_date.strftime('%d-%m-%Y')}"
-
+    
+    # Verifică conflicte cu alte învoiri/permisii
     query_permissions = Permission.query.filter(Permission.student_id == student_id, Permission.status == 'Aprobată', Permission.start_datetime < leave_end_dt, Permission.end_datetime > leave_start_dt)
     if leave_type == 'permission' and existing_leave_id: query_permissions = query_permissions.filter(Permission.id != existing_leave_id)
     if query_permissions.first() and leave_type != 'permission' : return "o permisie existentă"
-    if query_permissions.count() > (1 if leave_type == 'permission' and existing_leave_id else 0) : return "o permisie existentă"
+    if query_permissions.count() > (0 if leave_type == 'permission' and existing_leave_id else 0) and leave_type == 'permission' and not existing_leave_id : return "o permisie existentă" # Caz specific pentru adăugare nouă
 
     daily_leaves = DailyLeave.query.filter(DailyLeave.student_id == student_id, DailyLeave.status == 'Aprobată').all()
     for dl in daily_leaves:
@@ -317,7 +358,6 @@ def dashboard():
 def logout(): logout_user(); flash('Ai fost deconectat.', 'success'); return redirect(url_for('home'))
 
 # --- Autentificare Admin ---
-# ... (Rutele admin rămân la fel) ...
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
     if current_user.is_authenticated and current_user.role == 'admin': return redirect(url_for('admin_dashboard'))
@@ -363,54 +403,32 @@ def admin_delete_user(user_id):
     if current_user.role != 'admin':
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('home'))
-
     user_to_delete = User.query.get_or_404(user_id)
-
     if user_to_delete.id == current_user.id:
         flash('Nu vă puteți șterge propriul cont de admin.', 'danger')
         return redirect(url_for('admin_dashboard'))
-
     if user_to_delete.role == 'admin':
         flash('Nu se poate șterge un alt administrator prin această interfață.', 'warning')
         return redirect(url_for('admin_dashboard'))
-
     username_deleted = user_to_delete.username
     role_deleted = user_to_delete.role
-
     if role_deleted == 'gradat':
-        # Șterge toți studenții creați de acest gradat și datele lor asociate (prin cascade)
         students_to_delete = Student.query.filter_by(created_by_user_id=user_id).all()
         for student in students_to_delete:
-            # Ștergerea studentului va declanșa ștergerea în cascadă a permisii, învoiri, servicii, etc.
-            # datorită `ondelete='CASCADE'` și `cascade="all, delete-orphan"` în modele.
             db.session.delete(student)
         flash(f'Studenții și toate datele asociate gradatului {username_deleted} au fost șterse.', 'info')
-
-    # Șterge utilizatorul în sine
-    # Orice relație directă cu User (ex: created_by_user_id în VolunteerActivity, ServiceAssignment)
-    # ar trebui să fie setată la nullable sau gestionată (ex: setată la admin default, sau șterse și acele înregistrări)
-    # Pentru simplitate, presupunem că ștergerea user-ului e ok dacă nu mai sunt dependențe FK directe care blochează.
-    # Relațiile unde user_id este FK (ex: VolunteerActivity.creator, ServiceAssignment.creator)
-    # vor cauza probleme dacă nu sunt `ondelete='SET NULL'` sau `ondelete='CASCADE'` (dacă se dorește ștergerea acelor activități/servicii)
-    # Momentan, created_by_user_id în VolunteerActivity și ServiceAssignment sunt Non-nullable,
-    # deci ștergerea unui gradat care a creat aceste entități va eșua dacă nu sunt șterse manual mai întâi
-    # sau dacă nu se modifică schema pentru a permite NULL sau a adăuga cascade.
-    # Pentru siguranță, ștergem explicit activitățile și serviciile create de utilizator.
-
-    VolunteerActivity.query.filter_by(created_by_user_id=user_id).delete()
-    ServiceAssignment.query.filter_by(created_by_user_id=user_id).delete()
-    # Permisiile, învoirile sunt legate de student, care e șters în cascadă dacă e gradat.
-    # Dacă un comandant ar crea direct aceste entități (nu e cazul acum), ar trebui o logică similară.
+    VolunteerActivity.query.filter_by(created_by_user_id=user_id).delete(synchronize_session=False)
+    ServiceAssignment.query.filter_by(created_by_user_id=user_id).delete(synchronize_session=False)
+    Permission.query.filter_by(created_by_user_id=user_id).delete(synchronize_session=False) # Dacă gradatul ar putea crea permisii direct pt el
+    DailyLeave.query.filter_by(created_by_user_id=user_id).delete(synchronize_session=False)
+    WeekendLeave.query.filter_by(created_by_user_id=user_id).delete(synchronize_session=False)
 
     db.session.delete(user_to_delete)
     db.session.commit()
-
     flash(f'Utilizatorul {username_deleted} ({role_deleted}) a fost șters cu succes.', 'success')
     return redirect(url_for('admin_dashboard'))
 
-
 # --- Autentificare Utilizator ---
-# ... (Rutele de login utilizator rămân la fel) ...
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
@@ -439,7 +457,6 @@ def set_personal_code():
     return render_template('set_personal_code.html')
 
 # --- Rute Gradat ---
-# ... (Rutele gradat rămân la fel) ...
 @app.route('/gradat/dashboard')
 @login_required
 def gradat_dashboard():
@@ -452,10 +469,106 @@ def gradat_dashboard():
     active_wl_count = sum(1 for wl in active_wl_q if wl.is_any_interval_active_now)
     total_volunteer_activities = VolunteerActivity.query.filter_by(created_by_user_id=current_user.id).count()
     active_services_count = ServiceAssignment.query.join(Student).filter(Student.created_by_user_id == current_user.id, ServiceAssignment.start_datetime <= datetime.now(), ServiceAssignment.end_datetime >= datetime.now()).count()
-
-    return render_template('gradat_dashboard.html', student_count=s_count, active_permissions_count=active_p_count,
+    return render_template('gradat_dashboard.html', student_count=s_count, active_permissions_count=active_p_count, 
                            active_daily_leaves_count=active_dl_count, active_weekend_leaves_count=active_wl_count,
                            total_volunteer_activities=total_volunteer_activities, active_services_count=active_services_count)
+
+@app.route('/gradat/situatie_pluton')
+@login_required
+def situatie_pluton():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('home'))
+
+    now = datetime.now()
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+    day_after_tomorrow = today + timedelta(days=2) 
+    next_48h_limit = now + timedelta(hours=48)
+
+    students_platoon = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.nume, Student.prenume).all()
+    
+    efectiv_control_now = len(students_platoon)
+    efectiv_prezent_total_now = 0 
+    in_formation_now = 0
+    on_duty_now_list = [] 
+    absent_now_list = []  
+
+    for student in students_platoon:
+        status_info = get_student_status(student, now) 
+        if status_info['status_code'] == 'present':
+            in_formation_now += 1
+            efectiv_prezent_total_now +=1
+        elif status_info['status_code'] == 'on_duty': 
+            efectiv_prezent_total_now +=1 
+            on_duty_now_list.append(f"{student.grad_militar} {student.nume} {student.prenume} - {status_info['reason']}")
+        else: 
+            absent_now_list.append(f"{student.grad_militar} {student.nume} {student.prenume} - {status_info['reason']} (până la {status_info['until'].strftime('%d.%m %H:%M') if status_info['until'] else 'N/A'})")
+    
+    efectiv_absent_now_count = len(absent_now_list)
+
+    services_today = ServiceAssignment.query.join(Student).filter(
+        ServiceAssignment.created_by_user_id == current_user.id, Student.id == ServiceAssignment.student_id,
+        ServiceAssignment.service_date == today
+    ).order_by(ServiceAssignment.start_datetime).all()
+    services_tomorrow = ServiceAssignment.query.join(Student).filter(
+        ServiceAssignment.created_by_user_id == current_user.id, Student.id == ServiceAssignment.student_id,
+        ServiceAssignment.service_date == tomorrow
+    ).order_by(ServiceAssignment.start_datetime).all()
+    services_day_after = ServiceAssignment.query.join(Student).filter(
+        ServiceAssignment.created_by_user_id == current_user.id, Student.id == ServiceAssignment.student_id,
+        ServiceAssignment.service_date == day_after_tomorrow
+    ).order_by(ServiceAssignment.start_datetime).all()
+
+    upcoming_leaves_list = []
+    permissions_upcoming = Permission.query.join(Student).filter(
+        Permission.created_by_user_id == current_user.id, Permission.status == 'Aprobată', Student.id == Permission.student_id,
+        Permission.start_datetime > now, Permission.start_datetime <= next_48h_limit
+    ).order_by(Permission.start_datetime).all()
+    for p_up in permissions_upcoming: 
+        upcoming_leaves_list.append(f"Permisie: {p_up.student.grad_militar} {p_up.student.nume} {p_up.student.prenume} (de la {p_up.start_datetime.strftime('%d.%m %H:%M')} până la {p_up.end_datetime.strftime('%d.%m %H:%M')})")
+
+    daily_leaves_upcoming_q = DailyLeave.query.join(Student).filter(
+        DailyLeave.created_by_user_id == current_user.id, DailyLeave.status == 'Aprobată', Student.id == DailyLeave.student_id
+    ).order_by(DailyLeave.leave_date, DailyLeave.start_time).all() 
+    for dl_up in daily_leaves_upcoming_q: 
+        if now < dl_up.start_datetime <= next_48h_limit :
+             upcoming_leaves_list.append(f"Învoire Zilnică: {dl_up.student.grad_militar} {dl_up.student.nume} {dl_up.student.prenume} ({dl_up.leave_date.strftime('%d.%m')} {dl_up.start_time.strftime('%H:%M')}-{dl_up.end_time.strftime('%H:%M')})")
+    
+    weekend_leaves_upcoming_q = WeekendLeave.query.join(Student).filter(
+        WeekendLeave.created_by_user_id == current_user.id, WeekendLeave.status == 'Aprobată', Student.id == WeekendLeave.student_id
+    ).order_by(WeekendLeave.weekend_start_date).all() 
+    for wl_up in weekend_leaves_upcoming_q: 
+        for interval in wl_up.get_intervals():
+            if now < interval['start'] <= next_48h_limit:
+                 upcoming_leaves_list.append(f"Învoire Weekend ({interval['day_name']}): {wl_up.student.grad_militar} {wl_up.student.nume} {wl_up.student.prenume} ({interval['start'].strftime('%d.%m %H:%M')}-{interval['end'].strftime('%H:%M')})")
+    
+    next_roll_call_dt = now.replace(hour=20 if now.weekday() < 4 else 22, minute=0, second=0, microsecond=0)
+    if next_roll_call_dt < now: 
+        next_roll_call_dt += timedelta(days=1)
+        next_roll_call_dt = next_roll_call_dt.replace(hour=20 if next_roll_call_dt.weekday() < 4 else 22, minute=0, second=0, microsecond=0)
+
+    ep_next_roll_call, in_formation_next_roll_call = 0, 0
+    on_duty_next_roll_call_list, absent_next_roll_call_list = [], []
+    for student in students_platoon:
+        status_info = get_student_status(student, next_roll_call_dt)
+        if status_info['status_code'] == 'present': in_formation_next_roll_call +=1; ep_next_roll_call +=1
+        elif status_info['status_code'] == 'on_duty': 
+            ep_next_roll_call +=1
+            on_duty_next_roll_call_list.append(f"{student.grad_militar} {student.nume} {student.prenume} - {status_info['reason']}")
+        else: absent_next_roll_call_list.append(f"{student.grad_militar} {student.nume} {student.prenume} - {status_info['reason']} (până la {status_info['until'].strftime('%d.%m %H:%M') if status_info['until'] else 'N/A'})")
+    
+    next_report_info = {
+        "time": next_roll_call_dt.strftime('%d.%m.%Y %H:%M'), "type": "Apel Seară", "ec": efectiv_control_now,
+        "ep": ep_next_roll_call, "ea_count": len(absent_next_roll_call_list),
+        "in_formation": in_formation_next_roll_call, "on_duty_list": sorted(on_duty_next_roll_call_list),
+        "absent_list": sorted(absent_next_roll_call_list)
+    }
+    return render_template('situatie_pluton.html', efectiv_control_now=efectiv_control_now,efectiv_prezent_total_now=efectiv_prezent_total_now,
+                           in_formation_now=in_formation_now, on_duty_now_list=sorted(on_duty_now_list), absent_now_list=sorted(absent_now_list),
+                           efectiv_absent_now_count=efectiv_absent_now_count, services_today=services_today, services_tomorrow=services_tomorrow,
+                           services_day_after=services_day_after, upcoming_leaves_list=sorted(upcoming_leaves_list), next_report_info=next_report_info,
+                           current_time_str=now.strftime('%d.%m.%Y %H:%M'))
 
 # --- Management Studenți (include gender) ---
 @app.route('/gradat/students')
@@ -474,12 +587,12 @@ def add_student():
         elif form.get('id_unic_student') and Student.query.filter_by(id_unic_student=form.get('id_unic_student')).first(): flash(f"ID unic '{form.get('id_unic_student')}' există deja.", 'warning')
         elif form.get('gender') not in GENDERS : flash('Valoare invalidă pentru gen.', 'warning')
         else:
-            s = Student(nume=form.get('nume'), prenume=form.get('prenume'), grad_militar=form.get('grad_militar'),
+            s = Student(nume=form.get('nume'), prenume=form.get('prenume'), grad_militar=form.get('grad_militar'), 
                         id_unic_student=form.get('id_unic_student') or None,
-                        pluton=form.get('pluton'), companie=form.get('companie'), batalion=form.get('batalion'),
+                        pluton=form.get('pluton'), companie=form.get('companie'), batalion=form.get('batalion'), 
                         gender=form.get('gender'), created_by_user_id=current_user.id)
             db.session.add(s); db.session.commit(); flash(f'Studentul {s.grad_militar} {s.nume} {s.prenume} a fost adăugat!', 'success'); return redirect(url_for('list_students'))
-    return render_template('add_edit_student.html', form_title="Adăugare Student Nou", student=None, genders=GENDERS)
+    return render_template('add_edit_student.html', form_title="Adăugare Student Nou", student=None, genders=GENDERS) 
 
 @app.route('/gradat/students/edit/<int:student_id>', methods=['GET', 'POST'])
 @login_required
@@ -489,16 +602,16 @@ def edit_student(student_id):
     if request.method == 'POST':
         form = request.form
         s_edit.nume, s_edit.prenume, s_edit.grad_militar, s_edit.pluton, s_edit.companie, s_edit.batalion = form.get('nume'), form.get('prenume'), form.get('grad_militar'), form.get('pluton'), form.get('companie'), form.get('batalion')
-        s_edit.gender = form.get('gender')
+        s_edit.gender = form.get('gender') 
         new_id_unic = form.get('id_unic_student')
         if not all([s_edit.nume, s_edit.prenume, s_edit.grad_militar, s_edit.pluton, s_edit.companie, s_edit.batalion, s_edit.gender]): flash('Toate câmpurile marcate cu * sunt obligatorii (inclusiv genul).', 'warning')
         elif s_edit.gender not in GENDERS: flash('Valoare invalidă pentru gen.', 'warning')
         else:
-            if new_id_unic and new_id_unic != s_edit.id_unic_student and Student.query.filter(Student.id_unic_student==new_id_unic, Student.id != s_edit.id).first():
+            if new_id_unic and new_id_unic != s_edit.id_unic_student and Student.query.filter(Student.id_unic_student==new_id_unic, Student.id != s_edit.id).first(): 
                 flash(f"Alt student cu ID unic '{new_id_unic}' există deja.", 'warning'); return render_template('add_edit_student.html', form_title="Editare Student", student=s_edit, genders=GENDERS)
             s_edit.id_unic_student = new_id_unic or None; db.session.commit()
             flash(f'Studentul {s_edit.grad_militar} {s_edit.nume} {s_edit.prenume} a fost actualizat!', 'success'); return redirect(url_for('list_students'))
-    return render_template('add_edit_student.html', form_title="Editare Student", student=s_edit, genders=GENDERS)
+    return render_template('add_edit_student.html', form_title="Editare Student", student=s_edit, genders=GENDERS) 
 
 @app.route('/gradat/students/delete/<int:student_id>', methods=['POST'])
 @login_required
@@ -562,6 +675,147 @@ def add_daily_leave():
             except ValueError: flash('Format dată/oră invalid.', 'danger')
     return render_template('add_edit_daily_leave.html', form_title="Adăugare Învoire Zilnică", daily_leave=None, students=students, today_str=date.today().isoformat(), form_data=request.form if request.method == 'POST' else None)
 
+@app.route('/gradat/daily_leaves/process_text', methods=['POST'])
+@login_required
+def process_daily_leaves_text():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('home'))
+
+    form_text = request.form.get('leave_list_text')
+    apply_date_str = request.form.get('apply_date')
+
+    if not form_text or not apply_date_str:
+        flash('Lista de învoiri și data aplicării sunt obligatorii.', 'warning')
+        return redirect(url_for('list_daily_leaves', today_str=date.today().isoformat()))
+
+    try:
+        apply_date_obj = datetime.strptime(apply_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Format dată invalid pentru aplicare.', 'danger')
+        return redirect(url_for('list_daily_leaves', today_str=date.today().isoformat()))
+
+    if apply_date_obj.weekday() > 3: # Luni=0, ..., Joi=3
+        flash('Învoirile din text pot fi procesate doar pentru zilele de Luni până Joi.', 'warning')
+        return redirect(url_for('list_daily_leaves', today_str=date.today().isoformat()))
+
+    lines = form_text.strip().splitlines()
+    processed_count = 0
+    skipped_entries = [] 
+    success_entries = []
+
+    default_start_time = time(15, 0)
+    default_end_time_if_no_hour = time(19, 0)
+
+    all_students_gradat = Student.query.filter_by(created_by_user_id=current_user.id).all()
+
+    for line_num, line in enumerate(lines):
+        original_line_text = line.strip()
+        if not original_line_text:
+            continue
+        parsed_data = parse_student_line(original_line_text)
+        if not parsed_data['nume']:
+            skipped_entries.append(f"Linia {line_num+1} (format incorect): \"{original_line_text}\"")
+            continue
+        
+        student_found = None
+        search_nume = parsed_data['nume'].lower()
+        search_prenume = parsed_data['prenume'].lower() if parsed_data['prenume'] else None
+        for s in all_students_gradat:
+            s_nume_lower = s.nume.lower()
+            s_prenume_lower = s.prenume.lower()
+            match_nume_prenume = (search_nume == s_nume_lower and search_prenume == s_prenume_lower)
+            match_prenume_nume = (search_nume == s_prenume_lower and search_prenume == s_nume_lower) 
+            if search_prenume: 
+                if match_nume_prenume or match_prenume_nume:
+                    student_found = s; break
+            else: 
+                if search_nume == s_nume_lower or search_nume == s_prenume_lower:
+                    student_found = s; break 
+        if not student_found:
+            skipped_entries.append(f"Studentul '{parsed_data['nume']}{' ' + parsed_data['prenume'] if parsed_data['prenume'] else ''}' nu a fost găsit. (Linia: \"{original_line_text}\")")
+            continue
+
+        current_start_time = default_start_time
+        current_end_time = default_end_time_if_no_hour
+        if parsed_data['end_hour_str']:
+            try: current_end_time = datetime.strptime(parsed_data['end_hour_str'], '%H:%M').time()
+            except ValueError:
+                skipped_entries.append(f"Ora de sfârșit invalidă pentru {student_found.nume} {student_found.prenume}: {parsed_data['end_hour_str']}. (Linia: \"{original_line_text}\")")
+                continue
+        
+        is_valid_interval, interval_msg = validate_daily_leave_times(current_start_time, current_end_time, apply_date_obj)
+        if not is_valid_interval:
+            skipped_entries.append(f"Interval invalid ({current_start_time.strftime('%H:%M')}-{current_end_time.strftime('%H:%M')}) pentru {student_found.nume} {student_found.prenume}: {interval_msg}. (Linia: \"{original_line_text}\")")
+            continue
+
+        leave_start_dt = datetime.combine(apply_date_obj, current_start_time)
+        effective_end_leave_date = apply_date_obj
+        if current_end_time < current_start_time : effective_end_leave_date += timedelta(days=1)
+        leave_end_dt = datetime.combine(effective_end_leave_date, current_end_time)
+        
+        conflict_msg = check_leave_conflict(student_found.id, leave_start_dt, leave_end_dt, leave_type='daily_leave')
+        if conflict_msg:
+            skipped_entries.append(f"Conflict pentru {student_found.nume} {student_found.prenume}: are deja {conflict_msg}. Învoirea nu a fost adăugată. (Linia: \"{original_line_text}\")")
+            continue
+
+        new_leave = DailyLeave(student_id=student_found.id, leave_date=apply_date_obj, start_time=current_start_time, end_time=current_end_time, reason="Procesat din text", created_by_user_id=current_user.id)
+        db.session.add(new_leave)
+        success_entries.append(f"{student_found.grad_militar} {student_found.nume} {student_found.prenume} ({current_start_time.strftime('%H:%M')} - {current_end_time.strftime('%H:%M')})")
+        processed_count += 1
+    
+    try:
+        db.session.commit()
+        if processed_count > 0: flash(f'{processed_count} învoiri au fost procesate și adăugate cu succes pentru data de {apply_date_obj.strftime("%d-%m-%Y")}.', 'success')
+        #for success_entry in success_entries: flash(f"Adăugat: {success_entry}", "info") # Poate fi prea mult spam
+        if not processed_count and not skipped_entries: flash('Nicio linie validă de procesat în textul furnizat.', 'info')
+        elif not processed_count and skipped_entries : flash('Nicio învoire nu a putut fi procesată cu succes.', 'warning')
+
+        if skipped_entries:
+            flash('Următoarele linii/studenți nu au putut fi procesate:', 'warning')
+            for skipped_line in skipped_entries:
+                flash(skipped_line, 'secondary') 
+    except Exception as e:
+        db.session.rollback()
+        flash(f'A apărut o eroare la salvarea învoirilor: {str(e)}', 'danger')
+
+    return redirect(url_for('list_daily_leaves', today_str=apply_date_str)) # Păstrăm data selectată
+
+@app.route('/gradat/daily_leaves/generate_text_report', methods=['GET'])
+@login_required
+def generate_daily_leaves_text_report():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('home'))
+
+    report_date_str = request.args.get('date', date.today().isoformat())
+    try:
+        report_date_obj = datetime.strptime(report_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Format dată invalid pentru generare raport.', 'danger')
+        return redirect(url_for('list_daily_leaves', today_str=date.today().isoformat()))
+
+    leaves_for_date = DailyLeave.query.join(Student).filter(
+        DailyLeave.created_by_user_id == current_user.id,
+        DailyLeave.leave_date == report_date_obj,
+        DailyLeave.status == 'Aprobată', 
+        Student.id == DailyLeave.student_id
+    ).order_by(Student.nume, Student.prenume).all()
+
+    report_lines = [f"Învoiri Zilnice pentru data: {report_date_obj.strftime('%d.%m.%Y')} ({report_date_obj.strftime('%A')})"]
+    report_lines.append(f"Total: {len(leaves_for_date)}")
+    report_lines.append("-" * 30)
+
+    for leave_item in leaves_for_date: 
+        line = f"{leave_item.student.grad_militar} {leave_item.student.nume} {leave_item.student.prenume} - {leave_item.start_time.strftime('%H:%M')} - {leave_item.end_time.strftime('%H:%M')}"
+        if leave_item.reason and leave_item.reason != "Procesat din text": 
+            line += f" (Motiv: {leave_item.reason})"
+        report_lines.append(line)
+    
+    return render_template('text_report_display.html', 
+                           report_title=f"Raport Învoiri Zilnice - {report_date_obj.strftime('%d.%m.%Y')}",
+                           report_content="\n".join(report_lines))
+
 @app.route('/gradat/weekend_leaves/add', methods=['GET', 'POST'])
 @login_required
 def add_weekend_leave():
@@ -583,9 +837,8 @@ def add_weekend_leave():
                     stud = Student.query.filter_by(id=student_id, created_by_user_id=current_user.id).first()
                     if not stud: flash('Student invalid.', 'danger'); return redirect(url_for('list_weekend_leaves'))
                     day_map = {'Vineri': 0, 'Sambata': 1, 'Duminica': 2}
-                    processed_intervals = [] # Va stoca {'name', 'date', 'start_time_obj', 'end_time_obj'}
-
-                    # Validare și procesare Ziua 1
+                    processed_intervals = [] 
+                    
                     if selected_days:
                         day1_name = selected_days[0]
                         day1_date_obj = wknd_friday + timedelta(days=day_map[day1_name])
@@ -593,7 +846,7 @@ def add_weekend_leave():
                         day1_end_obj = datetime.strptime(d1_e_str, '%H:%M').time() if d1_e_str else None
                         if not day1_start_obj or not day1_end_obj: flash(f'Orele pentru {day1_name} sunt obligatorii.', 'warning'); raise ValueError(f"Missing time for {day1_name}")
                         if day1_end_obj <= day1_start_obj and not (day1_start_obj.hour >= 20 and day1_end_obj.hour <=9): flash(f'Interval orar invalid pentru {day1_name}.', 'warning'); raise ValueError(f"Invalid time for {day1_name}")
-
+                        
                         s_dt1 = datetime.combine(day1_date_obj, day1_start_obj)
                         e_dt1 = datetime.combine(day1_date_obj, day1_end_obj)
                         if e_dt1 < s_dt1: e_dt1 += timedelta(days=1)
@@ -601,7 +854,6 @@ def add_weekend_leave():
                         if conflict_msg1: flash(f"Conflict {day1_name}: studentul are deja {conflict_msg1}", 'danger'); raise ValueError(f"Conflict {day1_name}")
                         processed_intervals.append({'name': day1_name, 'date': day1_date_obj, 'start': day1_start_obj, 'end': day1_end_obj})
 
-                    # Validare și procesare Ziua 2
                     if len(selected_days) == 2:
                         day2_name = selected_days[1]
                         if day1_name == day2_name: flash('Nu selectați aceeași zi de două ori.', 'warning'); raise ValueError("Duplicate day selection")
@@ -617,8 +869,7 @@ def add_weekend_leave():
                         conflict_msg2 = check_leave_conflict(stud.id, s_dt2, e_dt2, leave_type='weekend_leave')
                         if conflict_msg2: flash(f"Conflict {day2_name}: studentul are deja {conflict_msg2}", 'danger'); raise ValueError(f"Conflict {day2_name}")
                         processed_intervals.append({'name': day2_name, 'date': day2_date_obj, 'start': day2_start_obj, 'end': day2_end_obj})
-
-                    # Creare înregistrare WeekendLeave
+                    
                     leave = WeekendLeave(student_id=student_id, weekend_start_date=wknd_friday, reason=form.get('reason'), created_by_user_id=current_user.id)
                     if processed_intervals:
                         leave.day1_selected = processed_intervals[0]['name']
@@ -630,10 +881,10 @@ def add_weekend_leave():
                         leave.day2_date = processed_intervals[1]['date']
                         leave.day2_start_time = processed_intervals[1]['start']
                         leave.day2_end_time = processed_intervals[1]['end']
-
+                    
                     db.session.add(leave); db.session.commit(); flash(f'Învoire de weekend adăugată pentru {stud.nume}!', 'success'); return redirect(url_for('list_weekend_leaves'))
-            except ValueError as e:
-                if str(e).startswith("Conflict") or "time" in str(e) or "day" in str(e) : pass
+            except ValueError as e: 
+                if str(e).startswith("Conflict") or "time" in str(e) or "day" in str(e) : pass 
                 else: flash(str(e) or 'Format dată/oră invalid sau altă problemă de validare.', 'danger')
     return render_template('add_edit_weekend_leave.html', form_title="Adăugare Învoire Weekend", students=students, upcoming_weekends=upcoming_weekends, form_data=request.form if request.method == 'POST' else None)
 
@@ -663,7 +914,7 @@ def list_daily_leaves():
     if current_user.role != 'gradat': flash('Acces neautorizat.', 'danger'); return redirect(url_for('home'))
     leaves_q = DailyLeave.query.join(Student).filter(DailyLeave.created_by_user_id == current_user.id, Student.id == DailyLeave.student_id).order_by(DailyLeave.leave_date.desc(), DailyLeave.start_time.desc())
     active_l = [l for l in leaves_q if l.is_active]; upcoming_l = [l for l in leaves_q if l.is_upcoming]; past_l = [l for l in leaves_q if l.is_past]
-    return render_template('list_daily_leaves.html', active_leaves=active_l, upcoming_leaves=upcoming_l, past_leaves=past_l)
+    return render_template('list_daily_leaves.html', active_leaves=active_l, upcoming_leaves=upcoming_l, past_leaves=past_l, today_str=date.today().isoformat()) # Adăugat today_str
 
 @app.route('/gradat/daily_leaves/cancel/<int:leave_id>', methods=['POST'])
 @login_required
@@ -689,7 +940,7 @@ def cancel_weekend_leave(leave_id):
     if current_user.role != 'gradat': flash('Acces neautorizat.', 'danger'); return redirect(url_for('home'))
     l_cancel = WeekendLeave.query.join(Student).filter(WeekendLeave.id == leave_id, WeekendLeave.created_by_user_id == current_user.id, Student.id == WeekendLeave.student_id).first_or_404()
     if l_cancel.status == 'Anulată': flash('Învoirea este deja anulată.', 'info')
-    elif not l_cancel.is_overall_active_or_upcoming: flash('Nu se poate anula o învoire expirată.', 'warning');
+    elif not l_cancel.is_overall_active_or_upcoming: flash('Nu se poate anula o învoire expirată.', 'warning'); 
     else: l_cancel.status = 'Anulată'; db.session.commit(); flash(f'Învoirea de weekend pentru {l_cancel.student.nume} a fost anulată.', 'success')
     return redirect(url_for('list_weekend_leaves'))
 
@@ -699,7 +950,7 @@ def cancel_weekend_leave(leave_id):
 @login_required
 def volunteer_home():
     if current_user.role != 'gradat': flash('Acces neautorizat.', 'danger'); return redirect(url_for('home'))
-    if request.method == 'POST':
+    if request.method == 'POST': 
         name, description, activity_date_str = request.form.get('activity_name'), request.form.get('activity_description'), request.form.get('activity_date')
         if not name or not activity_date_str: flash('Numele activității și data sunt obligatorii.', 'warning')
         else:
@@ -748,7 +999,7 @@ def volunteer_activity_details(activity_id):
                         else: flash('Nu s-au acordat puncte.', 'info')
                 except ValueError: flash('Punctele trebuie să fie un număr.', 'danger')
         return redirect(url_for('volunteer_activity_details', activity_id=activity.id))
-    current_participant_ids = {p.student_id for p in activity.participants}
+    current_participant_ids = {p.student_id for p in activity.participants} 
     activity_participants_detailed = db.session.query(ActivityParticipant, Student).join(Student, ActivityParticipant.student_id == Student.id).filter(ActivityParticipant.activity_id == activity.id, Student.created_by_user_id == current_user.id).all()
     return render_template('volunteer_activity_details.html', activity=activity, students_managed=students_managed, current_participant_ids=current_participant_ids, activity_participants_detailed=activity_participants_detailed)
 
@@ -797,10 +1048,10 @@ def assign_service():
                 if e_dt_obj <= s_dt_obj: e_dt_obj += timedelta(days=1)
                 stud = Student.query.filter_by(id=s_id, created_by_user_id=current_user.id).first()
                 if not stud: flash('Student invalid.', 'danger'); return redirect(url_for('list_services'))
-
+                
                 conflict_msg = check_service_conflict_for_student(stud.id, s_dt_obj, e_dt_obj, s_type)
                 if conflict_msg: flash(f"Conflict: studentul are deja {conflict_msg}", 'danger')
-                elif s_type in ['GSS', 'Intervenție'] and check_leave_conflict(stud.id, s_dt_obj, e_dt_obj):
+                elif s_type in ['GSS', 'Intervenție'] and check_leave_conflict(stud.id, s_dt_obj, e_dt_obj): 
                      flash(f"Conflict: Serviciul {s_type} nu poate fi asignat deoarece studentul are o învoire/permisie în acest interval.", 'danger')
                 else:
                     assignment = ServiceAssignment(student_id=s_id, service_type=s_type, service_date=s_date_obj,start_datetime=s_dt_obj, end_datetime=e_dt_obj,participates_in_roll_call=participates, notes=notes, created_by_user_id=current_user.id)
@@ -838,115 +1089,123 @@ def presence_report():
         report_time_str = dt_check.strftime("%Y-%m-%d %H:%M")
 
         students = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.nume, Student.prenume).all()
-        ec = len(students); ep = 0; ea_list = []
+        ec = len(students)
+        # Modificări pentru raportul de prezență
+        in_formation_count = 0
+        on_duty_list_details = [] # Va stoca stringuri cu detalii
+        absent_list_details = []  # Va stoca stringuri cu detalii
+
         for stud in students:
             s_info = get_student_status(stud, dt_check)
-            if s_info['status_code'] == 'present': ep += 1
-            else:
-                is_abs_from_formation = True
-                if s_info['status_code'] == 'absent_service' and s_info['object'] and s_info['object'].participates_in_roll_call and report_type == 'evening_roll_call':
-                    ep +=1; is_abs_from_formation = False
-                if is_abs_from_formation:
-                    detail = f"{stud.grad_militar} {stud.nume} {stud.prenume} - {s_info['reason']}"
-                    if s_info['until']: detail += f" (până la {s_info['until'].strftime('%d.%m %H:%M')})"
-                    ea_list.append(detail)
-        report_data = {"title": report_title, "datetime_checked": report_time_str, "efectiv_control": ec, "efectiv_prezent": ep, "efectiv_absent_count": len(ea_list), "efectiv_absent_list": sorted(ea_list)}
+            if s_info['status_code'] == 'present':
+                in_formation_count += 1
+            elif s_info['status_code'] == 'on_duty':
+                on_duty_list_details.append(f"{stud.grad_militar} {stud.nume} {stud.prenume} - {s_info['reason']}")
+            else: # absent_permission, absent_daily_leave, absent_weekend_leave
+                detail = f"{stud.grad_militar} {stud.nume} {stud.prenume} - {s_info['reason']}"
+                if s_info['until']: detail += f" (până la {s_info['until'].strftime('%d.%m %H:%M')})"
+                absent_list_details.append(detail)
+        
+        efectiv_prezent_total = in_formation_count + len(on_duty_list_details)
+        efectiv_absent_count = ec - efectiv_prezent_total
+        
+        report_data = {
+            "title": report_title, "datetime_checked": report_time_str, 
+            "efectiv_control": ec, "efectiv_prezent_total": efectiv_prezent_total,
+            "in_formation_count": in_formation_count, 
+            "on_duty_list": sorted(on_duty_list_details),
+            "efectiv_absent_count": efectiv_absent_count, 
+            "efectiv_absent_list": sorted(absent_list_details)
+        }
     return render_template('presence_report.html', report_data=report_data, current_datetime_str=datetime.now().strftime("%Y-%m-%dT%H:%M"))
 
 # --- Rute Comandanți (Noi) ---
 def get_aggregated_presence_data(students_query, datetime_check):
     """Funcție helper pentru a calcula efectivele pentru o listă de studenți."""
     efectiv_control = students_query.count()
-    efectiv_prezent = 0
-    absent_details_by_unit = {} # { 'Pluton X': ['Detalii absent 1', ...], 'Compania Y': [...] }
+    in_formation_count = 0
+    on_duty_count = 0 # Doar numărul celor în serviciu
+    absent_students_details = [] # Listă de stringuri cu detalii despre absenți (fără cei în serviciu)
 
     for student in students_query.all():
         status_info = get_student_status(student, datetime_check)
-        unit_key = f"Pluton {student.pluton}" # Cheia pentru agregare (poate fi și companie)
-
+        
         if status_info['status_code'] == 'present':
-            efectiv_prezent += 1
-        else:
-            is_absent_from_formation = True
-            if status_info['status_code'] == 'absent_service' and status_info['object'] and status_info['object'].participates_in_roll_call:
-                # Aici trebuie să decidem cum contorizăm pentru comandanți.
-                # Presupunem că și ei îi văd "prezenți" în efectivul general dacă participă la apelul unității.
-                efectiv_prezent += 1
-                is_absent_from_formation = False
+            in_formation_count += 1
+        elif status_info['status_code'] == 'on_duty':
+            on_duty_count += 1
+            # Pentru dashboard comandanți, cei în serviciu sunt parte din "prezent", dar pot fi afișați separat
+        else: # absent_permission, absent_daily_leave, absent_weekend_leave
+            absent_detail = f"{student.grad_militar} {student.nume} {student.prenume} ({student.pluton}) - {status_info['reason']}"
+            if status_info['until']: absent_detail += f" (până la {status_info['until'].strftime('%d.%m %H:%M')})"
+            absent_students_details.append(absent_detail)
 
-            if is_absent_from_formation:
-                absent_detail = f"{student.grad_militar} {student.nume} {student.prenume} ({student.pluton}) - {status_info['reason']}"
-                if status_info['until']: absent_detail += f" (până la {status_info['until'].strftime('%d.%m %H:%M')})"
+    efectiv_prezent_total = in_formation_count + on_duty_count
+    efectiv_absent_total = efectiv_control - efectiv_prezent_total
 
-                if unit_key not in absent_details_by_unit: absent_details_by_unit[unit_key] = []
-                absent_details_by_unit[unit_key].append(absent_detail)
-
+    # Pentru comandanți, detaliile absenților sunt suficiente, fără a sparge pe plutoane aici.
+    # Acest lucru se poate face în template dacă e necesar, sau funcția poate fi extinsă.
     return {
         "efectiv_control": efectiv_control,
-        "efectiv_prezent": efectiv_prezent,
-        "efectiv_absent_count": efectiv_control - efectiv_prezent, # Recalculăm pe baza celor prezenți
-        "absent_details_by_unit": {k: sorted(v) for k, v in absent_details_by_unit.items()} # Sortăm fiecare listă de absenți
+        "efectiv_prezent_total": efectiv_prezent_total,
+        "in_formation_count": in_formation_count,
+        "on_duty_count": on_duty_count,
+        "efectiv_absent_total": efectiv_absent_total,
+        "absent_students_details": sorted(absent_students_details) 
     }
 
 @app.route('/comandant/companie/dashboard')
 @login_required
 def company_commander_dashboard():
     if current_user.role != 'comandant_companie': flash('Acces neautorizat.', 'danger'); return redirect(url_for('home'))
-
-    # Extragem ID-ul companiei din username (ex: CmdC1 -> companie_id = "1")
     match = re.match(r"CmdC(\d+)", current_user.username)
     if not match: flash('Format username invalid pentru comandant companie.', 'danger'); return redirect(url_for('home'))
     company_id_str = match.group(1)
-
     students_in_company = Student.query.filter_by(companie=company_id_str)
-
-    # Calculăm efectivele pentru momentul curent (apel de seară)
     now = datetime.now()
     roll_call_time = now.replace(hour=20 if now.weekday() < 4 else 22, minute=0, second=0, microsecond=0)
+    
+    # Agregare pe plutoane pentru companie
+    platoons_data = {}
+    distinct_platoons = db.session.query(Student.pluton).filter(Student.companie == company_id_str).distinct().all()
 
-    presence_data = get_aggregated_presence_data(students_in_company, roll_call_time)
+    for platoon_tuple in distinct_platoons:
+        platoon_id_str = platoon_tuple[0]
+        students_in_platoon = Student.query.filter_by(companie=company_id_str, pluton=platoon_id_str)
+        platoons_data[f"Plutonul {platoon_id_str}"] = get_aggregated_presence_data(students_in_platoon, roll_call_time)
+        
+    # Total companie (recalculat pentru consistență sau luat direct)
+    total_company_presence = get_aggregated_presence_data(students_in_company, roll_call_time)
 
-    # Statistici suplimentare (opțional)
-    total_on_permission = Permission.query.join(Student).filter(Student.companie == company_id_str, Permission.status == 'Aprobată', Permission.start_datetime <= now, Permission.end_datetime >= now).count()
-    # ... alte statistici ...
-
-    return render_template('company_commander_dashboard.html',
+    return render_template('company_commander_dashboard.html', 
                            company_id=company_id_str,
-                           presence_data=presence_data,
-                           roll_call_time_str=roll_call_time.strftime('%d.%m.%Y %H:%M'),
-                           total_on_permission=total_on_permission)
+                           platoons_data=platoons_data,
+                           total_company_presence=total_company_presence,
+                           roll_call_time_str=roll_call_time.strftime('%d.%m.%Y %H:%M'))
 
 @app.route('/comandant/batalion/dashboard')
 @login_required
 def battalion_commander_dashboard():
     if current_user.role != 'comandant_batalion': flash('Acces neautorizat.', 'danger'); return redirect(url_for('home'))
-
     match = re.match(r"CmdB(\d+)", current_user.username)
     if not match: flash('Format username invalid pentru comandant batalion.', 'danger'); return redirect(url_for('home'))
     battalion_id_str = match.group(1)
-
-    students_in_battalion = Student.query.filter_by(batalion=battalion_id_str)
-
     now = datetime.now()
     roll_call_time = now.replace(hour=20 if now.weekday() < 4 else 22, minute=0, second=0, microsecond=0)
-
-    # Agregare pe companii
+    
     companies_data = {}
     distinct_companies = db.session.query(Student.companie).filter(Student.batalion == battalion_id_str).distinct().all()
+    for comp_tuple in distinct_companies:
+        company_id_str = comp_tuple[0]
+        students_in_company = Student.query.filter_by(batalion=battalion_id_str, companie=company_id_str)
+        companies_data[f"Compania {company_id_str}"] = get_aggregated_presence_data(students_in_company, roll_call_time)
 
-    for comp in distinct_companies:
-        company_id = comp[0]
-        students_in_company = Student.query.filter_by(batalion=battalion_id_str, companie=company_id)
-        companies_data[f"Compania {company_id}"] = get_aggregated_presence_data(students_in_company, roll_call_time)
-
-    # Total batalion
-    total_battalion_presence = get_aggregated_presence_data(students_in_battalion, roll_call_time)
-
+    total_battalion_presence = get_aggregated_presence_data(Student.query.filter_by(batalion=battalion_id_str), roll_call_time)
 
     return render_template('battalion_commander_dashboard.html',
                            battalion_id=battalion_id_str,
-                           companies_data=companies_data, # Date agregate pe companii
-                           total_battalion_presence=total_battalion_presence, # Totalul pe batalion
+                           companies_data=companies_data, 
+                           total_battalion_presence=total_battalion_presence,
                            roll_call_time_str=roll_call_time.strftime('%d.%m.%Y %H:%M'))
 
 # Definiția funcției validate_daily_leave_times la nivel global
@@ -963,29 +1222,29 @@ def validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj):
                      in_program_start <= end_time_obj <= in_program_end and
                      start_time_obj < end_time_obj)
 
-    is_out_program_same_night = (start_time_obj >= out_program_evening_start and
-                                 end_time_obj > start_time_obj and
+    is_out_program_same_night = (start_time_obj >= out_program_evening_start and 
+                                 end_time_obj > start_time_obj and 
                                  end_time_obj <= time(23,59,59))
-
-    is_out_program_overnight = (start_time_obj >= out_program_evening_start and
-                                end_time_obj < start_time_obj and
+    
+    is_out_program_overnight = (start_time_obj >= out_program_evening_start and 
+                                end_time_obj < start_time_obj and 
                                 end_time_obj <= out_program_morning_end)
 
-    is_out_program_early_morning_same_day = (start_time_obj < out_program_morning_end and
-                                            end_time_obj <= out_program_morning_end and
+    is_out_program_early_morning_same_day = (start_time_obj < out_program_morning_end and 
+                                            end_time_obj <= out_program_morning_end and 
                                             start_time_obj < end_time_obj)
 
     is_out_program = is_out_program_same_night or is_out_program_overnight or is_out_program_early_morning_same_day
 
     if not is_in_program and not is_out_program:
         return False, "Interval orar invalid. Permis: 07:00-14:20 sau 22:00-07:00 (poate fi a doua zi)."
-
+    
     if is_out_program:
         if in_program_start <= start_time_obj < in_program_end:
             return False, "Intervalul 'afară program' nu poate începe în timpul programului (07:00-14:20)."
         if in_program_start < end_time_obj <= in_program_end and not is_out_program_overnight:
              return False, "Intervalul 'afară program' nu se poate termina în timpul programului (07:00-14:20)."
-
+             
     return True, "Valid"
 
 # Funcția get_next_friday la nivel global
@@ -998,3 +1257,7 @@ def get_next_friday(start_date=None):
 if __name__ == '__main__':
     init_db()
     app.run(debug=True, port=5001)
+
+[end of app.py]
+
+[end of app.py]

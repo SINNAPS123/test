@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}{{ report_title if report_title else "Raport Text" }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>{{ report_title if report_title else "Raport Generat" }}</h2>
+        <a href="{{ request.referrer or url_for('list_daily_leaves') }}" class="btn btn-outline-secondary btn-sm">&laquo; Înapoi</a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title">Conținut Raport:</h5>
+            <textarea class="form-control" rows="15" readonly id="reportTextArea">{{ report_content }}</textarea>
+            <button class="btn btn-primary mt-3" onclick="copyReportToClipboard()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard-check" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M10.854 2.146a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 1 1 .708-.708L7.5 4.793l2.646-2.647a.5.5 0 0 1 .708 0z"/>
+                    <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+                    <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                  </svg>
+                Copiază Raportul
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyReportToClipboard() {
+    const reportText = document.getElementById('reportTextArea');
+    reportText.select(); // Selectează textul din textarea
+    reportText.setSelectionRange(0, 99999); // Pentru compatibilitate mobilă
+
+    navigator.clipboard.writeText(reportText.value).then(function() {
+        alert('Raportul a fost copiat în clipboard!');
+    }, function(err) {
+        alert('Eroare la copierea raportului: ' + err);
+        // Fallback
+        try {
+            document.execCommand('copy');
+            alert('Raportul a fost copiat în clipboard! (fallback)');
+        } catch (e) {
+            console.error('Fallback copy failed: ', e);
+        }
+    });
+    // Deselectează textul după copiere
+    if (window.getSelection) {
+      if (window.getSelection().empty) {  // Chrome
+        window.getSelection().empty();
+      } else if (window.getSelection().removeAllRanges) {  // Firefox
+        window.getSelection().removeAllRanges();
+      }
+    } else if (document.selection) {  // IE?
+      document.selection.empty();
+    }
+}
+</script>
+{% endblock %}
