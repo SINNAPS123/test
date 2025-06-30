@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Panou Gradat - {{ current_user.username }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Panou de Control Gradat: {{ current_user.username }}</h2>
+
+    <div class="row">
+        <!-- Card pentru Management Studenți -->
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Management Studenți</h5>
+                    <p class="card-text">Adaugă, vizualizează, editează sau șterge studenții din subordine.</p>
+                    <p class="card-text"><small class="text-muted">Număr studenți în evidență: {{ student_count }}</small></p>
+                    <a href="{{ url_for('list_students') }}" class="btn btn-primary">Gestionează Studenți</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card pentru Permisii -->
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Permisii</h5>
+                    <p class="card-text">Gestionează cererile de permisie ale studenților.</p>
+                    <p class="card-text"><small class="text-muted">Permisii active acum: {{ active_permissions_count }}</small></p>
+                    <a href="{{ url_for('list_permissions') }}" class="btn btn-primary">Gestionează Permisii</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card pentru Învoiri -->
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Învoiri</h5>
+                    <p class="card-text">Gestionează învoirile zilnice (L-J) și de weekend (V-D).</p>
+                    <p class="card-text"><small class="text-muted">Învoiri zilnice active: {{ active_daily_leaves_count }}</small><br>
+                                         <small class="text-muted">Învoiri weekend active: {{ active_weekend_leaves_count }}</small></p>
+                    <a href="{{ url_for('list_daily_leaves') }}" class="btn btn-primary mb-2 d-block">Învoiri Zilnice (L-J)</a>
+                    <a href="{{ url_for('list_weekend_leaves') }}" class="btn btn-primary d-block">Învoiri Weekend (V-D)</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+     <div class="row">
+        <!-- Card pentru Servicii -->
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Servicii</h5>
+                    <p class="card-text">Planifică și vizualizează serviciile studenților.</p>
+                    <p class="card-text"><small class="text-muted">Servicii active acum: {{ active_services_count }}</small></p>
+                    <a href="{{ url_for('list_services') }}" class="btn btn-primary">Gestionează Servicii</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card pentru Voluntariate -->
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Voluntariate</h5>
+                    <p class="card-text">Gestionează activitățile de voluntariat și punctele studenților.</p>
+                     <p class="card-text"><small class="text-muted">Total activități create: {{ total_volunteer_activities }}</small></p>
+                    <a href="{{ url_for('volunteer_home') }}" class="btn btn-primary">Gestionează Voluntariate</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card pentru Generare Prezență -->
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Generare Prezență</h5>
+                    <p class="card-text">Generează rapoartele de prezență și efective.</p>
+                    <a href="{{ url_for('presence_report') }}" class="btn btn-primary">Generează Raport</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr>
+    <p><a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">Înapoi la Panoul General</a></p>
+
+</div>
+{% endblock %}

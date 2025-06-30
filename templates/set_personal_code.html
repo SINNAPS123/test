@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Setare Cod Personal{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <h2 class="text-center mb-4">Setare Cod Personal de Acces</h2>
+        <div class="card">
+            <div class="card-body">
+                <p class="card-text text-muted">Salut, {{ current_user.username }}! Acesta este primul tău login. Te rugăm să îți setezi un cod personal pentru autentificările viitoare. Acest cod ar trebui să fie ușor de reținut pentru tine, dar greu de ghicit de alții (minim 4 caractere).</p>
+                <form method="POST" action="{{ url_for('set_personal_code') }}">
+                    <div class="mb-3">
+                        <label for="personal_code" class="form-label">Cod Personal Nou:</label>
+                        <input type="password" class="form-control" id="personal_code" name="personal_code" minlength="4" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirm_personal_code" class="form-label">Confirmă Codul Personal Nou:</label>
+                        <input type="password" class="form-control" id="confirm_personal_code" name="confirm_personal_code" minlength="4" required>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-success">Setează Codul Personal</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+         <p class="text-center mt-3 text-muted small">
+            După setarea codului personal, vei fi deconectat și va trebui să te autentifici din nou folosind noul cod.
+        </p>
+    </div>
+</div>
+{% endblock %}

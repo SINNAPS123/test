@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}{{ form_title }} - Management Învoiri Weekend{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>{{ form_title }}</h2>
+    <p class="text-muted">Selectează un student, weekendul dorit (Vineri-Duminică), apoi 1 sau 2 zile din acel weekend și specifică orele.</p>
+    <hr>
+
+    <div class="row justify-content-center">
+        <div class="col-md-9 col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="POST" action="" id="weekendLeaveForm">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="student_id" class="form-label">Student <span class="text-danger">*</span></label>
+                                <select class="form-select" id="student_id" name="student_id" required>
+                                    <option value="" disabled {% if not form_data %}selected{% endif %}>Selectează un student...</option>
+                                    {% for student in students %}
+                                        <option value="{{ student.id }}" {% if form_data and form_data.student_id == student.id|string %}selected{% endif %}>
+                                            {{ student.grad_militar }} {{ student.nume }} {{ student.prenume }} (Pluton: {{student.pluton }})
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="weekend_start_date" class="form-label">Selectează Weekendul (pe baza zilei de Vineri) <span class="text-danger">*</span></label>
+                                <select class="form-select" id="weekend_start_date" name="weekend_start_date" required>
+                                    <option value="" disabled {% if not form_data %}selected{% endif %}>Alege un weekend...</option>
+                                    {% for wknd in upcoming_weekends %}
+                                    <option value="{{ wknd.value }}" {% if form_data and form_data.weekend_start_date == wknd.value %}selected{% endif %}>{{ wknd.text }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <hr>
+                        <h5 class="mb-3">Selectează Zilele și Orele (maxim 2 zile)</h5>
+
+                        <div class="row mb-3">
+                            {% for day_name in ['Vineri', 'Sambata', 'Duminica'] %}
+                            <div class="col-md-4">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input day-checkbox" type="checkbox" name="selected_days[]" value="{{ day_name }}" id="check_{{ day_name.lower() }}"
+                                           {% if form_data and day_name in form_data.getlist('selected_days[]') %}checked{% endif %}>
+                                    <label class="form-check-label" for="check_{{ day_name.lower() }}">
+                                        <strong>{{ day_name }}</strong>
+                                    </label>
+                                </div>
+                                <div class="day-times {% if not form_data or day_name not in form_data.getlist('selected_days[]') %}d-none{% endif %}" id="times_{{ day_name.lower() }}">
+                                    <div class="mb-2">
+                                        <label for="{{ day_name.lower() }}_start_time" class="form-label form-label-sm">Ora început:</label>
+                                        <input type="time" class="form-control form-control-sm" id="{{ day_name.lower() }}_start_time" name="{{ day_name.lower() }}_start_time"
+                                               value="{{ form_data[day_name.lower()~'_start_time'] if form_data and form_data[day_name.lower()~'_start_time'] }}">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="{{ day_name.lower() }}_end_time" class="form-label form-label-sm">Ora sfârșit:</label>
+                                        <input type="time" class="form-control form-control-sm" id="{{ day_name.lower() }}_end_time" name="{{ day_name.lower() }}_end_time"
+                                                value="{{ form_data[day_name.lower()~'_end_time'] if form_data and form_data[day_name.lower()~'_end_time'] }}">
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <input type="hidden" id="day1_start_time_proxy" name="day1_start_time">
+                        <input type="hidden" id="day1_end_time_proxy" name="day1_end_time">
+                        <input type="hidden" id="day2_start_time_proxy" name="day2_start_time">
+                        <input type="hidden" id="day2_end_time_proxy" name="day2_end_time">
+
+
+                        <div class="mb-3">
+                            <label for="reason" class="form-label">Motiv (Opțional)</label>
+                            <textarea class="form-control" id="reason" name="reason" rows="2">{{ form_data.reason if form_data and form_data.reason else '' }}</textarea>
+                        </div>
+
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('list_weekend_leaves') }}" class="btn btn-outline-secondary">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-left-circle" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M1 8a7 7 0 1 0 14 0A7 7 0 0 0 1 8zm15 0A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-4.5-.5a.5.5 0 0 1 0 1H5.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L5.707 7.5H11.5z"/>
+                                </svg>
+                                Anulare
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check-circle-fill" viewBox="0 0 16 16">
+                                    <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
+                                </svg>
+                                Adaugă Învoire Weekend
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.day-checkbox');
+    const maxDays = 2;
+
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const dayName = this.value.toLowerCase();
+            const timesDiv = document.getElementById('times_' + dayName);
+            if (this.checked) {
+                timesDiv.classList.remove('d-none');
+            } else {
+                timesDiv.classList.add('d-none');
+                document.getElementById(dayName + '_start_time').value = '';
+                document.getElementById(dayName + '_end_time').value = '';
+            }
+
+            let checkedCount = 0;
+            checkboxes.forEach(cb => {
+                if (cb.checked) checkedCount++;
+            });
+
+            if (checkedCount > maxDays) {
+                this.checked = false; // Uncheck the last checked box
+                timesDiv.classList.add('d-none');
+                 document.getElementById(dayName + '_start_time').value = '';
+                document.getElementById(dayName + '_end_time').value = '';
+                alert('Puteți selecta maxim ' + maxDays + ' zile.');
+            }
+        });
+    });
+
+    // Proxy time inputs before submit
+    const form = document.getElementById('weekendLeaveForm');
+    if (form) {
+        form.addEventListener('submit', function(event) {
+            const selectedCheckboxes = Array.from(checkboxes).filter(cb => cb.checked);
+
+            // Clear previous proxy values
+            document.getElementById('day1_start_time_proxy').value = '';
+            document.getElementById('day1_end_time_proxy').value = '';
+            document.getElementById('day2_start_time_proxy').value = '';
+            document.getElementById('day2_end_time_proxy').value = '';
+
+            if (selectedCheckboxes.length >= 1) {
+                let day1_id_prefix = selectedCheckboxes[0].value.toLowerCase();
+                document.getElementById('day1_start_time_proxy').value = document.getElementById(day1_id_prefix + '_start_time').value;
+                document.getElementById('day1_end_time_proxy').value = document.getElementById(day1_id_prefix + '_end_time').value;
+            }
+            if (selectedCheckboxes.length === 2) {
+                 let day2_id_prefix = selectedCheckboxes[1].value.toLowerCase();
+                document.getElementById('day2_start_time_proxy').value = document.getElementById(day2_id_prefix + '_start_time').value;
+                document.getElementById('day2_end_time_proxy').value = document.getElementById(day2_id_prefix + '_end_time').value;
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

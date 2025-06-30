@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Panou Admin{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Panou de Control Admin</h2>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4>Creare Utilizator Nou (Gradat/Comandant)</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin_create_user') }}">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Nume utilizator (ex: Popescu_G, Pluton1_Cmd):</label>
+                            <input type="text" class="form-control" id="username" name="username" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="role" class="form-label">Rol:</label>
+                            <select class="form-select" id="role" name="role" required>
+                                <option value="" disabled selected>Selectează rolul</option>
+                                <option value="gradat">Gradat (Comandant Pluton)</option>
+                                <option value="comandant_companie">Comandant Companie</option>
+                                <option value="comandant_batalion">Comandant Batalion</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-success">Creare Utilizator și Generare Cod</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4>Informații Utile</h4>
+                </div>
+                <div class="card-body">
+                    <p>Utilizatorii creați vor primi un <strong>cod unic</strong>. Ei trebuie să folosească acest cod la prima autentificare.</p>
+                    <p>După prima autentificare cu codul unic, li se va cere să își seteze un <strong>cod personal</strong>.</p>
+                    <p>Logările ulterioare se vor face folosind codul personal.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr class="my-4">
+
+    <h3 class="mb-3">Listă Utilizatori (Non-Admin)</h3>
+    {% if users %}
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nume Utilizator</th>
+                    <th>Rol</th>
+                    <th>Cod Unic (la creare/reset)</th>
+                    <th>Necesită Setare Cod Personal?</th>
+                    <th>Acțiuni</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.id }}</td>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.role }}</td>
+                    <td>
+                        {% if user.unique_code %}
+                            <span class="badge bg-info text-dark">{{ user.unique_code }}</span>
+                        {% else %}
+                            <span class="badge bg-secondary">N/A</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user.is_first_login %}
+                            <span class="badge bg-warning text-dark">Da</span>
+                        {% else %}
+                            <span class="badge bg-success">Nu (Cod personal setat)</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user.role != 'admin' %}
+                        <form method="POST" action="{{ url_for('admin_reset_user_code', user_id=user.id) }}" style="display: inline;" onsubmit="return confirm('Ești sigur că vrei să resetezi codul pentru {{ user.username }}? Acest lucru va genera un nou cod unic și va necesita ca utilizatorul să își seteze un nou cod personal.');">
+                            <button type="submit" class="btn btn-sm btn-warning">Resetare Cod</button>
+                        </form>
+                        <!-- Aici se pot adăuga și alte acțiuni, ex: ștergere utilizator -->
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>Nu există alți utilizatori în sistem.</p>
+    {% endif %}
+</div>
+{% endblock %}

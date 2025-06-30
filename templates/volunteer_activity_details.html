@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Detalii Activitate Voluntariat: {{ activity.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <h2>Activitate: {{ activity.name }}</h2>
+        <a href="{{ url_for('volunteer_home') }}" class="btn btn-outline-secondary btn-sm">&laquo; Înapoi la Voluntariate</a>
+    </div>
+    <p class="text-muted">Data: {{ activity.activity_date.strftime('%d %B %Y') }}</p>
+    {% if activity.description %}
+    <p><strong>Descriere:</strong> {{ activity.description }}</p>
+    {% endif %}
+    <hr>
+
+    <div class="row">
+        <!-- Secțiunea Gestionare Participanți -->
+        <div class="col-md-7 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h4><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-people-fill" viewBox="0 0 16 16">
+                        <path d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1H7zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
+                        <path fill-rule="evenodd" d="M5.216 14A2.238 2.238 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.325 6.325 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1h4.216zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/>
+                        </svg> Gestionare Participanți ({{ activity_participants_detailed|length }})</h4>
+                </div>
+                <form method="POST" action="{{ url_for('volunteer_activity_details', activity_id=activity.id) }}">
+                    <input type="hidden" name="action" value="update_participants">
+                    <div class="card-body" style="max-height: 350px; overflow-y: auto;">
+                        {% if students_managed %}
+                            <p><small>Selectează studenții care au participat la această activitate:</small></p>
+                            <ul class="list-group">
+                            {% for student in students_managed %}
+                                <li class="list-group-item">
+                                    <input class="form-check-input me-1" type="checkbox" name="participant_ids[]" value="{{ student.id }}" id="student_{{ student.id }}"
+                                           {% if student.id in current_participant_ids %}checked{% endif %}>
+                                    <label class="form-check-label stretched-link" for="student_{{ student.id }}">
+                                        {{ student.grad_militar }} {{ student.nume }} {{ student.prenume }} ({{ student.pluton }}) - Pcte: {{student.volunteer_points }}
+                                    </label>
+                                </li>
+                            {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="text-muted">Nu aveți studenți în evidență.</p>
+                        {% endif %}
+                    </div>
+                    <div class="card-footer text-end">
+                        <button type="submit" class="btn btn-primary">Actualizează Lista de Participanți</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Secțiunea Acordare Puncte -->
+        <div class="col-md-5 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h4><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-gem" viewBox="0 0 16 16">
+                        <path d="M3.1.7a.5.5 0 0 1 .4-.2h9a.5.5 0 0 1 .4.2l2.976 3.974c.149.198.22.447.22.748s-.071.55-.22.748l-2.976 3.974a.5.5 0 0 1-.4.2h-9a.5.5 0 0 1-.4-.2L.124 6.17a.5.5 0 0 1-.22-.748s.07-.55.22-.748L3.1.7zM3.781 9.602a.5.5 0 0 0-.46.65L4.26 14.79a.5.5 0 0 0 .461.35h7.048a.5.5 0 0 0 .46-.35l.94-4.539a.5.5 0 0 0-.46-.65h-8.44zm-1.62-6.429 1.176 5.882h6.888l1.176-5.882H2.16z"/>
+                        </svg> Acordare Puncte Participanților</h4>
+                </div>
+                <form method="POST" action="{{ url_for('volunteer_activity_details', activity_id=activity.id) }}">
+                     <input type="hidden" name="action" value="award_points">
+                    <div class="card-body">
+                        {% if activity_participants_detailed %}
+                        <div class="mb-3">
+                            <label for="points_to_award" class="form-label">Puncte de acordat (pentru fiecare selectat):</label>
+                            <input type="number" class="form-control" id="points_to_award" name="points_to_award" value="1" min="0">
+                        </div>
+                        <p><small>Selectează participanții cărora le acorzi puncte pentru această activitate:</small></p>
+                        <ul class="list-group mb-3" style="max-height: 200px; overflow-y: auto;">
+                            {% for participant, student_detail in activity_participants_detailed %}
+                            <li class="list-group-item">
+                                 <input class="form-check-input me-1" type="checkbox" name="points_participant_ids[]" value="{{ participant.student_id }}" id="points_student_{{ participant.student_id }}" checked>
+                                <label class="form-check-label" for="points_student_{{ participant.student_id }}">
+                                    {{ student_detail.nume }} {{ student_detail.prenume }} (Pcte acordate: {{participant.points_awarded }})
+                                </label>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="text-muted">Nu există participanți adăugați la această activitate încă. Adaugă participanți din secțiunea alăturată.</p>
+                        {% endif %}
+                    </div>
+                    {% if activity_participants_detailed %}
+                    <div class="card-footer text-end">
+                        <button type="submit" class="btn btn-success">Acordă Puncte Selectaților</button>
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

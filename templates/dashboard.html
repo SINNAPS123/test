@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Panou de Control - {{ current_user.username }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Panou de Control General</h2>
+
+    {% if current_user.role == 'gradat' %}
+        <div class="alert alert-info">
+            Bine ai venit, {{ current_user.username }}! Acesta este panoul tău de gradat.
+            <br>
+            De aici vei putea gestiona studenții, permisiile, învoirile, serviciile și voluntariatele.
+            <p><a href="{{ url_for('gradat_dashboard') }}">Mergi la funcționalitățile specifice de gradat.</a></p>
+        </div>
+        <!-- Aici vor veni statisticile și link-urile rapide pentru gradat -->
+
+    {% elif current_user.role == 'comandant_companie' %}
+        <div class="alert alert-info">
+            Bine ai venit, {{ current_user.username }}! Acesta este panoul tău de Comandant Companie.
+            <br>
+            De aici vei putea vizualiza statisticile și efectivele pentru plutoanele din compania ta.
+        </div>
+        <!-- Aici vor veni statisticile pentru comandantul de companie -->
+
+    {% elif current_user.role == 'comandant_batalion' %}
+        <div class="alert alert-info">
+            Bine ai venit, {{ current_user.username }}! Acesta este panoul tău de Comandant Batalion.
+            <br>
+            De aici vei putea vizualiza statisticile și efectivele pentru companiile din batalionul tău.
+        </div>
+        <!-- Aici vor veni statisticile pentru comandantul de batalion -->
+
+    {% else %}
+        <div class="alert alert-secondary">
+            Panou de control general pentru {{ current_user.username }}. Rol nespecificat pentru conținut detaliat.
+        </div>
+    {% endif %}
+
+    <hr>
+    <p>Funcționalități comune (dacă există) sau informații generale pot fi afișate aici.</p>
+
+</div>
+{% endblock %}

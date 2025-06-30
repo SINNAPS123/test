@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}{{ form_title }} - Management Învoiri Zilnice{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>{{ form_title }}</h2>
+    <p class="text-muted">Învoirile zilnice sunt permise doar de Luni până Joi, în intervalele 07:00-14:20 sau 22:00-07:00 (poate fi a doua zi).</p>
+    <hr>
+
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-7">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="POST" action=""> {# Action-ul va fi setat de ruta Flask #}
+                        <div class="mb-3">
+                            <label for="student_id" class="form-label">Student <span class="text-danger">*</span></label>
+                            <select class="form-select" id="student_id" name="student_id" required>
+                                <option value="" disabled selected>Selectează un student...</option>
+                                {% for student in students %}
+                                    <option value="{{ student.id }}">
+                                        {{ student.grad_militar }} {{ student.nume }} {{ student.prenume }} (Pluton: {{student.pluton }})
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="leave_date" class="form-label">Data Învoirii (Luni-Joi) <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="leave_date" name="leave_date"
+                                   value="{{ daily_leave.leave_date.strftime('%Y-%m-%d') if daily_leave and daily_leave.leave_date else today_str }}"
+                                   required>
+                            <small class="form-text text-muted">Alege o dată de Luni până Joi.</small>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="start_time" class="form-label">Ora de Început <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" id="start_time" name="start_time"
+                                       value="{{ daily_leave.start_time.strftime('%H:%M') if daily_leave and daily_leave.start_time else '' }}" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="end_time" class="form-label">Ora de Sfârșit <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" id="end_time" name="end_time"
+                                       value="{{ daily_leave.end_time.strftime('%H:%M') if daily_leave and daily_leave.end_time else '' }}" required>
+                            </div>
+                        </div>
+                        <small class="form-text text-muted d-block mb-3">
+                            Intervale permise: <strong>07:00 - 14:20</strong> (în timpul programului) sau <strong>22:00 - 07:00</strong> (în afara programului, poate trece în ziua următoare).
+                        </small>
+
+
+                        <div class="mb-3">
+                            <label for="reason" class="form-label">Motiv (Opțional)</label>
+                            <textarea class="form-control" id="reason" name="reason" rows="2">{{ daily_leave.reason if daily_leave and daily_leave.reason else '' }}</textarea>
+                        </div>
+
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('list_daily_leaves') }}" class="btn btn-outline-secondary">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-left-circle" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M1 8a7 7 0 1 0 14 0A7 7 0 0 0 1 8zm15 0A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-4.5-.5a.5.5 0 0 1 0 1H5.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L5.707 7.5H11.5z"/>
+                                </svg>
+                                Anulare
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check-circle-fill" viewBox="0 0 16 16">
+                                    <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
+                                </svg>
+                                Adaugă Învoire
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    // Optional: Setează data minimă pentru inputul de dată la ziua curentă
+    // și restricționează zilele la Luni-Joi.
+    document.addEventListener('DOMContentLoaded', function() {
+        var dateInput = document.getElementById('leave_date');
+        if (dateInput) {
+            var today = new Date();
+            // Format YYYY-MM-DD
+            var yyyy = today.getFullYear();
+            var mm = String(today.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+            var dd = String(today.getDate()).padStart(2, '0');
+            // dateInput.min = yyyy + '-' + mm + '-' + dd; // Nu setăm min ca să poată vedea și în trecut dacă e cazul, validarea e în backend
+
+            dateInput.addEventListener('input', function(e) {
+                var selectedDate = new Date(e.target.value);
+                var day = selectedDate.getUTCDay(); // Duminică = 0, Luni = 1, ..., Sâmbătă = 6
+                if (day === 0 || day === 5 || day === 6) { // Duminică, Vineri, Sâmbătă
+                    e.target.setCustomValidity('Învoirile zilnice sunt permise doar de Luni până Joi.');
+                    e.target.reportValidity();
+                } else {
+                    e.target.setCustomValidity('');
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}
