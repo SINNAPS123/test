@@ -15,8 +15,13 @@
                 <div class="card-body">
                     <form method="POST" action="{{ url_for('admin_create_user') }}">
                         <div class="mb-3">
-                            <label for="username" class="form-label">Nume utilizator (ex: Popescu_G, Pluton1_Cmd):</label>
+                            <label for="username" class="form-label">Nume utilizator:</label>
                             <input type="text" class="form-control" id="username" name="username" required>
+                            <small class="form-text text-muted">
+                                Ex: <strong>Popescu_V</strong> (gradat),
+                                <strong>CmdC1</strong> (Cmd. Compania 1),
+                                <strong>CmdB1</strong> (Cmd. Batalionul 1).
+                            </small>
                         </div>
                         <div class="mb-3">
                             <label for="role" class="form-label">Rol:</label>
@@ -85,10 +90,12 @@
                     </td>
                     <td>
                         {% if user.role != 'admin' %}
-                        <form method="POST" action="{{ url_for('admin_reset_user_code', user_id=user.id) }}" style="display: inline;" onsubmit="return confirm('Ești sigur că vrei să resetezi codul pentru {{ user.username }}? Acest lucru va genera un nou cod unic și va necesita ca utilizatorul să își seteze un nou cod personal.');">
+                        <form method="POST" action="{{ url_for('admin_reset_user_code', user_id=user.id) }}" class="d-inline me-1" onsubmit="return confirm('Ești sigur că vrei să resetezi codul pentru {{ user.username }}? Acest lucru va genera un nou cod unic și va necesita ca utilizatorul să își seteze un nou cod personal.');">
                             <button type="submit" class="btn btn-sm btn-warning">Resetare Cod</button>
                         </form>
-                        <!-- Aici se pot adăuga și alte acțiuni, ex: ștergere utilizator -->
+                        <form method="POST" action="{{ url_for('admin_delete_user', user_id=user.id) }}" class="d-inline" onsubmit="return confirm('ATENȚIE! Ești sigur că vrei să ștergi utilizatorul {{ user.username }}? Dacă este gradat, TOȚI studenții și datele asociate acestuia (permisii, învoiri, servicii, etc.) vor fi ȘTERSE DEFINITIV. Această acțiune este ireversibilă!');">
+                            <button type="submit" class="btn btn-sm btn-danger">Șterge Utilizator</button>
+                        </form>
                         {% endif %}
                     </td>
                 </tr>

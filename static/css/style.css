@@ -1,16 +1,302 @@
-/* Stiluri CSS principale */
-body {
-    font-family: sans-serif;
-    margin: 0;
-    padding: 0;
-    background-color: #f4f4f4;
-    color: #333;
+/* --- Tema Futuristic Black AMOLED --- */
+
+/* Variabile de Culoare */
+:root {
+    --bg-main: #000000; /* Negru pur pentru AMOLED */
+    --bg-surface: #121212; /* Gri foarte închis pentru suprafețe (carduri, etc.) */
+    --bg-surface-2: #1E1E1E; /* Un gri puțin mai deschis pentru hover sau elemente secundare */
+    --text-primary: #E0E0E0; /* Alb-gri pentru text principal */
+    --text-secondary: #A0A0A0; /* Gri pentru text secundar, placeholder */
+    --accent-primary: #00BFFF; /* Deep Sky Blue / Cyan electric */
+    --accent-secondary: #39FF14; /* Verde Neon */
+    --accent-danger: #FF1493; /* Deep Pink / Roșu vibrant */
+    --accent-warning: #FFD700; /* Gold / Galben */
+    --accent-info: #87CEEB; /* Sky Blue deschis */
+
+    --border-color: #2A2A2A; /* Culoare subtilă pentru margini */
+    --input-bg: #1E1E1E;
+    --input-border: #333333;
+    --input-focus-border: var(--accent-primary);
 }
 
-.container {
-    width: 80%;
-    margin: auto;
-    overflow: hidden;
-    padding: 20px;
-    background-color: #fff;
+/* Stiluri Globale */
+body {
+    font-family: 'Roboto', 'Open Sans', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    line-height: 1.6;
+}
+
+.container, .container-fluid {
+    /* background-color: var(--bg-surface); */ /* Eliminăm fundalul containerului pentru un look mai unitar */
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+}
+
+a {
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+a:hover {
+    color: var(--accent-secondary);
+    text-decoration: underline;
+}
+
+/* Navbar */
+.navbar {
+    background-color: var(--bg-surface) !important; /* Suprascrie Bootstrap */
+    border-bottom: 1px solid var(--border-color);
+}
+.navbar .navbar-brand, .navbar .nav-link {
+    color: var(--text-primary) !important;
+}
+.navbar .nav-link:hover, .navbar .navbar-brand:hover {
+    color: var(--accent-primary) !important;
+}
+.navbar-toggler {
+    border-color: rgba(255,255,255,0.3);
+}
+.navbar-toggler-icon {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28224, 224, 224, 0.8%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
+
+/* Carduri */
+.card {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem; /* Un pic mai rotunjit */
+}
+.card-header {
+    background-color: var(--bg-surface-2);
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
+}
+.card-body {
+    color: var(--text-primary);
+}
+.card-footer {
+    background-color: var(--bg-surface-2);
+    border-top: 1px solid var(--border-color);
+}
+
+/* Tabele */
+.table {
+    color: var(--text-primary); /* Textul din celule */
+    border-color: var(--border-color);
+}
+.table > :not(caption) > * > * { /* Suprascrie culoarea textului și border pentru celulele tabelului */
+    background-color: transparent; /* Celulele să fie transparente pentru a vedea fundalul cardului/paginii */
+    border-bottom-width: 1px;
+    color: var(--text-primary);
+}
+.table-striped > tbody > tr:nth-of-type(odd) > * {
+    background-color: rgba(255, 255, 255, 0.03); /* Dungile foarte subtile */
+}
+.table-hover > tbody > tr:hover > * {
+    background-color: rgba(255, 255, 255, 0.06);
+    color: var(--accent-primary);
+}
+.table .thead-dark th, .table .table-dark th, .table .table-dark td, .table .table-dark > :not(caption) > * > * {
+    background-color: var(--bg-surface-2);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+/* Formulare */
+.form-control, .form-select {
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--input-border);
+}
+.form-control::placeholder, .form-select::placeholder {
+    color: var(--text-secondary);
+}
+.form-control:focus, .form-select:focus {
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+    border-color: var(--input-focus-border);
+    box-shadow: 0 0 0 0.25rem rgba(0, 191, 255, 0.25); /* Cyan glow */
+}
+.form-label {
+    color: var(--text-primary);
+}
+.form-check-input:checked {
+    background-color: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+.form-check-input {
+    background-color: var(--input-bg);
+    border: 1px solid var(--input-border);
+}
+
+/* Butoane */
+.btn {
+    border-radius: 0.3rem;
+    transition: all 0.2s ease-in-out;
+}
+.btn-primary {
+    background-color: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: var(--bg-main); /* Text negru pe fundal cyan pentru contrast bun */
+}
+.btn-primary:hover, .btn-primary:focus {
+    background-color: #00A8E0; /* Un cyan puțin mai închis la hover */
+    border-color: #00A8E0;
+    color: var(--bg-main);
+    box-shadow: 0 0 8px rgba(0, 191, 255, 0.5);
+}
+.btn-secondary {
+    background-color: var(--bg-surface-2);
+    border-color: var(--text-secondary);
+    color: var(--text-primary);
+}
+.btn-secondary:hover, .btn-secondary:focus {
+    background-color: #333333;
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+}
+
+.btn-success {
+    background-color: var(--accent-secondary);
+    border-color: var(--accent-secondary);
+    color: var(--bg-main);
+}
+.btn-success:hover, .btn-success:focus {
+    background-color: #2AAE0F;
+    border-color: #2AAE0F;
+    color: var(--bg-main);
+    box-shadow: 0 0 8px rgba(57, 255, 20, 0.5);
+}
+.btn-danger {
+    background-color: var(--accent-danger);
+    border-color: var(--accent-danger);
+    color: var(--text-primary);
+}
+.btn-danger:hover, .btn-danger:focus {
+    background-color: #D9006C;
+    border-color: #D9006C;
+    color: var(--text-primary);
+    box-shadow: 0 0 8px rgba(255, 20, 147, 0.5);
+}
+.btn-warning {
+    background-color: var(--accent-warning);
+    border-color: var(--accent-warning);
+    color: var(--bg-main);
+}
+.btn-warning:hover, .btn-warning:focus {
+    background-color: #CCA300;
+    border-color: #CCA300;
+    color: var(--bg-main);
+}
+.btn-info {
+    background-color: var(--accent-info);
+    border-color: var(--accent-info);
+    color: var(--bg-main);
+}
+.btn-info:hover, .btn-info:focus {
+    background-color: #60A9C7;
+    border-color: #60A9C7;
+    color: var(--bg-main);
+}
+.btn-outline-primary {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+.btn-outline-primary:hover {
+    color: var(--bg-main);
+    background-color: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+.btn-outline-secondary {
+    color: var(--text-secondary);
+    border-color: var(--text-secondary);
+}
+.btn-outline-secondary:hover {
+    color: var(--text-primary);
+    background-color: var(--text-secondary);
+    border-color: var(--text-secondary);
+}
+.btn-outline-danger {
+    color: var(--accent-danger);
+    border-color: var(--accent-danger);
+}
+.btn-outline-danger:hover {
+    color: var(--text-primary);
+    background-color: var(--accent-danger);
+    border-color: var(--accent-danger);
+}
+
+
+/* Alerte */
+.alert {
+    border-width: 1px;
+    border-radius: 0.3rem;
+}
+.alert-success {
+    background-color: rgba(57, 255, 20, 0.1);
+    border-color: var(--accent-secondary);
+    color: var(--accent-secondary);
+}
+.alert-danger {
+    background-color: rgba(255, 20, 147, 0.1);
+    border-color: var(--accent-danger);
+    color: var(--accent-danger);
+}
+.alert-warning {
+    background-color: rgba(255, 215, 0, 0.1);
+    border-color: var(--accent-warning);
+    color: #FFC107; /* Un galben mai lizibil */
+}
+.alert-info {
+    background-color: rgba(0, 191, 255, 0.1);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+.btn-close { /* Pentru închiderea alertelor */
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+
+/* Badges */
+.badge {
+    font-weight: 500;
+}
+.badge.bg-primary { background-color: var(--accent-primary) !important; color: var(--bg-main) !important; }
+.badge.bg-secondary { background-color: var(--text-secondary) !important; color: var(--bg-main) !important; }
+.badge.bg-success { background-color: var(--accent-secondary) !important; color: var(--bg-main) !important; }
+.badge.bg-danger { background-color: var(--accent-danger) !important; color: var(--text-primary) !important; }
+.badge.bg-warning { background-color: var(--accent-warning) !important; color: var(--bg-main) !important; }
+.badge.bg-info { background-color: var(--accent-info) !important; color: var(--bg-main) !important; }
+.badge.bg-light { background-color: var(--bg-surface-2) !important; color: var(--text-primary) !important; }
+.badge.bg-dark { background-color: var(--text-primary) !important; color: var(--bg-main) !important; }
+
+/* Text Muted */
+.text-muted {
+    color: var(--text-secondary) !important;
+}
+
+/* Hr */
+hr {
+    border-top: 1px solid var(--border-color);
+}
+
+/* Specific pentru input[type="date"] și input[type="time"] pentru a afișa picker-ul corect */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.8); /* Face iconița picker-ului vizibilă pe fundal închis */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container, .container-fluid {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+    h1, h2, h3, h4, h5 {
+        word-break: break-word; /* Previne overflow la titluri lungi */
+    }
 }

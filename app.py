@@ -357,6 +357,58 @@ def admin_reset_user_code(user_id):
     flash(f'Codul pentru {user_to_reset.username} a fost resetat. Noul cod unic este: {user_to_reset.unique_code}', 'success')
     return redirect(url_for('admin_dashboard'))
 
+@app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
+@login_required
+def admin_delete_user(user_id):
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('home'))
+
+    user_to_delete = User.query.get_or_404(user_id)
+
+    if user_to_delete.id == current_user.id:
+        flash('Nu vă puteți șterge propriul cont de admin.', 'danger')
+        return redirect(url_for('admin_dashboard'))
+
+    if user_to_delete.role == 'admin':
+        flash('Nu se poate șterge un alt administrator prin această interfață.', 'warning')
+        return redirect(url_for('admin_dashboard'))
+
+    username_deleted = user_to_delete.username
+    role_deleted = user_to_delete.role
+
+    if role_deleted == 'gradat':
+        # Șterge toți studenții creați de acest gradat și datele lor asociate (prin cascade)
+        students_to_delete = Student.query.filter_by(created_by_user_id=user_id).all()
+        for student in students_to_delete:
+            # Ștergerea studentului va declanșa ștergerea în cascadă a permisii, învoiri, servicii, etc.
+            # datorită `ondelete='CASCADE'` și `cascade="all, delete-orphan"` în modele.
+            db.session.delete(student)
+        flash(f'Studenții și toate datele asociate gradatului {username_deleted} au fost șterse.', 'info')
+
+    # Șterge utilizatorul în sine
+    # Orice relație directă cu User (ex: created_by_user_id în VolunteerActivity, ServiceAssignment)
+    # ar trebui să fie setată la nullable sau gestionată (ex: setată la admin default, sau șterse și acele înregistrări)
+    # Pentru simplitate, presupunem că ștergerea user-ului e ok dacă nu mai sunt dependențe FK directe care blochează.
+    # Relațiile unde user_id este FK (ex: VolunteerActivity.creator, ServiceAssignment.creator)
+    # vor cauza probleme dacă nu sunt `ondelete='SET NULL'` sau `ondelete='CASCADE'` (dacă se dorește ștergerea acelor activități/servicii)
+    # Momentan, created_by_user_id în VolunteerActivity și ServiceAssignment sunt Non-nullable,
+    # deci ștergerea unui gradat care a creat aceste entități va eșua dacă nu sunt șterse manual mai întâi
+    # sau dacă nu se modifică schema pentru a permite NULL sau a adăuga cascade.
+    # Pentru siguranță, ștergem explicit activitățile și serviciile create de utilizator.
+
+    VolunteerActivity.query.filter_by(created_by_user_id=user_id).delete()
+    ServiceAssignment.query.filter_by(created_by_user_id=user_id).delete()
+    # Permisiile, învoirile sunt legate de student, care e șters în cascadă dacă e gradat.
+    # Dacă un comandant ar crea direct aceste entități (nu e cazul acum), ar trebui o logică similară.
+
+    db.session.delete(user_to_delete)
+    db.session.commit()
+
+    flash(f'Utilizatorul {username_deleted} ({role_deleted}) a fost șters cu succes.', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+
 # --- Autentificare Utilizator ---
 # ... (Rutele de login utilizator rămân la fel) ...
 @app.route('/login', methods=['GET', 'POST'])
