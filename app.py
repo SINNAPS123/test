@@ -357,6 +357,58 @@ def admin_reset_user_code(user_id):
     flash(f'Codul pentru {user_to_reset.username} a fost resetat. Noul cod unic este: {user_to_reset.unique_code}', 'success')
     return redirect(url_for('admin_dashboard'))
 
+@app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
+@login_required
+def admin_delete_user(user_id):
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('home'))
+
+    user_to_delete = User.query.get_or_404(user_id)
+
+    if user_to_delete.id == current_user.id:
+        flash('Nu vă puteți șterge propriul cont de admin.', 'danger')
+        return redirect(url_for('admin_dashboard'))
+
+    if user_to_delete.role == 'admin':
+        flash('Nu se poate șterge un alt administrator prin această interfață.', 'warning')
+        return redirect(url_for('admin_dashboard'))
+
+    username_deleted = user_to_delete.username
+    role_deleted = user_to_delete.role
+
+    if role_deleted == 'gradat':
+        # Șterge toți studenții creați de acest gradat și datele lor asociate (prin cascade)
+        students_to_delete = Student.query.filter_by(created_by_user_id=user_id).all()
+        for student in students_to_delete:
+            # Ștergerea studentului va declanșa ștergerea în cascadă a permisii, învoiri, servicii, etc.
+            # datorită `ondelete='CASCADE'` și `cascade="all, delete-orphan"` în modele.
+            db.session.delete(student)
+        flash(f'Studenții și toate datele asociate gradatului {username_deleted} au fost șterse.', 'info')
+
+    # Șterge utilizatorul în sine
+    # Orice relație directă cu User (ex: created_by_user_id în VolunteerActivity, ServiceAssignment)
+    # ar trebui să fie setată la nullable sau gestionată (ex: setată la admin default, sau șterse și acele înregistrări)
+    # Pentru simplitate, presupunem că ștergerea user-ului e ok dacă nu mai sunt dependențe FK directe care blochează.
+    # Relațiile unde user_id este FK (ex: VolunteerActivity.creator, ServiceAssignment.creator)
+    # vor cauza probleme dacă nu sunt `ondelete='SET NULL'` sau `ondelete='CASCADE'` (dacă se dorește ștergerea acelor activități/servicii)
+    # Momentan, created_by_user_id în VolunteerActivity și ServiceAssignment sunt Non-nullable,
+    # deci ștergerea unui gradat care a creat aceste entități va eșua dacă nu sunt șterse manual mai întâi
+    # sau dacă nu se modifică schema pentru a permite NULL sau a adăuga cascade.
+    # Pentru siguranță, ștergem explicit activitățile și serviciile create de utilizator.
+
+    VolunteerActivity.query.filter_by(created_by_user_id=user_id).delete()
+    ServiceAssignment.query.filter_by(created_by_user_id=user_id).delete()
+    # Permisiile, învoirile sunt legate de student, care e șters în cascadă dacă e gradat.
+    # Dacă un comandant ar crea direct aceste entități (nu e cazul acum), ar trebui o logică similară.
+
+    db.session.delete(user_to_delete)
+    db.session.commit()
+
+    flash(f'Utilizatorul {username_deleted} ({role_deleted}) a fost șters cu succes.', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+
 # --- Autentificare Utilizator ---
 # ... (Rutele de login utilizator rămân la fel) ...
 @app.route('/login', methods=['GET', 'POST'])
@@ -897,6 +949,51 @@ def battalion_commander_dashboard():
                            total_battalion_presence=total_battalion_presence, # Totalul pe batalion
                            roll_call_time_str=roll_call_time.strftime('%d.%m.%Y %H:%M'))
 
+# Definiția funcției validate_daily_leave_times la nivel global
+def validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj):
+    if leave_date_obj.weekday() > 3: # 0-Luni, ..., 3-Joi
+        return False, "Învoirile zilnice sunt permise doar de Luni până Joi."
+
+    in_program_start = time(7, 0)
+    in_program_end = time(14, 20)
+    out_program_evening_start = time(22, 0)
+    out_program_morning_end = time(7, 0) # Sfârșitul intervalului de noapte
+
+    is_in_program = (in_program_start <= start_time_obj <= in_program_end and
+                     in_program_start <= end_time_obj <= in_program_end and
+                     start_time_obj < end_time_obj)
+
+    is_out_program_same_night = (start_time_obj >= out_program_evening_start and
+                                 end_time_obj > start_time_obj and
+                                 end_time_obj <= time(23,59,59))
+
+    is_out_program_overnight = (start_time_obj >= out_program_evening_start and
+                                end_time_obj < start_time_obj and
+                                end_time_obj <= out_program_morning_end)
+
+    is_out_program_early_morning_same_day = (start_time_obj < out_program_morning_end and
+                                            end_time_obj <= out_program_morning_end and
+                                            start_time_obj < end_time_obj)
+
+    is_out_program = is_out_program_same_night or is_out_program_overnight or is_out_program_early_morning_same_day
+
+    if not is_in_program and not is_out_program:
+        return False, "Interval orar invalid. Permis: 07:00-14:20 sau 22:00-07:00 (poate fi a doua zi)."
+
+    if is_out_program:
+        if in_program_start <= start_time_obj < in_program_end:
+            return False, "Intervalul 'afară program' nu poate începe în timpul programului (07:00-14:20)."
+        if in_program_start < end_time_obj <= in_program_end and not is_out_program_overnight:
+             return False, "Intervalul 'afară program' nu se poate termina în timpul programului (07:00-14:20)."
+
+    return True, "Valid"
+
+# Funcția get_next_friday la nivel global
+def get_next_friday(start_date=None):
+    d = start_date if start_date else date.today()
+    while d.weekday() != 4: # Vineri = 4
+        d += timedelta(days=1)
+    return d
 
 if __name__ == '__main__':
     init_db()
