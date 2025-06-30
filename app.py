@@ -1254,9 +1254,56 @@ def get_next_friday(start_date=None):
         d += timedelta(days=1)
     return d
 
+# Definițiile duplicate de mai jos vor fi șterse, deoarece sunt deja definite global mai sus.
+# # Definiția funcției validate_daily_leave_times la nivel global
+# def validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj):
+#     if leave_date_obj.weekday() > 3: # 0-Luni, ..., 3-Joi
+#         return False, "Învoirile zilnice sunt permise doar de Luni până Joi."
+#
+#     in_program_start = time(7, 0)
+#     in_program_end = time(14, 20)
+#     out_program_evening_start = time(22, 0)
+#     out_program_morning_end = time(7, 0) # Sfârșitul intervalului de noapte
+#
+#     is_in_program = (in_program_start <= start_time_obj <= in_program_end and
+#                      in_program_start <= end_time_obj <= in_program_end and
+#                      start_time_obj < end_time_obj)
+#
+#     is_out_program_same_night = (start_time_obj >= out_program_evening_start and
+#                                  end_time_obj > start_time_obj and
+#                                  end_time_obj <= time(23,59,59))
+#
+#     is_out_program_overnight = (start_time_obj >= out_program_evening_start and
+#                                 end_time_obj < start_time_obj and
+#                                 end_time_obj <= out_program_morning_end)
+#
+#     is_out_program_early_morning_same_day = (start_time_obj < out_program_morning_end and
+#                                             end_time_obj <= out_program_morning_end and
+#                                             start_time_obj < end_time_obj)
+#
+#     is_out_program = is_out_program_same_night or is_out_program_overnight or is_out_program_early_morning_same_day
+#
+#     if not is_in_program and not is_out_program:
+#         return False, "Interval orar invalid. Permis: 07:00-14:20 sau 22:00-07:00 (poate fi a doua zi)."
+#
+#     if is_out_program:
+#         if in_program_start <= start_time_obj < in_program_end:
+#             return False, "Intervalul 'afară program' nu poate începe în timpul programului (07:00-14:20)."
+#         if in_program_start < end_time_obj <= in_program_end and not is_out_program_overnight:
+#              return False, "Intervalul 'afară program' nu se poate termina în timpul programului (07:00-14:20)."
+#
+#     return True, "Valid"
+#
+# # Funcția get_next_friday la nivel global
+# def get_next_friday(start_date=None):
+#     d = start_date if start_date else date.today()
+#     while d.weekday() != 4: # Vineri = 4
+#         d += timedelta(days=1)
+#     return d
+
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True, port=5001)
+    app.run(host='0.0.0.0', port=5001, debug=False)
 
 [end of app.py]
 
