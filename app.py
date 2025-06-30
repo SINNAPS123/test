@@ -897,6 +897,12 @@ def battalion_commander_dashboard():
                            total_battalion_presence=total_battalion_presence, # Totalul pe batalion
                            roll_call_time_str=roll_call_time.strftime('%d.%m.%Y %H:%M'))
 
+# Funcția get_next_friday, dacă nu e deja definită global
+def get_next_friday(start_date=None):
+    d = start_date if start_date else date.today()
+    while d.weekday() != 4: # Vineri = 4
+        d += timedelta(days=1)
+    return d
 
 if __name__ == '__main__':
     init_db()
