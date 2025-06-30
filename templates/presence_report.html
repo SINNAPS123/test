@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Raport Prezență{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Generare Raport Prezență și Efective</h2>
+        <a href="{{ url_for('gradat_dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Înapoi la Panou</a>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('presence_report') }}">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="report_type" class="form-label">Tip Raport:</label>
+                        <select class="form-select" id="report_type" name="report_type">
+                            <option value="current" selected>Prezență Curentă (Acum)</option>
+                            <option value="evening_roll_call">Apel Seară (L-J 20:00, V-D 22:00)</option>
+                            <option value="company_report">Raport Companie (14:20)</option>
+                            <option value="morning_check">Prezență Dimineață (ex: 07:00)</option>
+                            <option value="custom">Dată și Oră Specifică</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="custom_datetime" class="form-label">Dată și Oră Custom (dacă e selectat):</label>
+                        <input type="datetime-local" class="form-control" id="custom_datetime" name="custom_datetime" value="{{ current_datetime_str }}">
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-text-fill" viewBox="0 0 16 16">
+                                <path d="M9.293 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.707A1 1 0 0 0 13.707 4L10 .293A1 1 0 0 0 9.293 0zM9.5 3.5v-2l3 3h-2a1 1 0 0 1-1-1zM4.5 9a.5.5 0 0 1 0-1h7a.5.5 0 0 1 0 1h-7zM4 10.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zm.5 2.5a.5.5 0 0 1 0-1h4a.5.5 0 0 1 0 1h-4z"/>
+                              </svg> Generează Raport
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if report_data %}
+    <div class="card shadow-sm">
+        <div class="card-header">
+            <h4>{{ report_data.title }}</h4>
+            <small class="text-muted">Generat pentru: {{ report_data.datetime_checked }}</small>
+        </div>
+        <div class="card-body">
+            <h5>Efective:</h5>
+            <p>
+                <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ report_data.efectiv_control }}</span><br>
+                <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ report_data.efectiv_prezent }}</span><br>
+                <strong>Efectiv Absent (Ea):</strong> <span class="badge bg-danger fs-6">{{ report_data.efectiv_absent_count }}</span>
+            </p>
+
+            {% if report_data.efectiv_absent_list %}
+                <h5 class="mt-3">Listă Absenți:</h5>
+                <ul class="list-group list-group-flush">
+                    {% for absent_student in report_data.efectiv_absent_list %}
+                        <li class="list-group-item">{{ loop.index }}. {{ absent_student }}</li>
+                    {% endfor %}
+                </ul>
+            {% elif report_data.efectiv_absent_count == 0 and report_data.efectiv_control > 0 %}
+                 <p class="text-success mt-3"><strong>Toți studenții sunt prezenți!</strong></p>
+            {% elif report_data.efectiv_control == 0 %}
+                 <p class="text-info mt-3">Nu există studenți în evidență pentru a genera prezența.</p>
+            {% endif %}
+        </div>
+        <div class="card-footer">
+            <button class="btn btn-sm btn-outline-secondary" onclick="copyReportToClipboard()">Copiază Raportul Text</button>
+            <pre id="reportTextForCopy" class="d-none">
+EC: {{ report_data.efectiv_control }}
+Ep: {{ report_data.efectiv_prezent }}
+Ea: {{ report_data.efectiv_absent_count }}
+{% for absent_student in report_data.efectiv_absent_list %}{{ absent_student }}
+{% endfor %}
+            </pre>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const reportTypeSelect = document.getElementById('report_type');
+    const customDateTimeField = document.getElementById('custom_datetime');
+
+    function toggleCustomDateTime() {
+        if (reportTypeSelect.value === 'custom') {
+            customDateTimeField.closest('div').style.display = 'block'; // Arată câmpul
+            customDateTimeField.required = true;
+        } else {
+            customDateTimeField.closest('div').style.display = 'none'; // Ascunde câmpul
+            customDateTimeField.required = false;
+        }
+    }
+    if (reportTypeSelect) {
+        reportTypeSelect.addEventListener('change', toggleCustomDateTime);
+        toggleCustomDateTime(); // Setează starea inițială la încărcare
+    }
+});
+
+function copyReportToClipboard() {
+    const reportText = document.getElementById('reportTextForCopy').innerText.trim();
+    navigator.clipboard.writeText(reportText).then(function() {
+        alert('Raportul a fost copiat în clipboard!');
+    }, function(err) {
+        alert('Eroare la copierea raportului: ', err);
+    });
+}
+</script>
+{% endblock %}

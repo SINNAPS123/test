@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Panou Comandant Batalion {{ battalion_id }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-3">Panou Comandant Batalionul {{ battalion_id }}</h2>
+    <p class="text-muted">Situația efectivelor pentru Apelul de Seară din {{ roll_call_time_str }}</p>
+    <hr>
+
+    {% if total_battalion_presence %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-success text-white">
+            <h4 class="mb-0">Efective Totale Batalionul {{ battalion_id }}</h4>
+        </div>
+        <div class="card-body">
+            <p>
+                <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ total_battalion_presence.efectiv_control }}</span><br>
+                <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ total_battalion_presence.efectiv_prezent }}</span><br>
+                <strong>Efectiv Absent (Ea):</strong> <span class="badge bg-danger fs-6">{{ total_battalion_presence.efectiv_absent_count }}</span>
+            </p>
+            {% if total_battalion_presence.efectiv_absent_count > 0 %}
+                <small class="text-muted">Detalii absenți pe companii mai jos.</small>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-warning">Nu s-au putut încărca datele de prezență pentru batalion.</div>
+    {% endif %}
+
+    <h4 class="mt-4">Detalii Efective pe Companii:</h4>
+    {% if companies_data %}
+        {% for company_name, data in companies_data.items()|sort %}
+        <div class="card shadow-sm mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">{{ company_name }}</h5>
+            </div>
+            <div class="card-body">
+                <p>
+                    EC: <span class="badge bg-dark">{{ data.efectiv_control }}</span> |
+                    Ep: <span class="badge bg-success">{{ data.efectiv_prezent }}</span> |
+                    Ea: <span class="badge bg-danger">{{ data.efectiv_absent_count }}</span>
+                </p>
+                {% if data.absent_details_by_unit %}
+                    <p class="mb-1"><small><strong>Absenți din {{ company_name }}:</strong></small></p>
+                    <ul class="list-unstyled" style="font-size: 0.9em;">
+                        {% for pluton_key, absent_list in data.absent_details_by_unit.items()|sort %}
+                            {% for absent_detail in absent_list %}
+                                <li><small>{{ absent_detail }}</small></li>
+                            {% endfor %}
+                        {% endfor %}
+                    </ul>
+                {% elif data.efectiv_absent_count == 0 and data.efectiv_control > 0 %}
+                    <p class="text-success mb-0"><small>Toți studenții prezenți în {{ company_name }}.</small></p>
+                {% elif data.efectiv_control == 0 %}
+                    <p class="text-info mb-0"><small>Nu există studenți înregistrați pentru {{ company_name }}.</small></p>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="alert alert-info">Nu există companii cu studenți în acest batalion.</div>
+    {% endif %}
+
+    <p class="mt-4">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
+            &laquo; Înapoi la Panoul Principal
+        </a>
+    </p>
+</div>
+{% endblock %}
