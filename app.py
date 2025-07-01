@@ -557,13 +557,9 @@ def _calculate_presence_data(student_list, check_datetime):
         if status_info["status_code"] == "present":
             in_formation_list.append(student_display_name)
         elif status_info["status_code"] == "on_duty":
-            # Only count as "on_duty" for roll call if they don't participate
-            # For general presence, always list them as on_duty.
-            # The commander dashboard is for roll call, so use participates_in_roll_call
-            if hasattr(status_info.get("object"), 'participates_in_roll_call') and not status_info["object"].participates_in_roll_call:
-                 on_duty_list.append(f"{student_display_name} - {status_info['reason']}")
-            else: # Participates in roll call or not applicable (e.g. old service without the field)
-                in_formation_list.append(student_display_name) # Counted as present if they participate
+            # For company/battalion reports, all students on duty are listed under "on duty",
+            # regardless of their participation in roll call.
+            on_duty_list.append(f"{student_display_name} - {status_info['reason']}")
         elif status_info["status_code"] == "platoon_graded_duty":
             # This status means they are present but have a special role.
             # They are not "absent" but might be reported separately from "in_formation_list"
@@ -700,8 +696,17 @@ def presence_report():
             datetime_to_check = datetime.combine(date.today(), time(14, 20))
             report_title_detail = "Raport Companie (14:20)"
         elif report_type == 'morning_check':
-            datetime_to_check = datetime.combine(date.today(), time(7, 0))
-            report_title_detail = "Prezență Dimineață (07:00)"
+            # Use the date part from custom_datetime_str if available and valid, otherwise default to today
+            target_d = date.today() # Default to today
+            if custom_datetime_str: # If a custom date string is provided
+                try:
+                    # Attempt to parse the date part from the custom datetime input
+                    target_d = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M').date()
+                except (ValueError, TypeError):
+                    # If parsing fails, stick to the default (today)
+                    flash('Data custom specificată era invalidă, s-a folosit data curentă pentru raportul de dimineață.', 'warning')
+            datetime_to_check = datetime.combine(target_d, time(7, 0))
+            report_title_detail = f"Prezență Dimineață ({target_d.strftime('%d.%m.%Y')} 07:00)"
         elif report_type == 'custom':
             try:
                 datetime_to_check = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M')
@@ -1309,13 +1314,17 @@ def add_edit_daily_leave(leave_id=None):
         except ValueError: flash('Format dată sau oră invalid.', 'danger'); return render_template('add_edit_daily_leave.html', form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post)
         is_valid_day, day_message = validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj)
         if not is_valid_day: flash(day_message, 'danger'); return render_template('add_edit_daily_leave.html', form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post)
-        in_program_start, in_program_end = time(7,0), time(14,20); out_program_evening_start, out_program_morning_end = time(22,0), time(7,0)
-        is_in_program = (in_program_start <= start_time_obj < in_program_end and in_program_start < end_time_obj <= in_program_end and start_time_obj < end_time_obj)
-        is_out_program = ((start_time_obj >= out_program_evening_start or start_time_obj < out_program_morning_end) and (end_time_obj <= out_program_morning_end or end_time_obj > start_time_obj or start_time_obj > end_time_obj) and not (in_program_start <= start_time_obj < in_program_end and in_program_start < end_time_obj <= in_program_end) )
-        if not (is_in_program or is_out_program): flash('Intervalul orar nu este valid. Permis: 07:00-14:20 sau 22:00-07:00 (poate trece în ziua următoare).', 'danger'); return render_template('add_edit_daily_leave.html', form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post)
-        start_dt = datetime.combine(leave_date_obj, start_time_obj); effective_end_date = leave_date_obj
-        if end_time_obj < start_time_obj and is_out_program: effective_end_date += timedelta(days=1)
+
+        # Removed the restrictive is_in_program and is_out_program checks.
+        # The primary validation will be that end_datetime is after start_datetime.
+
+        start_dt = datetime.combine(leave_date_obj, start_time_obj)
+        effective_end_date = leave_date_obj
+        # Determine if end_time implies the next day
+        if end_time_obj < start_time_obj: # This condition means it spans midnight
+            effective_end_date += timedelta(days=1)
         end_dt = datetime.combine(effective_end_date, end_time_obj)
+
         if end_dt <= start_dt : flash('Data/ora de sfârșit trebuie să fie după data/ora de început, chiar și când trece în ziua următoare.', 'warning'); return render_template('add_edit_daily_leave.html', form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post)
         student_to_check = Student.query.get(student_id)
         if student_to_check:
@@ -1397,7 +1406,7 @@ def process_daily_leaves_text():
     default_start_time_obj = time(15, 0); default_end_time_obj = time(19, 0)
     processed_count, error_count, already_exists_count = 0,0,0; not_found_or_ambiguous = []
     for line_raw in lines:
-        line = line_raw.strip();_ = _; __ = __
+        line = line_raw.strip()
         if not line: continue
         parsed_name_norm, parsed_grad, parsed_time_str = parse_leave_line(line)
         if not parsed_name_norm: error_count +=1; flash(f"Linie ignorată (format nume invalid): '{line_raw}'", "info"); continue
@@ -1840,7 +1849,7 @@ def text_report_display_company():
     report_lines.append(f"Efectiv control (Ec): {company_presence_data['efectiv_control']}")
     report_lines.append(f"Efectiv prezent (Ep): {company_presence_data['efectiv_prezent_total']}")
     report_lines.append(f"  - În formație: {company_presence_data['in_formation_count']}")
-    report_lines.append(f"  - În serviciu (nu participă la apel): {company_presence_data['on_duty_count']}")
+    report_lines.append(f"  - La Servicii: {company_presence_data['on_duty_count']}") # Changed label
     report_lines.append(f"  - Gradat Pluton (prezent): {company_presence_data['platoon_graded_duty_count']}")
     report_lines.append(f"Efectiv absent (Ea): {company_presence_data['efectiv_absent_total']}")
     report_lines.append("-" * 30)
@@ -1850,7 +1859,7 @@ def text_report_display_company():
         for detail in company_presence_data['in_formation_students_details']: report_lines.append(f"  - {detail}")
 
     if company_presence_data['on_duty_students_details']:
-        report_lines.append("\nÎN SERVICIU (nu participă la apel):")
+        report_lines.append("\nLA SERVICII:") # Changed label
         for detail in company_presence_data['on_duty_students_details']: report_lines.append(f"  - {detail}")
 
     if company_presence_data['platoon_graded_duty_students_details']:
@@ -1901,7 +1910,7 @@ def text_report_display_battalion():
     report_lines.append(f"  Efectiv control (Ec): {total_battalion_presence['efectiv_control']}")
     report_lines.append(f"  Efectiv prezent (Ep): {total_battalion_presence['efectiv_prezent_total']}")
     report_lines.append(f"    - În formație: {total_battalion_presence['in_formation_count']}")
-    report_lines.append(f"    - În serviciu (nu participă la apel): {total_battalion_presence['on_duty_count']}")
+    report_lines.append(f"    - La Servicii: {total_battalion_presence['on_duty_count']}") # Changed label
     report_lines.append(f"    - Gradat Pluton (prezent): {total_battalion_presence['platoon_graded_duty_count']}")
     report_lines.append(f"  Efectiv absent (Ea): {total_battalion_presence['efectiv_absent_total']}")
     report_lines.append("=" * 40)
@@ -1914,7 +1923,7 @@ def text_report_display_battalion():
         report_lines.append(f"\nSITUAȚIE COMPANIA {company_id_loop}:")
         report_lines.append(f"  Ec: {company_presence_data['efectiv_control']}, Ep: {company_presence_data['efectiv_prezent_total']}, Ea: {company_presence_data['efectiv_absent_total']}")
         report_lines.append(f"    În formație: {company_presence_data['in_formation_count']}")
-        report_lines.append(f"    În serviciu (fără apel): {company_presence_data['on_duty_count']}")
+        report_lines.append(f"    La Servicii: {company_presence_data['on_duty_count']}") # Changed label
         report_lines.append(f"    Gradat Pluton (prezent): {company_presence_data['platoon_graded_duty_count']}")
 
         if company_presence_data['absent_students_details']:
