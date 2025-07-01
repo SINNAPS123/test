@@ -398,6 +398,59 @@ def admin_create_user():
     flash(f'Utilizatorul "{username}" ({role}) creat cu codul unic: {new_user.unique_code}', 'success')
     return redirect(url_for('admin_dashboard'))
 
+@app.route('/admin/reset_user_code/<int:user_id>', methods=['POST'])
+@login_required
+def admin_reset_user_code(user_id):
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('home'))
+
+    user_to_reset = User.query.get_or_404(user_id)
+    if user_to_reset.role == 'admin':
+        flash('Codul adminului nu poate fi resetat din acest panou.', 'warning')
+        return redirect(url_for('admin_dashboard'))
+
+    user_to_reset.unique_code = secrets.token_hex(8)
+    user_to_reset.personal_code_hash = None  # Șterge codul personal vechi
+    user_to_reset.is_first_login = True    # Forțează setarea unui nou cod personal la login
+    db.session.commit()
+
+    flash(f'Codul pentru utilizatorul {user_to_reset.username} a fost resetat. Noul cod unic este: {user_to_reset.unique_code}', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
+@login_required
+def admin_delete_user(user_id):
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('home'))
+
+    user_to_delete = User.query.get_or_404(user_id)
+    if user_to_delete.id == current_user.id:
+        flash('Nu vă puteți șterge propriul cont de admin.', 'danger')
+        return redirect(url_for('admin_dashboard'))
+
+    # Verifică dacă utilizatorul este gradat și are studenți asociați
+    # Această verificare este importantă din cauza cascade delete pe student și datele asociate
+    if user_to_delete.role == 'gradat':
+        students_count = Student.query.filter_by(created_by_user_id=user_to_delete.id).count()
+        if students_count > 0:
+            flash(f'ATENȚIE: Utilizatorul {user_to_delete.username} este gradat și are {students_count} studenți asociați. Ștergerea va elimina și acești studenți și toate datele lor (permisii, învoiri, servicii).', 'warning')
+            # Aici s-ar putea adăuga o confirmare suplimentară dacă se dorește, dar onsubmit="confirm(...)" din HTML face deja asta.
+
+    try:
+        # Ștergerea utilizatorului va șterge în cascadă și intrarea din SpecialGradedUser (dacă există)
+        # și studenții creați de el (dacă e gradat), și datele asociate studenților.
+        username_deleted = user_to_delete.username
+        db.session.delete(user_to_delete)
+        db.session.commit()
+        flash(f'Utilizatorul {username_deleted} și toate datele asociate (dacă este cazul) au fost șterse definitiv.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la ștergerea utilizatorului {user_to_delete.username}: {str(e)}', 'danger')
+
+    return redirect(url_for('admin_dashboard'))
+
 # ... (restul rutelor admin, user, gradat, student management vor fi actualizate pentru a elimina referințele la student.este_gradat_activ)
 # ... și pentru a integra logica SpecialGradedUser unde e necesar.
 # ... De exemplu, list_students pentru admin nu va mai afișa coloana "Gradat Activ" din Student, ci va trebui să facă un join sau o verificare separată cu SpecialGradedUser.
