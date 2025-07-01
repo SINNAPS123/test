@@ -18,7 +18,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
-login_manager.login_view = 'home'
+login_manager.login_view = 'user_login' # Changed from 'home'
 login_manager.login_message_category = 'info'
 login_manager.login_message = "Te rugăm să te autentifici pentru a accesa această pagină."
 
@@ -262,6 +262,115 @@ def home():
                            total_students=total_students,
                            total_users=total_users,
                            total_volunteer_activities=total_volunteer_activities)
+
+@app.route('/user_login', methods=['GET', 'POST'])
+def user_login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    if request.method == 'POST':
+        login_code = request.form.get('login_code')
+        # Try to find user by unique_code (for first login)
+        user = User.query.filter_by(unique_code=login_code).first()
+
+        if user:
+            if user.is_first_login:
+                login_user(user)
+                flash('Autentificare reușită! Setează-ți codul personal.', 'info')
+                return redirect(url_for('set_personal_code'))
+            else:
+                # This case should ideally not happen if unique_code is only for first login
+                # and personal_code is used afterwards.
+                # However, if unique_code is also a permanent secondary login method:
+                # login_user(user)
+                # flash('Autentificare reușită!', 'success')
+                # return redirect(url_for('dashboard'))
+                # For now, assume unique_code is ONLY for first login leading to set_personal_code.
+                # If they try to use unique_code after setting personal_code, it means they should use personal_code.
+                flash('Acest cod unic a fost deja folosit pentru prima autentificare. Te rugăm folosește codul personal setat.', 'warning')
+                return redirect(url_for('user_login'))
+
+        # If not found by unique_code, try by personal_code
+        # This requires iterating through users if personal_code is hashed and not directly queryable
+        # The User model has check_personal_code method.
+        users = User.query.filter(User.role != 'admin').all() # Check only non-admin users
+        found_user_by_personal_code = None
+        for u in users:
+            if u.personal_code_hash and u.check_personal_code(login_code):
+                found_user_by_personal_code = u
+                break
+
+        if found_user_by_personal_code:
+            user = found_user_by_personal_code
+            if user.is_first_login: # Should not happen if they have a personal code set.
+                flash('Eroare de configurare cont. Contactează administratorul.', 'danger')
+                return redirect(url_for('user_login'))
+
+            login_user(user)
+            flash('Autentificare reușită!', 'success')
+            return redirect(url_for('dashboard'))
+
+        flash('Cod de autentificare invalid sau expirat.', 'danger')
+        return redirect(url_for('user_login'))
+
+    return render_template('user_login.html')
+
+@app.route('/admin_login', methods=['GET', 'POST'])
+def admin_login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard')) # Or specific admin dashboard if preferred
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username, role='admin').first()
+        if user and user.check_password(password):
+            login_user(user)
+            flash('Autentificare admin reușită!', 'success')
+            return redirect(url_for('dashboard')) # Will redirect to admin_dashboard via logic in dashboard route
+        else:
+            flash('Nume de utilizator sau parolă admin incorecte.', 'danger')
+            return redirect(url_for('admin_login'))
+    return render_template('admin_login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('Ai fost deconectat.', 'success')
+    return redirect(url_for('home'))
+
+@app.route('/set_personal_code', methods=['GET', 'POST'])
+@login_required
+def set_personal_code():
+    # This page should ideally only be accessed if it's truly the user's first login setup phase
+    if not current_user.is_first_login:
+        flash('Codul personal a fost deja setat.', 'info')
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        personal_code = request.form.get('personal_code')
+        confirm_personal_code = request.form.get('confirm_personal_code')
+
+        if not personal_code or len(personal_code) < 4:
+            flash('Codul personal trebuie să aibă minim 4 caractere.', 'warning')
+            return redirect(url_for('set_personal_code'))
+
+        if personal_code != confirm_personal_code:
+            flash('Codurile personale nu se potrivesc.', 'warning')
+            return redirect(url_for('set_personal_code'))
+
+        try:
+            current_user.set_personal_code(personal_code) # This also sets is_first_login to False
+            db.session.commit()
+            flash_message = 'Codul personal a fost setat cu succes. Te rugăm să te autentifici din nou folosind noul cod.'
+            logout_user() # Log out user as per template's instruction
+            flash(flash_message, 'success')
+            return redirect(url_for('user_login'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'A apărut o eroare la setarea codului personal: {str(e)}', 'danger')
+            return redirect(url_for('set_personal_code'))
+
+    return render_template('set_personal_code.html')
 
 @app.route('/dashboard')
 @login_required
