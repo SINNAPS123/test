@@ -6,7 +6,7 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Listă Permisii</h2>
-        <a href="{{ url_for('add_permission') }}" class="btn btn-success">
+        <a href="{{ url_for('add_edit_permission') }}" class="btn btn-success">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-calendar-plus-fill" viewBox="0 0 16 16">
                 <path d="M4 .5a.5.5 0 0 0-1 0V1H2a2 2 0 0 0-2 2v1h16V3a2 2 0 0 0-2-2h-1V.5a.5.5 0 0 0-1 0V1H4V.5zM16 14V5H0v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2zM8.5 8.5V10H10a.5.5 0 0 1 0 1H8.5v1.5a.5.5 0 0 1-1 0V11H6a.5.5 0 0 1 0-1h1.5V8.5a.5.5 0 0 1 1 0z"/>
             </svg>
@@ -90,7 +90,7 @@
         {{ render_permissions_table(past_permissions, 'Permisii Trecute/Anulate', 'past-permissions') }}
     {% else %}
         <div class="alert alert-info mt-4" role="alert">
-            Nu există permisii de afișat. Puteți adăuga o <a href="{{ url_for('add_permission') }}" class="alert-link">permisie nouă aici</a>.
+            Nu există permisii de afișat. Puteți adăuga o <a href="{{ url_for('add_edit_permission') }}" class="alert-link">permisie nouă aici</a>.
         </div>
     {% endif %}
 

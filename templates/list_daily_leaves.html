@@ -6,7 +6,7 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Listă Învoiri Zilnice (Luni-Joi)</h2>
-        <a href="{{ url_for('add_daily_leave') }}" class="btn btn-success">
+        <a href="{{ url_for('add_edit_daily_leave') }}" class="btn btn-success">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-calendar2-plus-fill" viewBox="0 0 16 16">
                 <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM2 3.5v1c0 .276.244.5.545.5h10.91c.3 0 .545-.224.545-.5v-1c0-.276-.244-.5-.546-.5H2.545c-.3 0-.545.224-.545.5zm6.5 5a.5.5 0 0 0-1 0V10H6.5a.5.5 0 0 0 0 1H8v1.5a.5.5 0 0 0 1 0V11h1.5a.5.5 0 0 0 0-1H9V8.5z"/>
             </svg>
@@ -132,7 +132,7 @@
         {{ render_daily_leaves_table(past_leaves, 'Învoiri Trecute/Anulate') }}
     {% else %}
         <div class="alert alert-info mt-4" role="alert">
-            Nu există învoiri zilnice de afișat. Puteți adăuga o <a href="{{ url_for('add_daily_leave') }}" class="alert-link">învoire nouă aici</a> sau procesa o <a href="#leave_list_text" class="alert-link">listă din text</a>.
+            Nu există învoiri zilnice de afișat. Puteți adăuga o <a href="{{ url_for('add_edit_daily_leave') }}" class="alert-link">învoire nouă aici</a> sau procesa o <a href="#leave_list_text" class="alert-link">listă din text</a>.
         </div>
     {% endif %}
 
