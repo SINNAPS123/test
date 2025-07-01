@@ -3,6 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        (function() {
+            try {
+                var theme = localStorage.getItem('theme');
+                if (theme === 'dark') {
+                    document.documentElement.classList.add('dark-mode-preload');
+                    // Defer adding to body until it exists, or rely on CSS for body background
+                } else if (theme === 'light') {
+                    document.documentElement.classList.remove('dark-mode-preload');
+                }
+                // main.js will handle body class and icon updates once DOM is ready
+            } catch (e) {
+                console.warn('Could not apply stored theme preference early:', e);
+            }
+        })();
+    </script>
     <title>{% block title %}Administrare Studenți{% endblock %}</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -29,9 +45,10 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
         <div class="container-fluid">
-            <a class="navbar-brand unap-brand" href="{{ url_for('home') }}">
+            <a class="navbar-brand unap-brand" href="{{ url_for('home') }}" style="display: flex; align-items: center;">
                 {# Aici ar veni <img src="{{ url_for('static', filename='images/unap_logo.png') }}" alt="UNAP"> dacă am avea un logo #}
                 <span class="unap-logo-text">UNAP</span>
+                <span class="badge ms-2" style="padding: 0.3em 0.5em; font-size: 0.6em; color: white; background-image: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);">BETA</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>

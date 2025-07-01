@@ -30,7 +30,7 @@
                                 <select class="form-select" id="weekend_start_date" name="weekend_start_date" required>
                                     <option value="" disabled {% if not form_data %}selected{% endif %}>Alege un weekend...</option>
                                     {% for wknd in upcoming_weekends %}
-                                    <option value="{{ wknd.value }}" {% if form_data and form_data.weekend_start_date == wknd.value %}selected{% endif %}>{{ wknd.text }}</option>
+                                    <option value="{{ wknd.value }}" {% if form_data and form_data.weekend_start_date == wknd.value %}selected{% endif %}>{{ wknd.display }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
@@ -52,24 +52,32 @@
                                 <div class="day-times {% if not form_data or day_name not in form_data.getlist('selected_days[]') %}d-none{% endif %}" id="times_{{ day_name.lower() }}">
                                     <div class="mb-2">
                                         <label for="{{ day_name.lower() }}_start_time" class="form-label form-label-sm">Ora început:</label>
-                                        <input type="time" class="form-control form-control-sm" id="{{ day_name.lower() }}_start_time" name="{{ day_name.lower() }}_start_time"
-                                               value="{{ form_data[day_name.lower()~'_start_time'] if form_data and form_data[day_name.lower()~'_start_time'] }}">
+                                        <input type="time" class="form-control form-control-sm time-input" id="{{ day_name.lower() }}_start_time" name="{{ day_name.lower() }}_start_time"
+                                               value="{{ form_data[day_name.lower()~'_start_time'] if form_data and form_data[day_name.lower()~'_start_time'] }}" data-day="{{ day_name.lower() }}">
                                     </div>
                                     <div class="mb-2">
                                         <label for="{{ day_name.lower() }}_end_time" class="form-label form-label-sm">Ora sfârșit:</label>
-                                        <input type="time" class="form-control form-control-sm" id="{{ day_name.lower() }}_end_time" name="{{ day_name.lower() }}_end_time"
-                                                value="{{ form_data[day_name.lower()~'_end_time'] if form_data and form_data[day_name.lower()~'_end_time'] }}">
+                                        <input type="time" class="form-control form-control-sm time-input" id="{{ day_name.lower() }}_end_time" name="{{ day_name.lower() }}_end_time"
+                                                value="{{ form_data[day_name.lower()~'_end_time'] if form_data and form_data[day_name.lower()~'_end_time'] }}" data-day="{{ day_name.lower() }}">
                                     </div>
+                                    {% if day_name == 'Duminica' %}
+                                    <div class="form-check mt-1 mb-2" id="church_option_div" style="display: {% if form_data and 'Duminica' in form_data.getlist('selected_days[]') %}block{% else %}none{% endif %};">
+                                        <input class="form-check-input" type="checkbox" id="duminica_biserica" name="duminica_biserica" value="true"
+                                               {% if form_data and form_data.duminica_biserica %}checked{% endif %}>
+                                        <label class="form-check-label form-label-sm" for="duminica_biserica">
+                                            Participă la biserică (09:00-11:00)
+                                        </label>
+                                    </div>
+                                    {% endif %}
                                 </div>
                             </div>
                             {% endfor %}
                         </div>
-                        <!-- Aceste inputuri hidden vor fi populate de JS înainte de submit -->
-                        <!-- Backend-ul se așteaptă la aceste nume de câmpuri -->
-                        <input type="hidden" id="day1_start_time_hidden" name="day1_start_time">
-                        <input type="hidden" id="day1_end_time_hidden" name="day1_end_time">
-                        <input type="hidden" id="day2_start_time_hidden" name="day2_start_time">
-                        <input type="hidden" id="day2_end_time_hidden" name="day2_end_time">
+                        <div id="day_selection_warning" class="form-text text-warning mb-2" style="display: none;">
+                            Atenție: Ați selectat 3 zile pentru învoire. Asigurați-vă că acest lucru este permis conform regulamentului.
+                        </div>
+                        <!-- Hidden inputs for day1/day2 are not strictly necessary with current backend parsing, but can be kept or removed -->
+                        <!-- For simplicity, if backend is flexible, these specific hidden ones might not be needed if we handle 3 days -->
 
                         <div class="mb-3">
                             <label for="reason" class="form-label">Motiv (Opțional)</label>
@@ -101,18 +109,62 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const checkboxes = document.querySelectorAll('.day-checkbox');
-    const maxDays = 2;
+    const warningDiv = document.getElementById('day_selection_warning');
+    const maxDaysAllowed = 3;
+
+    const defaultTimes = {
+        'vineri': {start: '15:00', end: '20:00'},
+        'sambata': {start: '15:00', end: '22:00'},
+        'duminica': {start: '15:00', end: '22:00'}
+    };
+    const churchTimes = {start: '09:00', end: '11:00'};
+
+    const sundayCheckbox = document.getElementById('check_duminica');
+    const churchOptionDiv = document.getElementById('church_option_div');
+    const churchCheckbox = document.getElementById('duminica_biserica');
+    const sundayStartTimeInput = document.getElementById('duminica_start_time');
+    const sundayEndTimeInput = document.getElementById('duminica_end_time');
+
+    function toggleChurchOptionVisibility() {
+        if (sundayCheckbox && sundayCheckbox.checked) {
+            churchOptionDiv.style.display = 'block';
+        } else {
+            churchOptionDiv.style.display = 'none';
+            if (churchCheckbox) churchCheckbox.checked = false; // Uncheck church if Sunday is deselected
+        }
+    }
+
+    function applyDefaultOrChurchTimes(dayNameLower) {
+        const startTimeInput = document.getElementById(dayNameLower + '_start_time');
+        const endTimeInput = document.getElementById(dayNameLower + '_end_time');
+
+        if (startTimeInput.value === '' && endTimeInput.value === '') {
+            if (dayNameLower === 'duminica' && churchCheckbox && churchCheckbox.checked) {
+                startTimeInput.value = churchTimes.start;
+                endTimeInput.value = churchTimes.end;
+            } else if (defaultTimes[dayNameLower]) {
+                startTimeInput.value = defaultTimes[dayNameLower].start;
+                endTimeInput.value = defaultTimes[dayNameLower].end;
+            }
+        }
+    }
 
     checkboxes.forEach(checkbox => {
         checkbox.addEventListener('change', function() {
-            const dayName = this.value.toLowerCase();
-            const timesDiv = document.getElementById('times_' + dayName);
+            const dayNameLower = this.value.toLowerCase();
+            const timesDiv = document.getElementById('times_' + dayNameLower);
+
             if (this.checked) {
                 timesDiv.classList.remove('d-none');
+                applyDefaultOrChurchTimes(dayNameLower);
             } else {
                 timesDiv.classList.add('d-none');
-                document.getElementById(dayName + '_start_time').value = '';
-                document.getElementById(dayName + '_end_time').value = '';
+                document.getElementById(dayNameLower + '_start_time').value = '';
+                document.getElementById(dayNameLower + '_end_time').value = '';
+            }
+
+            if (dayNameLower === 'duminica') {
+                toggleChurchOptionVisibility();
             }
 
             let checkedCount = 0;
@@ -120,63 +172,93 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (cb.checked) checkedCount++;
             });
 
-            if (checkedCount > maxDays) {
-                this.checked = false; // Uncheck the last checked box
+            if (checkedCount > maxDaysAllowed) {
+                this.checked = false; // Uncheck the last checked box that exceeded the limit
                 timesDiv.classList.add('d-none');
-                 document.getElementById(dayName + '_start_time').value = '';
+                document.getElementById(dayName + '_start_time').value = '';
                 document.getElementById(dayName + '_end_time').value = '';
-                alert('Puteți selecta maxim ' + maxDays + ' zile.');
+                alert('Puteți selecta maxim ' + maxDaysAllowed + ' zile.');
+            }
+
+            // Show/hide warning for 3 days
+            if (checkedCount === 3) {
+                warningDiv.style.display = 'block';
+            } else {
+                warningDiv.style.display = 'none';
             }
         });
     });
 
-    // Proxy time inputs before submit
+    // Initialize visibility for church option on page load (for edits)
+    if (sundayCheckbox) { // Ensure sundayCheckbox exists
+        toggleChurchOptionVisibility();
+    }
+
+
+    if (churchCheckbox) {
+        churchCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                sundayStartTimeInput.value = churchTimes.start;
+                sundayEndTimeInput.value = churchTimes.end;
+            } else {
+                // Revert to default Sunday times if church is unchecked
+                // only if current times are church times (to avoid overwriting user's other manual input)
+                if (sundayStartTimeInput.value === churchTimes.start && sundayEndTimeInput.value === churchTimes.end) {
+                    sundayStartTimeInput.value = defaultTimes.duminica.start;
+                    sundayEndTimeInput.value = defaultTimes.duminica.end;
+                }
+            }
+        });
+    }
+
+    // If user manually changes Sunday times, uncheck "church" if times no longer match church times
+    [sundayStartTimeInput, sundayEndTimeInput].forEach(input => {
+        if (input) { // Ensure input exists
+            input.addEventListener('input', function() {
+                if (churchCheckbox && churchCheckbox.checked) {
+                    if (sundayStartTimeInput.value !== churchTimes.start || sundayEndTimeInput.value !== churchTimes.end) {
+                        churchCheckbox.checked = false;
+                    }
+                }
+            });
+        }
+    });
+
+    // Initial pre-fill for checked days on load (e.g. validation error repopulation or edit)
+    checkboxes.forEach(cb => {
+        if (cb.checked) {
+            const dayNameLower = cb.value.toLowerCase();
+            applyDefaultOrChurchTimes(dayNameLower); // Applies default if fields are empty, respects church if checked
+            if (dayNameLower === 'duminica') { // Ensure church state is correct based on times
+                 if (churchCheckbox && sundayStartTimeInput.value === churchTimes.start && sundayEndTimeInput.value === churchTimes.end) {
+                    churchCheckbox.checked = true;
+                }
+            }
+        }
+    });
+
+    // Client-side validation for filled times if day is checked
     const form = document.getElementById('weekendLeaveForm');
     if (form) {
         form.addEventListener('submit', function(event) {
             const selectedCheckboxes = Array.from(checkboxes).filter(cb => cb.checked);
+            let timesAreValid = true;
 
-            // Inputurile hidden pe care le va citi backend-ul
-            const day1StartHidden = document.getElementById('day1_start_time_hidden');
-            const day1EndHidden = document.getElementById('day1_end_time_hidden');
-            const day2StartHidden = document.getElementById('day2_start_time_hidden');
-            const day2EndHidden = document.getElementById('day2_end_time_hidden');
+            selectedCheckboxes.forEach(cb => {
+                let day_id_prefix = cb.value.toLowerCase();
+                let startTimeInput = document.getElementById(day_id_prefix + '_start_time');
+                let endTimeInput = document.getElementById(day_id_prefix + '_end_time');
 
-            // Resetează valorile inputurilor hidden
-            day1StartHidden.value = '';
-            day1EndHidden.value = '';
-            day2StartHidden.value = '';
-            day2EndHidden.value = '';
-
-            if (selectedCheckboxes.length >= 1) {
-                let day1_id_prefix = selectedCheckboxes[0].value.toLowerCase();
-                let day1StartTimeInput = document.getElementById(day1_id_prefix + '_start_time');
-                let day1EndTimeInput = document.getElementById(day1_id_prefix + '_end_time');
-
-                day1StartHidden.value = day1StartTimeInput.value;
-                day1EndHidden.value = day1EndTimeInput.value;
-
-                // Validare simplă pe client că orele sunt completate dacă ziua e bifată
-                if (!day1StartTimeInput.value || !day1EndTimeInput.value) {
-                    alert('Vă rugăm completați orele pentru ' + selectedCheckboxes[0].value + '.');
-                    event.preventDefault(); // Oprește trimiterea formularului
-                    return;
+                if (!startTimeInput.value || !endTimeInput.value) {
+                    timesAreValid = false;
+                    alert('Vă rugăm completați orele pentru ' + cb.value + '.');
                 }
-            }
-            if (selectedCheckboxes.length === 2) {
-                 let day2_id_prefix = selectedCheckboxes[1].value.toLowerCase();
-                 let day2StartTimeInput = document.getElementById(day2_id_prefix + '_start_time');
-                 let day2EndTimeInput = document.getElementById(day2_id_prefix + '_end_time');
+            });
 
-                day2StartHidden.value = day2StartTimeInput.value;
-                day2EndHidden.value = day2EndTimeInput.value;
-
-                if (!day2StartTimeInput.value || !day2EndTimeInput.value) {
-                    alert('Vă rugăm completați orele pentru ' + selectedCheckboxes[1].value + '.');
-                    event.preventDefault(); // Oprește trimiterea formularului
-                    return;
-                }
+            if (!timesAreValid) {
+                event.preventDefault(); // Stop form submission
             }
+            // The hidden input population for day1/day2 is removed as backend handles selected_days[] directly
         });
     }
 });

@@ -1,5 +1,10 @@
 /* --- Tema Modernă și Luminoasă --- */
 
+/* Preload style for dark mode to prevent FOUC */
+html.dark-mode-preload {
+    background-color: #1a1a1a; /* Fallback, should match --bg-main in dark mode */
+}
+
 /* Variabile de Culoare */
 :root {
     --bg-main: #f8f9fa;                     /* Gri foarte deschis, aproape alb */
@@ -127,13 +132,13 @@ body {
     padding: 0;
     background-color: var(--bg-main);
     color: var(--text-primary);
-    line-height: 1.6;
+    line-height: 1.5; /* Redus line-height global */
     font-size: 1rem; /* Asigură o bază bună pentru responsive */
 }
 
 .container, .container-fluid {
-    padding-top: 1.5rem;
-    padding-bottom: 1.5rem;
+    padding-top: 1rem; /* Redus padding container */
+    padding-bottom: 1rem; /* Redus padding container */
 }
 
 a {
@@ -152,26 +157,27 @@ a:hover {
     box-shadow: var(--shadow-sm);
 }
 .navbar {
-    padding-top: 0.3rem; /* Redus padding-ul navbar-ului */
-    padding-bottom: 0.3rem; /* Redus padding-ul navbar-ului */
+    padding-top: 0.1rem; /* Redus padding-ul navbar-ului */
+    padding-bottom: 0.1rem; /* Redus padding-ul navbar-ului */
 }
 .navbar .navbar-brand {
     font-weight: 600;
-    font-size: 1.25rem; /* Redus font-size pentru brand */
+    font-size: 1.1rem; /* Redus font-size pentru brand */
     display: flex;
     align-items: center;
-    padding-top: 0.2rem; /* Redus padding-ul brand-ului */
-    padding-bottom: 0.2rem; /* Redus padding-ul brand-ului */
+    padding-top: 0.1rem; /* Redus padding-ul brand-ului */
+    padding-bottom: 0.1rem; /* Redus padding-ul brand-ului */
 }
 .navbar .navbar-brand img {
-    max-height: 30px; /* Redus înălțimea logo-ului */
-    margin-right: 0.5rem; /* Redus marginea logo-ului */
+    max-height: 25px; /* Redus înălțimea logo-ului */
+    margin-right: 0.3rem; /* Redus marginea logo-ului */
 }
 .navbar .nav-link {
     color: var(--text-secondary) !important;
     font-weight: 500;
-    padding-top: 0.4rem; /* Redus padding-ul link-urilor */
-    padding-bottom: 0.4rem; /* Redus padding-ul link-urilor */
+    padding-top: 0.2rem; /* Redus padding-ul link-urilor */
+    padding-bottom: 0.2rem; /* Redus padding-ul link-urilor */
+    font-size: 0.9rem; /* Ajustat font-size pentru link-uri */
 }
 .navbar .nav-link:hover, .navbar .nav-link.active {
     color: var(--accent-primary) !important;
@@ -193,26 +199,26 @@ a:hover {
     border: 1px solid var(--border-color);
     border-radius: 0.375rem; /* Bootstrap default */
     box-shadow: var(--shadow-sm);
-    margin-bottom: 1.5rem; /* Spațiere mai bună între carduri */
+    margin-bottom: 1rem; /* Redus margin-bottom card */
 }
 .card-header {
     background-color: var(--bg-main); /* Un fundal ușor diferit pentru header */
     color: var(--text-primary);
     border-bottom: 1px solid var(--border-color);
     font-weight: 600;
-    padding: 0.75rem 1.25rem;
+    padding: 0.6rem 1rem; /* Redus padding card-header */
 }
 .card-body {
     color: var(--text-primary);
-    padding: 1.25rem;
+    padding: 1rem; /* Redus padding card-body */
 }
 .card-footer {
     background-color: var(--bg-main);
     border-top: 1px solid var(--border-color);
-    padding: 0.75rem 1.25rem;
+    padding: 0.6rem 1rem; /* Redus padding card-footer */
 }
 .card-title {
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem; /* Redus margin-bottom card-title */
     font-weight: 600;
 }
 
@@ -224,7 +230,7 @@ a:hover {
     margin-bottom: 1rem;
 }
 .table th, .table td {
-    padding: 0.75rem;
+    padding: 0.5rem; /* Redus padding table cell */
     vertical-align: top;
     border-top: 1px solid var(--border-color);
 }
@@ -247,7 +253,7 @@ a:hover {
     color: var(--text-primary);
     border: 1px solid var(--input-border);
     border-radius: 0.25rem;
-    padding: 0.5rem 0.75rem; /* Padding ajustat */
+    padding: 0.4rem 0.6rem; /* Redus padding form-control/select */
     transition: border-color .15s ease-in-out,box-shadow .15s ease-in-out;
 }
 .form-control::placeholder { /* Stil explicit pentru placeholder */
@@ -264,7 +270,7 @@ a:hover {
 .form-label {
     color: var(--text-primary);
     font-weight: 500;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.3rem; /* Redus margin-bottom form-label */
 }
 .form-check-input {
     margin-top: 0.2rem; /* Aliniere mai bună cu label-ul */
@@ -282,7 +288,7 @@ a:hover {
 /* Butoane - folosind culorile Bootstrap standard pentru coerență */
 .btn {
     border-radius: 0.25rem;
-    padding: 0.5rem 1rem; /* Padding mai generos */
+    padding: 0.4rem 0.8rem; /* Redus padding btn */
     font-weight: 500;
     transition: color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out;
 }
@@ -351,8 +357,8 @@ a:hover {
 .alert {
     border-width: 1px;
     border-radius: 0.25rem;
-    padding: 1rem; /* Padding mai generos */
-    margin-bottom: 1rem;
+    padding: 0.75rem; /* Redus padding alert */
+    margin-bottom: 0.75rem; /* Redus margin-bottom alert */
 }
 .alert-success {
     color: #0f5132; background-color: #d1e7dd; border-color: #badbcc;
@@ -419,12 +425,12 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
 
 /* Footer specific styles */
 .footer {
-    padding: 1rem 0; /* Redus padding-ul footer-ului */
+    padding: 0.5rem 0; /* Redus padding-ul footer-ului */
     background-color: var(--bg-surface);
     border-top: 1px solid var(--border-color);
     color: var(--text-secondary);
     text-align: center;
-    font-size: 0.9em;
+    font-size: 0.8em; /* Redus font-size pentru footer */
 }
 
 .heartbeat {

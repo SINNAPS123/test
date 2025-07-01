@@ -1,5 +1,6 @@
 from flask import Flask, render_template, redirect, url_for, flash, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import joinedload
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from werkzeug.security import generate_password_hash, check_password_hash
 import bcrypt
@@ -133,6 +134,11 @@ class WeekendLeave(db.Model):
     day2_date = db.Column(db.Date, nullable=True)
     day2_start_time = db.Column(db.Time, nullable=True)
     day2_end_time = db.Column(db.Time, nullable=True)
+    day3_selected = db.Column(db.String(10), nullable=True)
+    day3_date = db.Column(db.Date, nullable=True)
+    day3_start_time = db.Column(db.Time, nullable=True)
+    day3_end_time = db.Column(db.Time, nullable=True)
+    duminica_biserica = db.Column(db.Boolean, default=False, nullable=False) # New field for church attendance
     reason = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(50), default='Aprobată', nullable=False)
     student = db.relationship('Student', backref=db.backref('weekend_leaves', lazy=True, cascade="all, delete-orphan"))
@@ -140,7 +146,12 @@ class WeekendLeave(db.Model):
     creator = db.relationship('User', backref=db.backref('weekend_leaves_created', lazy=True))
     def get_intervals(self):
         intervals = []
-        for d_date, s_time, e_time, d_name in [(self.day1_date, self.day1_start_time, self.day1_end_time, self.day1_selected), (self.day2_date, self.day2_start_time, self.day2_end_time, self.day2_selected)]:
+        days_info = [
+            (self.day1_date, self.day1_start_time, self.day1_end_time, self.day1_selected),
+            (self.day2_date, self.day2_start_time, self.day2_end_time, self.day2_selected),
+            (self.day3_date, self.day3_start_time, self.day3_end_time, self.day3_selected)
+        ]
+        for d_date, s_time, e_time, d_name in days_info:
             if d_date and s_time and e_time:
                 s_dt, e_dt = datetime.combine(d_date, s_time), datetime.combine(d_date, e_time)
                 if e_dt < s_dt: e_dt += timedelta(days=1)
@@ -148,7 +159,8 @@ class WeekendLeave(db.Model):
         return sorted(intervals, key=lambda x: x['start'])
     @property
     def is_overall_active_or_upcoming(self):
-        if self.status != 'Aprobată': return False; now = datetime.now() 
+        now = datetime.now()
+        if self.status != 'Aprobată': return False
         return any(interval["end"] >= now for interval in self.get_intervals())
     @property
     def is_any_interval_active_now(self):
@@ -1062,6 +1074,9 @@ def list_students():
     per_page = 15
 
     students_query = Student.query
+    if is_admin_view: # Admin might want to see creator info
+        students_query = students_query.options(joinedload(Student.creator))
+
     search_term = request.args.get('search', '').strip()
     filter_batalion = request.args.get('batalion', '').strip()
     filter_companie = request.args.get('companie', '').strip()
@@ -1239,14 +1254,35 @@ def list_permissions():
     if current_user.role != 'gradat': flash('Acces neautorizat.', 'danger'); return redirect(url_for('dashboard'))
     student_id_tuples = db.session.query(Student.id).filter_by(created_by_user_id=current_user.id).all()
     student_ids_managed_by_gradat = [s[0] for s in student_id_tuples]
-    if not student_ids_managed_by_gradat: return render_template('list_permissions.html', active_permissions=[], upcoming_permissions=[], past_permissions=[], title="Listă Permisii")
-    now = datetime.now(); base_query = Permission.query.filter(Permission.student_id.in_(student_ids_managed_by_gradat))
-    active_permissions = base_query.filter(Permission.status == 'Aprobată', Permission.start_datetime <= now, Permission.end_datetime >= now).order_by(Permission.start_datetime).all()
-    upcoming_permissions = base_query.filter(Permission.status == 'Aprobată', Permission.start_datetime > now).order_by(Permission.start_datetime).all()
+    if not student_ids_managed_by_gradat:
+        return render_template('list_permissions.html', active_permissions=[], upcoming_permissions=[], past_permissions=[], title="Listă Permisii")
+
+    now = datetime.now()
+    base_query = Permission.query.options(joinedload(Permission.student)).filter(Permission.student_id.in_(student_ids_managed_by_gradat))
+
+    active_permissions = base_query.filter(
+        Permission.status == 'Aprobată',
+        Permission.start_datetime <= now,
+        Permission.end_datetime >= now
+    ).order_by(Permission.start_datetime).all()
+
+    upcoming_permissions = base_query.filter(
+        Permission.status == 'Aprobată',
+        Permission.start_datetime > now
+    ).order_by(Permission.start_datetime).all()
+
+    # For past_permissions, we need to be careful not to re-query without joinedload if base_query changes
+    # It's better to fetch IDs and then query separately or ensure joinedload is consistently applied.
+    # The current approach for past_permissions might be okay if base_query is reused,
+    # but let's be explicit if we construct a new query.
     active_upcoming_ids = [p.id for p in active_permissions] + [p.id for p in upcoming_permissions]
-    past_or_cancelled_query = base_query
-    if active_upcoming_ids: past_or_cancelled_query = past_or_cancelled_query.filter(Permission.id.notin_(active_upcoming_ids))
-    past_permissions = past_or_cancelled_query.order_by(Permission.end_datetime.desc(), Permission.start_datetime.desc()).limit(30).all()
+
+    past_permissions_query = Permission.query.options(joinedload(Permission.student)).filter(Permission.student_id.in_(student_ids_managed_by_gradat))
+    if active_upcoming_ids:
+        past_permissions_query = past_permissions_query.filter(Permission.id.notin_(active_upcoming_ids))
+
+    past_permissions = past_permissions_query.order_by(Permission.end_datetime.desc(), Permission.start_datetime.desc()).limit(30).all()
+
     return render_template('list_permissions.html', active_permissions=active_permissions, upcoming_permissions=upcoming_permissions, past_permissions=past_permissions, title="Listă Permisii")
 
 @app.route('/gradat/permission/add', methods=['GET', 'POST'])
@@ -1368,8 +1404,12 @@ def list_daily_leaves():
     student_id_tuples = db.session.query(Student.id).filter_by(created_by_user_id=current_user.id).all()
     student_ids = [s[0] for s in student_id_tuples]
     today_string_for_form = date.today().strftime('%Y-%m-%d')
-    if not student_ids: return render_template('list_daily_leaves.html', active_leaves=[], upcoming_leaves=[], past_leaves=[], title="Listă Învoiri Zilnice", today_str=today_string_for_form)
-    all_relevant_leaves = DailyLeave.query.filter(DailyLeave.student_id.in_(student_ids)).order_by(DailyLeave.leave_date.desc(), DailyLeave.start_time.desc()).all()
+    if not student_ids:
+        return render_template('list_daily_leaves.html', active_leaves=[], upcoming_leaves=[], past_leaves=[], title="Listă Învoiri Zilnice", today_str=today_string_for_form)
+
+    all_relevant_leaves = DailyLeave.query.options(joinedload(DailyLeave.student))\
+                                      .filter(DailyLeave.student_id.in_(student_ids))\
+                                      .order_by(DailyLeave.leave_date.desc(), DailyLeave.start_time.desc()).all()
     active_leaves = []; upcoming_leaves = []; past_leaves = []
     for leave in all_relevant_leaves:
         if leave.status == 'Anulată': past_leaves.append(leave)
@@ -1467,18 +1507,50 @@ def cancel_daily_leave(leave_id):
     else: flash('Această învoire nu poate fi anulată (statusul curent nu este "Aprobată").', 'warning')
     return redirect(url_for('list_daily_leaves'))
 
-def parse_leave_line(line_text):
-    parts = line_text.strip().split(); grad = None; time_str = None; normalized_name_search = None
-    if not parts: return None, None, None
-    if re.fullmatch(r"(\d{1,2}:\d{2})", parts[-1]): time_str = parts[-1]; name_parts = parts[:-1]
-    else: name_parts = parts
-    if not name_parts: return None, None, None
+def parse_leave_line(line_text): # Renamed from parse_leave_line_new for replacement
+    parts = line_text.strip().split()
+    grad = None
+    parsed_start_time_obj = None
+    parsed_end_time_obj = None
+    normalized_name_search = None
+
+    if not parts:
+        return None, None, None, None
+
+    name_parts = list(parts) # Make a mutable copy
+
+    # Try to parse time range HH:MM-HH:MM from the end
+    if len(name_parts) > 0:
+        time_range_match = re.fullmatch(r"(\d{1,2}:\d{2})-(\d{1,2}:\d{2})", name_parts[-1])
+        if time_range_match:
+            try:
+                parsed_start_time_obj = datetime.strptime(time_range_match.group(1), '%H:%M').time()
+                parsed_end_time_obj = datetime.strptime(time_range_match.group(2), '%H:%M').time()
+                name_parts.pop() # Remove the time string from name_parts
+            except ValueError:
+                # Invalid time format in range, reset times, it will be treated as part of name
+                parsed_start_time_obj = None
+                parsed_end_time_obj = None
+                # name_parts remains as is, time string is part of the name
+
+    if not name_parts: # If only time was provided, or all parts were consumed
+        return None, None, None, None
+
     student_name_str = " ".join(name_parts)
+    # Attempt to extract military rank
     for pattern in KNOWN_RANK_PATTERNS:
         match = pattern.match(student_name_str)
-        if match: grad = match.group(0).strip(); student_name_str = pattern.sub("", student_name_str).strip(); break
-    if student_name_str: normalized_name_search = unidecode(student_name_str.lower())
-    return normalized_name_search, grad, time_str
+        if match:
+            grad = match.group(0).strip()
+            student_name_str = pattern.sub("", student_name_str).strip()
+            break
+
+    if student_name_str: # If there's any name left after stripping rank
+        normalized_name_search = unidecode(student_name_str.lower())
+    else: # Only rank was found, or empty string
+        return None, grad, parsed_start_time_obj, parsed_end_time_obj # Might be only rank + time
+
+    return normalized_name_search, grad, parsed_start_time_obj, parsed_end_time_obj
 
 @app.route('/gradat/daily_leaves/process_text', methods=['POST'])
 @login_required
@@ -1489,40 +1561,114 @@ def process_daily_leaves_text():
     try: apply_date_obj = datetime.strptime(apply_date_str, '%Y-%m-%d').date()
     except ValueError: flash('Format dată aplicare invalid.', 'danger'); return redirect(url_for('list_daily_leaves'))
     if apply_date_obj.weekday() > 3: flash('Învoirile din text pot fi aplicate doar pentru zile de Luni până Joi.', 'warning'); return redirect(url_for('list_daily_leaves'))
-    lines = leave_list_text.strip().splitlines(); students_managed_by_gradat = Student.query.filter_by(created_by_user_id=current_user.id).all()
-    default_start_time_obj = time(15, 0); default_end_time_obj = time(19, 0)
-    processed_count, error_count, already_exists_count = 0,0,0; not_found_or_ambiguous = []
+
+    lines = leave_list_text.strip().splitlines()
+    students_managed_by_gradat = Student.query.filter_by(created_by_user_id=current_user.id).all()
+
+    default_start_time_obj = time(15, 0) # Default start time if not specified in line
+    default_end_time_obj = time(19, 0)   # Default end time if not specified in line
+
+    processed_count, error_count, already_exists_count = 0,0,0
+    not_found_or_ambiguous = []
+
     for line_raw in lines:
         line = line_raw.strip()
         if not line: continue
-        parsed_name_norm, parsed_grad, parsed_time_str = parse_leave_line(line)
-        if not parsed_name_norm: error_count +=1; flash(f"Linie ignorată (format nume invalid): '{line_raw}'", "info"); continue
+
+        parsed_name_norm, parsed_grad, line_start_time, line_end_time = parse_leave_line(line)
+
+        if not parsed_name_norm:
+            error_count +=1
+            flash(f"Linie ignorată (format nume/student invalid): '{line_raw}'", "info")
+            continue
+
+        # Student matching logic (existing logic seems fine)
         matched_students = []
         for s in students_managed_by_gradat:
-            s_name_norm = unidecode(f"{s.nume} {s.prenume}".lower()); s_name_prenume_norm = unidecode(f"{s.prenume} {s.nume}".lower())
-            name_match = (parsed_name_norm in s_name_norm) or (parsed_name_norm in s_name_prenume_norm) or (s_name_norm in parsed_name_norm)
-            grad_match = True
-            if parsed_grad: s_grad_norm = parsed_grad.lower().replace('.', ''); db_s_grad_norm = s.grad_militar.lower().replace('.', ''); grad_match = s_grad_norm in db_s_grad_norm or db_s_grad_norm in s_grad_norm
-            if name_match and grad_match: matched_students.append(s)
+            s_name_norm = unidecode(f"{s.nume} {s.prenume}".lower())
+            s_name_prenume_norm = unidecode(f"{s.prenume} {s.nume}".lower())
+            name_match = (parsed_name_norm in s_name_norm) or \
+                         (parsed_name_norm in s_name_prenume_norm) or \
+                         (s_name_norm in parsed_name_norm) # Allow partial matches too
+
+            grad_match = True # Assume grad matches if not specified in input line
+            if parsed_grad:
+                s_grad_norm = parsed_grad.lower().replace('.', '')
+                db_s_grad_norm = s.grad_militar.lower().replace('.', '')
+                grad_match = (s_grad_norm in db_s_grad_norm or db_s_grad_norm in s_grad_norm)
+
+            if name_match and grad_match:
+                matched_students.append(s)
+
         found_student = None
-        if len(matched_students) == 1: found_student = matched_students[0]
-        elif len(matched_students) > 1: not_found_or_ambiguous.append(f"{line_raw} (potriviri multiple)"); error_count += 1; continue
-        else: not_found_or_ambiguous.append(f"{line_raw} (student negăsit)"); error_count += 1; continue
-        current_start_time, current_end_time = default_start_time_obj, default_end_time_obj
-        if parsed_time_str:
-            try: current_end_time = datetime.strptime(parsed_time_str, '%H:%M').time()
-            except ValueError: flash(f"Format oră invalid '{parsed_time_str}' pentru {found_student.nume}. Folosit interval default.", "warning")
-        valid_schedule, _ = validate_daily_leave_times(current_start_time, current_end_time, apply_date_obj)
-        if not valid_schedule: flash(f"Interval orar invalid pentru {found_student.nume}. Încercare ignorată.", "warning"); error_count +=1; continue
-        start_dt_bulk = datetime.combine(apply_date_obj, current_start_time); effective_end_date_bulk = apply_date_obj
-        if current_end_time < current_start_time : effective_end_date_bulk += timedelta(days=1)
+        if len(matched_students) == 1:
+            found_student = matched_students[0]
+        elif len(matched_students) > 1:
+            not_found_or_ambiguous.append(f"{line_raw} (potriviri multiple: {', '.join([s.nume for s in matched_students])})")
+            error_count += 1
+            continue
+        else:
+            not_found_or_ambiguous.append(f"{line_raw} (student negăsit)")
+            error_count += 1
+            continue
+
+        # Determine start and end times for the leave
+        current_start_time = line_start_time if line_start_time else default_start_time_obj
+        current_end_time = line_end_time if line_end_time else default_end_time_obj
+
+        if line_start_time and not line_end_time: # If only start time is given, use default end time
+            current_end_time = default_end_time_obj
+            flash(f"Doar ora de început specificată pentru {found_student.nume} în '{line_raw}'. S-a folosit ora de sfârșit implicită ({default_end_time_obj.strftime('%H:%M')}).", "info")
+
+
+        valid_schedule, validation_message = validate_daily_leave_times(current_start_time, current_end_time, apply_date_obj)
+        if not valid_schedule:
+            flash(f"Interval orar invalid pentru {found_student.nume} ({validation_message}). Încercare ignorată pentru '{line_raw}'.", "warning")
+            error_count +=1
+            continue
+
+        start_dt_bulk = datetime.combine(apply_date_obj, current_start_time)
+        effective_end_date_bulk = apply_date_obj
+        if current_end_time < current_start_time : # Spans midnight
+            effective_end_date_bulk += timedelta(days=1)
         end_dt_bulk = datetime.combine(effective_end_date_bulk, current_end_time)
-        active_intervention_service = ServiceAssignment.query.filter(ServiceAssignment.student_id == found_student.id, ServiceAssignment.service_type == 'Intervenție', ServiceAssignment.start_datetime < end_dt_bulk, ServiceAssignment.end_datetime > start_dt_bulk).first()
-        if active_intervention_service: flash(f'Studentul {found_student.nume} e în "Intervenție". Învoire ignorată.', 'warning'); error_count += 1; continue
-        existing_leave = DailyLeave.query.filter_by(student_id=found_student.id, leave_date=apply_date_obj, start_time=current_start_time, end_time=current_end_time, status='Aprobată').first()
-        if existing_leave: already_exists_count +=1; continue
-        new_leave = DailyLeave(student_id=found_student.id, leave_date=apply_date_obj, start_time=current_start_time, end_time=current_end_time, status='Aprobată', created_by_user_id=current_user.id, reason="Procesare text listă")
-        db.session.add(new_leave); processed_count += 1
+
+        # Conflict checking (existing logic seems fine)
+        active_intervention_service = ServiceAssignment.query.filter(
+            ServiceAssignment.student_id == found_student.id,
+            ServiceAssignment.service_type == 'Intervenție',
+            ServiceAssignment.start_datetime < end_dt_bulk,
+            ServiceAssignment.end_datetime > start_dt_bulk
+        ).first()
+        if active_intervention_service:
+            flash(f'Studentul {found_student.nume} {found_student.prenume} este în "Intervenție". Învoire ignorată pentru '{line_raw}'.', 'warning')
+            error_count += 1
+            continue
+
+        # Check for existing identical leave
+        existing_leave = DailyLeave.query.filter_by(
+            student_id=found_student.id,
+            leave_date=apply_date_obj,
+            start_time=current_start_time,
+            end_time=current_end_time,
+            status='Aprobată'
+        ).first()
+        if existing_leave:
+            already_exists_count +=1
+            continue
+
+        new_leave = DailyLeave(
+            student_id=found_student.id,
+            leave_date=apply_date_obj,
+            start_time=current_start_time,
+            end_time=current_end_time,
+            status='Aprobată',
+            created_by_user_id=current_user.id,
+            reason=f"Procesare text: {line_raw}"
+        )
+        db.session.add(new_leave)
+        processed_count += 1
+
     try:
         db.session.commit()
         if processed_count > 0: flash(f'{processed_count} învoiri procesate și adăugate.', 'success')
@@ -1576,8 +1722,12 @@ def list_weekend_leaves():
     if current_user.role != 'gradat': flash('Acces neautorizat.', 'danger'); return redirect(url_for('dashboard'))
     student_id_tuples = db.session.query(Student.id).filter_by(created_by_user_id=current_user.id).all()
     student_ids = [s[0] for s in student_id_tuples]
-    if not student_ids: return render_template('list_weekend_leaves.html', active_or_upcoming_leaves=[], past_leaves=[], title="Listă Învoiri Weekend")
-    all_relevant_leaves = WeekendLeave.query.filter(WeekendLeave.student_id.in_(student_ids)).order_by(WeekendLeave.weekend_start_date.desc()).all()
+    if not student_ids:
+        return render_template('list_weekend_leaves.html', active_or_upcoming_leaves=[], past_leaves=[], title="Listă Învoiri Weekend")
+
+    all_relevant_leaves = WeekendLeave.query.options(joinedload(WeekendLeave.student))\
+                                          .filter(WeekendLeave.student_id.in_(student_ids))\
+                                          .order_by(WeekendLeave.weekend_start_date.desc()).all()
     active_or_upcoming_leaves = []; past_leaves = []
     for leave in all_relevant_leaves:
         if leave.status == 'Anulată': past_leaves.append(leave)
@@ -1597,30 +1747,49 @@ def add_edit_weekend_leave(leave_id=None):
         student_of_leave = Student.query.get(weekend_leave.student_id)
         if not student_of_leave or student_of_leave.created_by_user_id != current_user.id: flash('Acces neautorizat la această învoire de weekend.', 'danger'); return redirect(url_for('list_weekend_leaves'))
         form_title = f"Editare Învoire Weekend: {student_of_leave.grad_militar} {student_of_leave.nume} {student_of_leave.prenume}"
-        form_data_on_get['student_id'] = str(weekend_leave.student_id); form_data_on_get['weekend_start_date'] = weekend_leave.weekend_start_date.strftime('%Y-%m-%d')
-        form_data_on_get['reason'] = weekend_leave.reason; selected_days_from_db = []
-        day_names_ro = {0: "Luni", 1: "Marti", 2: "Miercuri", 3: "Joi", 4: "Vineri", 5: "Sambata", 6: "Duminica"}
-        if weekend_leave.day1_date:
-            day_name_ro1 = day_names_ro.get(weekend_leave.day1_date.weekday(), "Nespecificat"); selected_days_from_db.append(day_name_ro1)
-            form_data_on_get[f'{day_name_ro1.lower()}_start_time'] = weekend_leave.day1_start_time.strftime('%H:%M') if weekend_leave.day1_start_time else ''
-            form_data_on_get[f'{day_name_ro1.lower()}_end_time'] = weekend_leave.day1_end_time.strftime('%H:%M') if weekend_leave.day1_end_time else ''
-        if weekend_leave.day2_date:
-            day_name_ro2 = day_names_ro.get(weekend_leave.day2_date.weekday(), "Nespecificat")
-            if day_name_ro2 not in selected_days_from_db : selected_days_from_db.append(day_name_ro2)
-            form_data_on_get[f'{day_name_ro2.lower()}_start_time'] = weekend_leave.day2_start_time.strftime('%H:%M') if weekend_leave.day2_start_time else ''
-            form_data_on_get[f'{day_name_ro2.lower()}_end_time'] = weekend_leave.day2_end_time.strftime('%H:%M') if weekend_leave.day2_end_time else ''
-        form_data_on_get['selected_days[]'] = selected_days_from_db
+        form_data_on_get['student_id'] = str(weekend_leave.student_id)
+        form_data_on_get['weekend_start_date'] = weekend_leave.weekend_start_date.strftime('%Y-%m-%d')
+        form_data_on_get['reason'] = weekend_leave.reason
+        form_data_on_get['duminica_biserica'] = weekend_leave.duminica_biserica # Populate church checkbox state
+        selected_days_from_db = []
+        # Helper to populate form_data_on_get for existing leave days
+        day_fields_map = {
+            'day1': (weekend_leave.day1_date, weekend_leave.day1_start_time, weekend_leave.day1_end_time, weekend_leave.day1_selected),
+            'day2': (weekend_leave.day2_date, weekend_leave.day2_start_time, weekend_leave.day2_end_time, weekend_leave.day2_selected),
+            'day3': (weekend_leave.day3_date, weekend_leave.day3_start_time, weekend_leave.day3_end_time, weekend_leave.day3_selected)
+        }
+        day_names_ro_map = {0: "Luni", 1: "Marti", 2: "Miercuri", 3: "Joi", 4: "Vineri", 5: "Sambata", 6: "Duminica"}
+
+        for _field_prefix, (d_date, s_time, e_time, d_name_selected) in day_fields_map.items():
+            if d_date and d_name_selected: # d_name_selected is the actual day name like "Vineri"
+                # day_name_template_key = day_names_ro_map.get(d_date.weekday(), "Nespecificat").lower() # This was problematic if d_name_selected is the source of truth
+                day_name_template_key = d_name_selected.lower() # Use the stored day name directly
+                if day_name_template_key not in selected_days_from_db: # Ensure unique day names for selection
+                    selected_days_from_db.append(d_name_selected) # Use original casing for selected_days[] list
+
+                form_data_on_get[f'{day_name_template_key}_start_time'] = s_time.strftime('%H:%M') if s_time else ''
+                form_data_on_get[f'{day_name_template_key}_end_time'] = e_time.strftime('%H:%M') if e_time else ''
+
+        form_data_on_get['selected_days[]'] = selected_days_from_db # This will be used by template to check checkboxes
     students_managed = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.nume).all()
     upcoming_fridays_list = get_upcoming_fridays()
     if request.method == 'POST':
         student_id = request.form.get('student_id'); weekend_start_date_str = request.form.get('weekend_start_date'); selected_days = request.form.getlist('selected_days[]')
         reason = request.form.get('reason', '').strip()
-        current_form_data_post = request.form
-        if not student_id or not weekend_start_date_str: flash('Studentul și data de început a weekendului (Vineri) sunt obligatorii.', 'warning'); return render_template('add_edit_weekend_leave.html', form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post)
-        if not selected_days or len(selected_days) > 2: flash('Trebuie să selectați 1 sau 2 zile din weekend.', 'warning'); return render_template('add_edit_weekend_leave.html', form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post)
-        try: friday_date_obj = datetime.strptime(weekend_start_date_str, '%Y-%m-%d').date()
-        except ValueError: flash('Format dată weekend invalid.', 'danger'); return render_template('add_edit_weekend_leave.html', form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post)
-        day_data = []
+        current_form_data_post = request.form # Used to repopulate form on error
+        if not student_id or not weekend_start_date_str:
+            flash('Studentul și data de început a weekendului (Vineri) sunt obligatorii.', 'warning')
+            return render_template('add_edit_weekend_leave.html', form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post)
+        if not selected_days or len(selected_days) == 0 or len(selected_days) > 3: # Allow 1 to 3 days
+            flash('Trebuie să selectați între 1 și 3 zile din weekend.', 'warning')
+            return render_template('add_edit_weekend_leave.html', form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post)
+        try:
+            friday_date_obj = datetime.strptime(weekend_start_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Format dată weekend invalid.', 'danger')
+            return render_template('add_edit_weekend_leave.html', form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post)
+
+        day_data = [] # To store processed day information before saving
         for day_name_selected in selected_days:
             start_time_str = request.form.get(f'{day_name_selected.lower()}_start_time'); end_time_str = request.form.get(f'{day_name_selected.lower()}_end_time')
             if not start_time_str or not end_time_str: flash(f'Orele de început și sfârșit sunt obligatorii pentru {day_name_selected}.', 'warning'); return render_template('add_edit_weekend_leave.html', form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post)
@@ -1641,17 +1810,54 @@ def add_edit_weekend_leave(leave_id=None):
             for interval_data in day_data:
                 active_intervention_service = ServiceAssignment.query.filter(ServiceAssignment.student_id == student_id, ServiceAssignment.service_type == 'Intervenție', ServiceAssignment.start_datetime < interval_data['end_dt'], ServiceAssignment.end_datetime > interval_data['start_dt']).first()
                 if active_intervention_service: flash(f'Studentul {student_to_check.nume} este în "Intervenție" pe {interval_data["name"]} și nu poate primi învoire.', 'danger'); return render_template('add_edit_weekend_leave.html', form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post)
+
+        # Clear previous day data before setting new, especially for edits
         if weekend_leave:
-            weekend_leave.day1_selected = None; weekend_leave.day1_date = None; weekend_leave.day1_start_time = None; weekend_leave.day1_end_time = None
-            weekend_leave.day2_selected = None; weekend_leave.day2_date = None; weekend_leave.day2_start_time = None; weekend_leave.day2_end_time = None
-            target_leave = weekend_leave; flash_msg = 'Învoire Weekend actualizată!'
-        else: target_leave = WeekendLeave(created_by_user_id=current_user.id, status='Aprobată'); flash_msg = 'Învoire Weekend adăugată!'
-        target_leave.student_id = int(student_id); target_leave.weekend_start_date = friday_date_obj; target_leave.reason = reason
-        if len(day_data) >= 1: target_leave.day1_selected = day_data[0]['name']; target_leave.day1_date = day_data[0]['date']; target_leave.day1_start_time = day_data[0]['start']; target_leave.day1_end_time = day_data[0]['end']
-        if len(day_data) == 2: target_leave.day2_selected = day_data[1]['name']; target_leave.day2_date = day_data[1]['date']; target_leave.day2_start_time = day_data[1]['start']; target_leave.day2_end_time = day_data[1]['end']
-        if not weekend_leave: db.session.add(target_leave)
-        try: db.session.commit(); flash(flash_msg, 'success')
-        except Exception as e: db.session.rollback(); flash(f'Eroare la salvarea învoirii de weekend: {str(e)}', 'danger'); return render_template('add_edit_weekend_leave.html', form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post)
+            target_leave = weekend_leave
+            target_leave.day1_selected = None; target_leave.day1_date = None; target_leave.day1_start_time = None; target_leave.day1_end_time = None
+            target_leave.day2_selected = None; target_leave.day2_date = None; target_leave.day2_start_time = None; target_leave.day2_end_time = None
+            target_leave.day3_selected = None; target_leave.day3_date = None; target_leave.day3_start_time = None; target_leave.day3_end_time = None
+            flash_msg = 'Învoire Weekend actualizată!'
+        else:
+            target_leave = WeekendLeave(created_by_user_id=current_user.id, status='Aprobată')
+            flash_msg = 'Învoire Weekend adăugată!'
+
+        target_leave.student_id = int(student_id)
+        target_leave.weekend_start_date = friday_date_obj
+        target_leave.reason = reason
+        target_leave.duminica_biserica = request.form.get('duminica_biserica') == 'true'
+
+
+        # Assign processed day_data to the model fields
+        if len(day_data) >= 1:
+            target_leave.day1_selected = day_data[0]['name']
+            target_leave.day1_date = day_data[0]['date']
+            target_leave.day1_start_time = day_data[0]['start']
+            target_leave.day1_end_time = day_data[0]['end']
+        if len(day_data) >= 2:
+            target_leave.day2_selected = day_data[1]['name']
+            target_leave.day2_date = day_data[1]['date']
+            target_leave.day2_start_time = day_data[1]['start']
+            target_leave.day2_end_time = day_data[1]['end']
+        if len(day_data) >= 3: # Assign third day if present
+            target_leave.day3_selected = day_data[2]['name']
+            target_leave.day3_date = day_data[2]['date']
+            target_leave.day3_start_time = day_data[2]['start']
+            target_leave.day3_end_time = day_data[2]['end']
+
+        if not weekend_leave: # If it's a new leave, add to session
+            db.session.add(target_leave)
+
+        try:
+            db.session.commit()
+            if len(selected_days) == 3:
+                 flash(flash_msg + " Ați selectat 3 zile pentru învoire.", 'success') # Add warning if 3 days selected
+            else:
+                 flash(flash_msg, 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Eroare la salvarea învoirii de weekend: {str(e)}', 'danger')
+            return render_template('add_edit_weekend_leave.html', form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post)
         return redirect(url_for('list_weekend_leaves'))
 
     data_to_populate_form_with = {}
@@ -1737,15 +1943,17 @@ def list_services():
 
     now = datetime.now()
 
-    upcoming_services = ServiceAssignment.query.filter(
-                            ServiceAssignment.student_id.in_(student_ids),
-                            ServiceAssignment.end_datetime >= now
-                        ).order_by(ServiceAssignment.start_datetime.asc()).all()
+    upcoming_services = ServiceAssignment.query.options(joinedload(ServiceAssignment.student))\
+                            .filter(
+                                ServiceAssignment.student_id.in_(student_ids),
+                                ServiceAssignment.end_datetime >= now
+                            ).order_by(ServiceAssignment.start_datetime.asc()).all()
 
-    past_services = ServiceAssignment.query.filter(
-                        ServiceAssignment.student_id.in_(student_ids),
-                        ServiceAssignment.end_datetime < now
-                    ).order_by(ServiceAssignment.start_datetime.desc()).limit(50).all()
+    past_services = ServiceAssignment.query.options(joinedload(ServiceAssignment.student))\
+                        .filter(
+                            ServiceAssignment.student_id.in_(student_ids),
+                            ServiceAssignment.end_datetime < now
+                        ).order_by(ServiceAssignment.start_datetime.desc()).limit(50).all()
 
     return render_template('list_services.html',
                            upcoming_services=upcoming_services,
