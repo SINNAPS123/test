@@ -7,7 +7,7 @@ import os
 import secrets 
 from datetime import datetime, date, time, timedelta 
 from sqlalchemy import func, or_
-import re
+import re 
 from unidecode import unidecode
 
 # Inițializare aplicație Flask
@@ -24,7 +24,7 @@ login_manager.login_message = "Te rugăm să te autentifici pentru a accesa acea
 
 SERVICE_TYPES = ["GSS", "SVM", "Planton 1", "Planton 2", "Planton 3", "Intervenție", "Altul"]
 GENDERS = ["Nespecificat", "M", "F"]
-KNOWN_RANK_PATTERNS = [
+KNOWN_RANK_PATTERNS = [ 
     re.compile(r"^(Mm V)\s+", re.IGNORECASE), re.compile(r"^(Sd cap)\s+", re.IGNORECASE),
     re.compile(r"^(Sg Maj)\s+", re.IGNORECASE), re.compile(r"^(Mm IV)\s+", re.IGNORECASE),
     re.compile(r"^(Sdt\.?)\s+", re.IGNORECASE), re.compile(r"^(Sd\.?)\s+", re.IGNORECASE),
@@ -67,7 +67,7 @@ class Student(db.Model):
     creator = db.relationship('User', backref=db.backref('students_created', lazy=True))
     # Câmpurile este_gradat_activ și pluton_gradat_la au fost eliminate
 
-    def __repr__(self):
+    def __repr__(self): 
         user_obj = getattr(self, 'creator', None) # User object (creator of student record)
         sgs_info = ""
         if user_obj and user_obj.special_graded_status and user_obj.special_graded_status.is_active:
@@ -80,7 +80,7 @@ class SpecialGradedUser(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
     is_active = db.Column(db.Boolean, default=False, nullable=False)
     # Stochează informații despre unde își exercită atribuțiile (ex: "Plutonul 1 / Compania 1", "Comandant Compania 2", "Comandant Batalion 1")
-    assigned_platoon_info = db.Column(db.String(100), nullable=True)
+    assigned_platoon_info = db.Column(db.String(100), nullable=True) 
     # user = definit prin backref din User.special_graded_status
 
     def __repr__(self):
@@ -165,11 +165,11 @@ class WeekendLeave(db.Model):
         return sorted(intervals, key=lambda x: x['start'])
     @property
     def is_overall_active_or_upcoming(self):
-        if self.status != 'Aprobată': return False; now = datetime.now()
+        if self.status != 'Aprobată': return False; now = datetime.now() 
         return any(interval["end"] >= now for interval in self.get_intervals())
     @property
     def is_any_interval_active_now(self):
-        if self.status != 'Aprobată': return False; now = datetime.now()
+        if self.status != 'Aprobată': return False; now = datetime.now() 
         return any(interval["start"] <= now <= interval["end"] for interval in self.get_intervals())
     @property
     def is_overall_past(self): now = datetime.now(); return True if self.status == 'Anulată' else not self.is_overall_active_or_upcoming
@@ -257,15 +257,15 @@ def get_student_status(student_obj_or_user_obj, datetime_check):
     if student_id_to_check: # Aceste statusuri sunt specifice studenților
         active_service = ServiceAssignment.query.filter(ServiceAssignment.student_id == student_id_to_check, ServiceAssignment.start_datetime <= datetime_check, ServiceAssignment.end_datetime >= datetime_check).order_by(ServiceAssignment.start_datetime).first()
         if active_service: return {"status_code": "on_duty", "reason": f"Serviciu ({active_service.service_type})", "until": active_service.end_datetime, "details": f"Serviciu: {active_service.service_type}", "object": active_service, "participates_in_roll_call": active_service.participates_in_roll_call }
-
+        
         active_permission = Permission.query.filter(Permission.student_id == student_id_to_check, Permission.status == 'Aprobată', Permission.start_datetime <= datetime_check, Permission.end_datetime >= datetime_check).order_by(Permission.start_datetime).first()
         if active_permission: return {"status_code": "absent_permission", "reason": "Permisie", "until": active_permission.end_datetime, "details": "Permisie", "object": active_permission}
-
+        
         weekend_leaves = WeekendLeave.query.filter(WeekendLeave.student_id == student_id_to_check, WeekendLeave.status == 'Aprobată').all()
         for wl in weekend_leaves:
             for interval in wl.get_intervals():
                 if interval['start'] <= datetime_check <= interval['end']: return {"status_code": "absent_weekend_leave", "reason": f"Învoire Weekend ({interval['day_name']})", "until": interval['end'], "details": f"Învoire Weekend: {interval['day_name']}", "object": wl}
-
+        
         daily_leaves = DailyLeave.query.filter(DailyLeave.student_id == student_id_to_check, DailyLeave.status == 'Aprobată').all()
         for dl in daily_leaves:
             if dl.start_datetime <= datetime_check <= dl.end_datetime: return {"status_code": "absent_daily_leave", "reason": f"Învoire Zilnică ({dl.leave_type_display})", "until": dl.end_datetime, "details": f"Învoire Zilnică: {dl.leave_type_display}", "object": dl}
@@ -281,22 +281,22 @@ def get_student_status(student_obj_or_user_obj, datetime_check):
                 reason_sgs += f" - {sgs.assigned_platoon_info}"
             else:
                 reason_sgs += " - Activitate Comandă/Gradat"
-
+            
             return {
                 "status_code": "special_graded_duty",
                 "reason": reason_sgs,
-                "until": None,
+                "until": None, 
                 "details": reason_sgs,
-                "object": sgs,
+                "object": sgs, 
                 "assigned_platoon_info": sgs.assigned_platoon_info,
                 # Dacă este un student, putem adăuga plutonul lui de bază
-                "pluton_baza_student": student_obj_or_user_obj.pluton if is_student_object else None
+                "pluton_baza_student": student_obj_or_user_obj.pluton if is_student_object else None 
             }
-
+            
     # Dacă nu e niciunul de mai sus și e un student, e prezent în formația lui de bază
     if is_student_object:
         return {"status_code": "present", "reason": "Prezent", "until": None, "details": "Prezent", "object": student_obj_or_user_obj}
-
+    
     # Dacă e un User (ex: admin, comandant ne-gradat special) și nu are alt status, nu avem un status de prezență definit aici
     # Acest caz ar trebui gestionat de funcțiile care apelează get_student_status pentru Useri non-student.
     # Sau, returnăm un status neutru.
@@ -311,16 +311,16 @@ def parse_student_line(line_text):
     if time_interval_match:
         try:
             start_h_str, end_h_str = time_interval_match.group(1), time_interval_match.group(2)
-            datetime.strptime(start_h_str, '%H:%M'); datetime.strptime(end_h_str, '%H:%M')
-            start_hour_interval_str, end_hour_interval_str = start_h_str, end_h_str; parts = parts[1:]
-        except ValueError: pass
+            datetime.strptime(start_h_str, '%H:%M'); datetime.strptime(end_h_str, '%H:%M')   
+            start_hour_interval_str, end_hour_interval_str = start_h_str, end_h_str; parts = parts[1:] 
+        except ValueError: pass 
     if not parts: return {'grad': grad, 'nume': nume, 'prenume': prenume, 'start_hour_interval_str': start_hour_interval_str, 'end_hour_interval_str': end_hour_interval_str, 'end_hour_individual_str': end_hour_individual_str, 'original_line': original_line}
-    if not start_hour_interval_str and parts:
+    if not start_hour_interval_str and parts: 
         last_part, time_extracted_individual = parts[-1], False
         if ':' in last_part and len(last_part.split(':')[0]) <= 2 and len(last_part.split(':')[-1]) == 2:
             try: datetime.strptime(last_part, '%H:%M'); end_hour_individual_str = last_part; parts = parts[:-1]; time_extracted_individual = True
             except ValueError: pass
-        elif len(last_part) == 4 and last_part.isdigit() and not time_extracted_individual:
+        elif len(last_part) == 4 and last_part.isdigit() and not time_extracted_individual: 
             try:
                 h, m = last_part[:2], last_part[2:]; datetime.strptime(f"{h}:{m}", '%H:%M'); end_hour_individual_str = f"{h}:{m}"
                 parts = parts[:-1]; time_extracted_individual = True
@@ -335,8 +335,8 @@ def parse_student_line(line_text):
         if found_match_for_test_text: temp_grad_candidate, grad, grad_parts_count = test_text_for_grad, temp_grad_candidate, i + 1
         else:
             if grad: break
-            if not grad: break
-    name_parts_start_index = grad_parts_count; remaining_parts = parts[name_parts_start_index:] if parts else []
+            if not grad: break 
+    name_parts_start_index = grad_parts_count; remaining_parts = parts[name_parts_start_index:] if parts else [] 
     if len(remaining_parts) >= 1: nume = remaining_parts[0]
     if len(remaining_parts) >= 2: prenume = " ".join(remaining_parts[1:])
     if not grad and nume and ' ' in nume and not prenume:
@@ -357,7 +357,7 @@ def dashboard():
     elif current_user.role == 'gradat': return redirect(url_for('gradat_dashboard'))
     elif current_user.role == 'comandant_companie': return redirect(url_for('company_commander_dashboard'))
     elif current_user.role == 'comandant_batalion': return redirect(url_for('battalion_commander_dashboard'))
-    return render_template('dashboard.html', name=current_user.username)
+    return render_template('dashboard.html', name=current_user.username) 
 
 @app.route('/logout')
 @login_required
@@ -380,7 +380,7 @@ def admin_dashboard():
     if current_user.role != 'admin': flash('Acces neautorizat.', 'danger'); return redirect(url_for('home'))
     # Numărul de gradați activi se va lua acum din tabela SpecialGradedUser
     active_special_graded_count = SpecialGradedUser.query.filter_by(is_active=True).count()
-    return render_template('admin_dashboard.html',
+    return render_template('admin_dashboard.html', 
                            users=User.query.filter(User.role != 'admin').all(),
                            active_special_graded_count=active_special_graded_count, # Actualizat
                            max_gradati_activi=MAX_GRADATI_ACTIVI)
@@ -444,7 +444,7 @@ def admin_manage_special_graded():
                 db.session.commit()
             else:
                 flash(f'Utilizatorul {user_to_manage.username} nu este încă în lista de Gradați Speciali. Activați-l întâi.', 'warning')
-
+        
         return redirect(url_for('admin_manage_special_graded'))
 
     # GET request: Afișează lista
@@ -463,7 +463,7 @@ def admin_manage_special_graded():
             'sgs_assigned_info': sgs.assigned_platoon_info if sgs else ""
         })
 
-    return render_template('admin_manage_special_graded.html',
+    return render_template('admin_manage_special_graded.html', 
                            users_with_sgs_status=users_with_sgs_status,
                            active_special_graded_count=active_special_graded_count,
                            max_gradati_activi=MAX_GRADATI_ACTIVI)
@@ -473,13 +473,13 @@ def admin_manage_special_graded():
 # Se actualizează list_students pentru a nu mai afișa butoane de toggle gradat.
 
 # --- Management Studenți ---
-@app.route('/gradat/students')
-@app.route('/admin/students')
+@app.route('/gradat/students') 
+@app.route('/admin/students') 
 @login_required
 def list_students():
     if current_user.role == 'admin':
         page = request.args.get('page', 1, type=int)
-        per_page = 25
+        per_page = 25 
         query = Student.query.join(User, Student.created_by_user_id == User.id).options(db.joinedload(Student.creator).joinedload(User.special_graded_status))
         search_term = request.args.get('search', '')
         filter_batalion = request.args.get('batalion', '')
@@ -503,8 +503,8 @@ def list_students():
     else:
         flash('Acces neautorizat.', 'danger'); return redirect(url_for('home'))
 
-@app.route('/gradat/students/add', methods=['GET', 'POST'])
-@app.route('/admin/students/add', methods=['GET', 'POST'])
+@app.route('/gradat/students/add', methods=['GET', 'POST']) 
+@app.route('/admin/students/add', methods=['GET', 'POST'])  
 @login_required
 def add_student():
     if current_user.role not in ['admin', 'gradat']:
@@ -521,8 +521,8 @@ def add_student():
             db.session.add(s); db.session.commit(); flash(f'Studentul {s.grad_militar} {s.nume} {s.prenume} a fost adăugat!', 'success'); return redirect(url_for('list_students'))
     return render_template('add_edit_student.html', form_title="Adăugare Student Nou", student=None, genders=GENDERS, form_data=request.form if request.method == 'POST' else None)
 
-@app.route('/gradat/students/edit/<int:student_id>', methods=['GET', 'POST'])
-@app.route('/admin/students/edit/<int:student_id>', methods=['GET', 'POST'])
+@app.route('/gradat/students/edit/<int:student_id>', methods=['GET', 'POST']) 
+@app.route('/admin/students/edit/<int:student_id>', methods=['GET', 'POST'])  
 @login_required
 def edit_student(student_id):
     s_edit = Student.query.get_or_404(student_id)
@@ -567,7 +567,7 @@ def process_daily_leaves_text():
     except ValueError:
         flash('Format dată invalid pentru aplicare.', 'danger')
         return redirect(url_for('list_daily_leaves', today_str=date.today().isoformat()))
-    if apply_date_obj.weekday() > 3:
+    if apply_date_obj.weekday() > 3: 
         flash('Învoirile din text pot fi procesate doar pentru zilele de Luni până Joi.', 'warning')
         return redirect(url_for('list_daily_leaves', today_str=apply_date_str))
     lines = form_text.strip().splitlines()
@@ -578,18 +578,18 @@ def process_daily_leaves_text():
     for line_num, line in enumerate(lines):
         original_line_text = line.strip()
         if not original_line_text: continue
-        parsed_data = parse_student_line(original_line_text)
+        parsed_data = parse_student_line(original_line_text) 
         if not parsed_data['nume'] and not parsed_data['start_hour_interval_str']:
             skipped_entries.append(f"Linia {line_num+1} (format nume incorect sau linie goală): \"{parsed_data['original_line']}\""); continue
-        student_found_original_object = None
+        student_found_original_object = None 
         if parsed_data['nume']:
             search_nume_norm = unidecode(parsed_data['nume'].lower()); search_prenume_norm = unidecode(parsed_data['prenume'].lower()) if parsed_data['prenume'] else ""
-            if search_prenume_norm:
+            if search_prenume_norm: 
                 for s_info in students_db_normalized:
                     if (s_info["norm_nume"] == search_nume_norm and s_info["norm_prenume"] == search_prenume_norm) or \
-                       (s_info["norm_nume"] == search_prenume_norm and s_info["norm_prenume"] == search_nume_norm):
+                       (s_info["norm_nume"] == search_prenume_norm and s_info["norm_prenume"] == search_nume_norm): 
                         student_found_original_object = s_info["original"]; break
-            if not student_found_original_object:
+            if not student_found_original_object: 
                 possible_matches_objects = []
                 for s_info in students_db_normalized:
                     db_full_name_norm = f"{s_info['norm_nume']} {s_info['norm_prenume']}".strip()
@@ -601,21 +601,21 @@ def process_daily_leaves_text():
                     strict_matches = []
                     for s_obj in possible_matches_objects:
                         s_obj_norm_nume = unidecode(s_obj.nume.lower()); s_obj_norm_prenume = unidecode(s_obj.prenume.lower()) if s_obj.prenume else ""
-                        if search_prenume_norm:
+                        if search_prenume_norm: 
                             if (s_obj_norm_nume == search_nume_norm and s_obj_norm_prenume == search_prenume_norm) or \
                                (s_obj_norm_nume == search_prenume_norm and s_obj_norm_prenume == search_nume_norm): strict_matches.append(s_obj)
-                        else:
+                        else: 
                             if s_obj_norm_nume == search_nume_norm or s_obj_norm_prenume == search_nume_norm : strict_matches.append(s_obj)
                     if len(strict_matches) == 1: student_found_original_object = strict_matches[0]
                     else: skipped_entries.append(f"Numele '{parsed_data['nume']}{' ' + parsed_data['prenume'] if parsed_data['prenume'] else ''}' (normalizat: '{search_nume_norm}{' ' + search_prenume_norm if search_prenume_norm else ''}') este ambiguu. Găsit {len(strict_matches) if strict_matches else len(possible_matches_objects)} potriviri. (Linia: \"{original_line_text}\")"); continue
-        if not student_found_original_object:
+        if not student_found_original_object: 
             skipped_entries.append(f"Studentul '{parsed_data['nume']}{' ' + parsed_data['prenume'] if parsed_data['prenume'] else ''}' (normalizat: '{unidecode(parsed_data['nume'].lower())}{' ' + unidecode(parsed_data['prenume'].lower()) if parsed_data.get('prenume') else ''}') nu a fost găsit. (Linia: \"{original_line_text}\")"); continue
-        student_found = student_found_original_object
+        student_found = student_found_original_object 
         current_start_time, current_end_time = default_start_processing_time, default_end_processing_time
         if parsed_data['start_hour_interval_str'] and parsed_data['end_hour_interval_str']:
             try: current_start_time, current_end_time = datetime.strptime(parsed_data['start_hour_interval_str'], '%H:%M').time(), datetime.strptime(parsed_data['end_hour_interval_str'], '%H:%M').time()
             except ValueError: skipped_entries.append(f"Interval orar invalid ({parsed_data['start_hour_interval_str']}-{parsed_data['end_hour_interval_str']}) pentru {student_found.nume} {student_found.prenume}. (Linia: \"{original_line_text}\")"); continue
-        elif parsed_data['end_hour_individual_str']:
+        elif parsed_data['end_hour_individual_str']: 
             try: current_start_time, current_end_time = default_start_processing_time, datetime.strptime(parsed_data['end_hour_individual_str'], '%H:%M').time()
             except ValueError: skipped_entries.append(f"Ora de sfârșit individuală invalidă ({parsed_data['end_hour_individual_str']}) pentru {student_found.nume} {student_found.prenume}. (Linia: \"{original_line_text}\")"); continue
         is_valid_interval, interval_msg = validate_daily_leave_times(current_start_time, current_end_time, apply_date_obj)
@@ -634,12 +634,12 @@ def process_daily_leaves_text():
         elif not processed_count and skipped_entries : flash('Nicio învoire nu a putut fi procesată cu succes.', 'warning')
         if skipped_entries:
             flash('Următoarele linii/studenți nu au putut fi procesate:', 'warning')
-            for skipped_line in skipped_entries: flash(skipped_line, 'secondary')
+            for skipped_line in skipped_entries: flash(skipped_line, 'secondary') 
     except Exception as e: db.session.rollback(); flash(f'A apărut o eroare la salvarea învoirilor: {str(e)}', 'danger')
     return redirect(url_for('list_daily_leaves', today_str=apply_date_str))
 
-@app.route('/gradat/services/delete/<int:assignment_id>', methods=['POST'])
-@app.route('/admin/services/delete/<int:assignment_id>', methods=['POST'])
+@app.route('/gradat/services/delete/<int:assignment_id>', methods=['POST']) 
+@app.route('/admin/services/delete/<int:assignment_id>', methods=['POST'])  
 @login_required
 def delete_service_assignment(assignment_id):
     assignment_to_delete = ServiceAssignment.query.get_or_404(assignment_id)
@@ -651,7 +651,7 @@ def delete_service_assignment(assignment_id):
     if not can_delete:
         flash('Acces neautorizat pentru a șterge acest serviciu.', 'danger')
         if current_user.role == 'gradat': return redirect(url_for('list_services'))
-        else: return redirect(url_for('dashboard'))
+        else: return redirect(url_for('dashboard')) 
     try:
         service_type_flash = assignment_to_delete.service_type; service_date_flash = assignment_to_delete.service_date.strftime("%d.%m.%Y")
         db.session.delete(assignment_to_delete); db.session.commit()
@@ -674,9 +674,9 @@ def presence_report():
         elif report_type == 'evening_roll_call': dt_check = dt_check.replace(hour=20 if dt_check.weekday() < 4 else 22, minute=0, second=0, microsecond=0); report_title = f"Raport Apel Seară ({dt_check.strftime('%d.%m %H:%M')})"
         elif report_type == 'company_report': dt_check = dt_check.replace(hour=14, minute=20, second=0, microsecond=0); report_title = f"Raport Companie ({dt_check.strftime('%d.%m %H:%M')})"
         elif report_type == 'morning_check': dt_check = dt_check.replace(hour=7, minute=0, second=0, microsecond=0); report_title = f"Raport Prezență Dimineață ({dt_check.strftime('%d.%m %H:%M')})"
-        else: report_title = f"Raport Prezență pentru {dt_check.strftime('%d.%m.%Y %H:%M')}"
+        else: report_title = f"Raport Prezență pentru {dt_check.strftime('%d.%m.%Y %H:%M')}" 
         report_time_str = dt_check.strftime("%Y-%m-%d %H:%M")
-
+        
         # Pentru raportul gradatului, ne interesează doar studenții lui
         students = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.nume, Student.prenume).all()
         ec = len(students)
@@ -694,7 +694,7 @@ def presence_report():
                  # Chiar dacă e gradat special, în raportul plutonului de bază (al gradatului) e considerat prezent
                  # dar cu mențiunea că e gradat special.
                  special_graded_list_details.append(f"{stud.grad_militar} {stud.nume} {stud.prenume} - {s_info['reason']}")
-            else:
+            else: 
                 detail = f"{stud.grad_militar} {stud.nume} {stud.prenume} - {s_info['reason']}"
                 if s_info['until']: detail += f" (până la {s_info['until'].strftime('%d.%m %H:%M')})"
                 absent_list_details.append(detail)
@@ -706,10 +706,10 @@ def presence_report():
         combined_on_duty_special_list = sorted(on_duty_list_details + special_graded_list_details)
 
         report_data = {
-            "title": report_title, "datetime_checked": report_time_str, "efectiv_control": ec,
+            "title": report_title, "datetime_checked": report_time_str, "efectiv_control": ec, 
             "efectiv_prezent_total": efectiv_prezent_total, "in_formation_count": in_formation_count,
-            "in_formation_list": sorted(in_formation_list_details),
-            "on_duty_list": combined_on_duty_special_list,
+            "in_formation_list": sorted(in_formation_list_details), 
+            "on_duty_list": combined_on_duty_special_list, 
             "efectiv_absent_count": efectiv_absent_count, "efectiv_absent_list": sorted(absent_list_details)
         }
     return render_template('presence_report.html', report_data=report_data, current_datetime_str=datetime.now().strftime("%Y-%m-%dT%H:%M"))
@@ -718,14 +718,14 @@ def presence_report():
 def get_aggregated_presence_data(target_students_query, datetime_check, unit_type="pluton", unit_id_str=None):
     # unit_type poate fi "pluton", "companie", "batalion"
     # unit_id_str este ID-ul unității evaluate (ex: pluton_id, companie_id)
-
+    
     students_list = target_students_query.all()
     efectiv_control = len(students_list)
-
+    
     in_formation_count = 0
     on_duty_count = 0 # Servicii clasice
     special_graded_present_count = 0 # Gradați speciali prezenți în unitate (nu neapărat în formație)
-
+    
     in_formation_students_details = []
     on_duty_students_details = []
     absent_students_details = []
@@ -734,7 +734,7 @@ def get_aggregated_presence_data(target_students_query, datetime_check, unit_typ
     for student_obj in students_list: # Iterăm peste obiectele Student
         user_obj = student_obj.creator # Userul care a creat studentul (gradat, admin)
         # Obținem statusul pentru student (care va verifica și User-ul asociat pentru SpecialGradedUser)
-        status_info = get_student_status(student_obj, datetime_check)
+        status_info = get_student_status(student_obj, datetime_check) 
         
         student_display_info = f"{student_obj.grad_militar} {student_obj.nume} {student_obj.prenume} (Pl.Bază: {student_obj.pluton})"
 
@@ -752,7 +752,7 @@ def get_aggregated_presence_data(target_students_query, datetime_check, unit_typ
             # Această logică e importantă pentru a decide dacă e "în formație" sau doar "prezent în unitate"
             # `assigned_platoon_info` poate fi "Plutonul X / Compania Y" sau "Comandant Compania Z"
             # Trebuie o metodă de a verifica apartenența la unit_id_str
-
+            
             # Simplificare pentru moment: Dacă unit_type e 'pluton' și assigned_platoon_info menționează plutonul, e în formație.
             # Altfel, e doar prezent în unitate.
             # Pentru comandanți de companie/batalion, ei sunt în formația unității lor.
@@ -780,11 +780,11 @@ def get_aggregated_presence_data(target_students_query, datetime_check, unit_typ
             if status_info.get('until'): absent_detail += f" (până la {status_info['until'].strftime('%d.%m %H:%M')})"
             absent_students_details.append(absent_detail)
 
-    efectiv_prezent_total = in_formation_count + on_duty_count + len(special_graded_details)
+    efectiv_prezent_total = in_formation_count + on_duty_count + len(special_graded_details) 
     # Am eliminat special_graded_present_count din suma Ep, deoarece gradații sunt fie în formație, fie în special_graded_details
     # `in_formation_count` include acum și gradații speciali care sunt în formație în unitatea evaluată.
     # `special_graded_details` îi conține pe cei prezenți în unitate dar nu în formația specifică (ex: gradat la alt pluton).
-
+    
     efectiv_absent_total = len(absent_students_details)
     # Asigurare consistență EC = EP + EA
     efectiv_prezent_total = efectiv_control - efectiv_absent_total
@@ -795,7 +795,7 @@ def get_aggregated_presence_data(target_students_query, datetime_check, unit_typ
         "efectiv_prezent_total": efectiv_prezent_total,
         "in_formation_count": in_formation_count, # Include și gradații speciali în formația unității evaluate
         "in_formation_students_details": sorted(in_formation_students_details),
-        "on_duty_count": on_duty_count,
+        "on_duty_count": on_duty_count, 
         "on_duty_students_details": sorted(on_duty_students_details),
         "special_graded_details": sorted(special_graded_details), # Gradați speciali prezenți, dar nu neapărat în formație
         "efectiv_absent_total": efectiv_absent_total,
@@ -809,13 +809,13 @@ def company_commander_dashboard():
     match = re.match(r"CmdC(\d+)", current_user.username) # Presupunem că username-ul comandantului conține ID-ul companiei
     if not match: flash('Format username invalid pentru comandant companie.', 'danger'); return redirect(url_for('home'))
     company_id_str = match.group(1)
-
+    
     now = datetime.now()
     roll_call_time = now.replace(hour=20 if now.weekday() < 4 else 22, minute=0, second=0, microsecond=0)
     
     platoons_data = {}
     all_students_in_company = Student.query.filter_by(companie=company_id_str).all()
-
+    
     students_by_platoon = {}
     for student in all_students_in_company:
         if student.pluton not in students_by_platoon: students_by_platoon[student.pluton] = []
