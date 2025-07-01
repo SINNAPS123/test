@@ -17,7 +17,7 @@
         {% else %}
             <p class="lead mb-4">Selectează o opțiune de autentificare:</p>
             <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
-                <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg px-4 gap-3">Autentificare Utilizator</a>
+                <a href="{{ url_for('admin_login') }}" class="btn btn-primary btn-lg px-4 gap-3">Autentificare Utilizator</a>
                 <a href="{{ url_for('admin_login') }}" class="btn btn-outline-secondary btn-lg px-4">Autentificare Admin</a>
             </div>
         {% endif %}
