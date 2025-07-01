@@ -16,10 +16,10 @@
         <div class="card-body">
             <p>
                 <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ total_battalion_presence.efectiv_control }}</span><br>
-                <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ total_battalion_presence.efectiv_prezent }}</span><br>
-                <strong>Efectiv Absent (Ea):</strong> <span class="badge bg-danger fs-6">{{ total_battalion_presence.efectiv_absent_count }}</span>
+                <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ total_battalion_presence.efectiv_prezent_total }}</span><br>
+                <strong>Efectiv Absent (Ea):</strong> <span class="badge bg-danger fs-6">{{ total_battalion_presence.efectiv_absent_total }}</span>
             </p>
-            {% if total_battalion_presence.efectiv_absent_count > 0 %}
+            {% if total_battalion_presence.efectiv_absent_total > 0 %}
                 <small class="text-muted">Detalii absenți pe companii mai jos.</small>
             {% endif %}
         </div>
@@ -38,19 +38,17 @@
             <div class="card-body">
                 <p>
                     EC: <span class="badge bg-dark">{{ data.efectiv_control }}</span> |
-                    Ep: <span class="badge bg-success">{{ data.efectiv_prezent }}</span> |
-                    Ea: <span class="badge bg-danger">{{ data.efectiv_absent_count }}</span>
+                    Ep: <span class="badge bg-success">{{ data.efectiv_prezent_total }}</span> |
+                    Ea: <span class="badge bg-danger">{{ data.efectiv_absent_total }}</span>
                 </p>
-                {% if data.absent_details_by_unit %}
+                {% if data.absent_students_details %}
                     <p class="mb-1"><small><strong>Absenți din {{ company_name }}:</strong></small></p>
                     <ul class="list-unstyled" style="font-size: 0.9em;">
-                        {% for pluton_key, absent_list in data.absent_details_by_unit.items()|sort %}
-                            {% for absent_detail in absent_list %}
-                                <li><small>{{ absent_detail }}</small></li>
-                            {% endfor %}
+                        {% for absent_detail in data.absent_students_details %}
+                            <li><small>{{ absent_detail }}</small></li>
                         {% endfor %}
                     </ul>
-                {% elif data.efectiv_absent_count == 0 and data.efectiv_control > 0 %}
+                {% elif data.efectiv_absent_total == 0 and data.efectiv_control > 0 %}
                     <p class="text-success mb-0"><small>Toți studenții prezenți în {{ company_name }}.</small></p>
                 {% elif data.efectiv_control == 0 %}
                     <p class="text-info mb-0"><small>Nu există studenți înregistrați pentru {{ company_name }}.</small></p>
