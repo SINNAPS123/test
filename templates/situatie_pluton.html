@@ -92,7 +92,14 @@
                     {% if services_today %}
                         <ul class="list-unstyled">
                         {% for srv in services_today %}
-                            <li><small><strong>{{ srv.student.nume }} {{ srv.student.prenume }}</strong> ({{ srv.service_type }}: {{ srv.start_datetime.strftime('%H:%M') }}-{{ srv.end_datetime.strftime('%H:%M') }})</small></li>
+                            <li><small>
+                                {% if srv.student %}
+                                    <strong>{{ srv.student.nume }} {{ srv.student.prenume }}</strong>
+                                {% else %}
+                                    <strong>Student Șters (ID: {{ srv.student_id }})</strong>
+                                {% endif %}
+                                ({{ srv.service_type }}: {{ srv.start_datetime.strftime('%H:%M') }}-{{ srv.end_datetime.strftime('%H:%M') }})
+                            </small></li>
                         {% endfor %}
                         </ul>
                     {% else %}<p><small class="text-muted">Niciun serviciu azi.</small></p>{% endif %}
@@ -101,7 +108,14 @@
                     {% if services_tomorrow %}
                         <ul class="list-unstyled">
                         {% for srv in services_tomorrow %}
-                            <li><small><strong>{{ srv.student.nume }} {{ srv.student.prenume }}</strong> ({{ srv.service_type }}: {{ srv.start_datetime.strftime('%H:%M') }}-{{ srv.end_datetime.strftime('%H:%M') }})</small></li>
+                            <li><small>
+                                {% if srv.student %}
+                                    <strong>{{ srv.student.nume }} {{ srv.student.prenume }}</strong>
+                                {% else %}
+                                    <strong>Student Șters (ID: {{ srv.student_id }})</strong>
+                                {% endif %}
+                                ({{ srv.service_type }}: {{ srv.start_datetime.strftime('%H:%M') }}-{{ srv.end_datetime.strftime('%H:%M') }})
+                            </small></li>
                         {% endfor %}
                         </ul>
                     {% else %}<p><small class="text-muted">Niciun serviciu mâine.</small></p>{% endif %}
@@ -110,7 +124,14 @@
                     {% if services_day_after %}
                         <ul class="list-unstyled">
                         {% for srv in services_day_after %}
-                            <li><small><strong>{{ srv.student.nume }} {{ srv.student.prenume }}</strong> ({{ srv.service_type }}: {{ srv.start_datetime.strftime('%H:%M') }}-{{ srv.end_datetime.strftime('%H:%M') }})</small></li>
+                            <li><small>
+                                {% if srv.student %}
+                                    <strong>{{ srv.student.nume }} {{ srv.student.prenume }}</strong>
+                                {% else %}
+                                    <strong>Student Șters (ID: {{ srv.student_id }})</strong>
+                                {% endif %}
+                                ({{ srv.service_type }}: {{ srv.start_datetime.strftime('%H:%M') }}-{{ srv.end_datetime.strftime('%H:%M') }})
+                            </small></li>
                         {% endfor %}
                         </ul>
                     {% else %}<p><small class="text-muted">Niciun serviciu poimâine.</small></p>{% endif %}

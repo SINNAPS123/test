@@ -114,14 +114,19 @@
                 </tbody>
             </table>
         </div>
-        {% else %}
-        <p class="text-muted"><em>Nu există învoiri în această categorie.</em></p>
+        {# Am eliminat clauza else pentru a gestiona mesajul global #}
         {% endif %}
     {% endmacro %}
 
-    {{ render_daily_leaves_table(active_leaves, 'Învoiri Active Acum') }}
-    {{ render_daily_leaves_table(upcoming_leaves, 'Învoiri Viitoare') }}
-    {{ render_daily_leaves_table(past_leaves, 'Învoiri Trecute/Anulate') }}
+    {% if active_leaves or upcoming_leaves or past_leaves %}
+        {{ render_daily_leaves_table(active_leaves, 'Învoiri Active Acum') }}
+        {{ render_daily_leaves_table(upcoming_leaves, 'Învoiri Viitoare') }}
+        {{ render_daily_leaves_table(past_leaves, 'Învoiri Trecute/Anulate') }}
+    {% else %}
+        <div class="alert alert-info mt-4" role="alert">
+            Nu există învoiri zilnice de afișat. Puteți adăuga o <a href="{{ url_for('add_daily_leave') }}" class="alert-link">învoire nouă aici</a> sau procesa o <a href="#leave_list_text" class="alert-link">listă din text</a>.
+        </div>
+    {% endif %}
 
     <p class="mt-4">
         <a href="{{ url_for('gradat_dashboard') }}" class="btn btn-outline-secondary btn-sm">

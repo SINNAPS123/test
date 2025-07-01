@@ -49,19 +49,42 @@
             <h5>Efective:</h5>
             <p>
                 <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ report_data.efectiv_control }}</span><br>
-                <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ report_data.efectiv_prezent }}</span><br>
+                <strong>Efectiv Prezent Total (Ep):</strong> <span class="badge bg-success fs-6">{{ report_data.efectiv_prezent_total }}</span><br>
                 <strong>Efectiv Absent (Ea):</strong> <span class="badge bg-danger fs-6">{{ report_data.efectiv_absent_count }}</span>
             </p>
 
+            <h5 class="mt-3">Detalii Prezență:</h5>
+            <p>
+                <strong>În Formație:</strong> <span class="badge bg-info fs-6">{{ report_data.in_formation_count }}</span>
+            </p>
+            {% if report_data.in_formation_list %}
+                <ul class="list-group list-group-flush mb-3">
+                    {% for present_student in report_data.in_formation_list %}
+                        <li class="list-group-item list-group-item-action list-group-item-light py-1">{{ loop.index }}. {{ present_student }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+
+            <p>
+                <strong>În Serviciu:</strong> <span class="badge bg-warning text-dark fs-6">{{ report_data.on_duty_list | length }}</span>
+            </p>
+            {% if report_data.on_duty_list %}
+                <ul class="list-group list-group-flush mb-3">
+                    {% for duty_student in report_data.on_duty_list %}
+                        <li class="list-group-item list-group-item-action list-group-item-light py-1">{{ loop.index }}. {{ duty_student }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+
             {% if report_data.efectiv_absent_list %}
-                <h5 class="mt-3">Listă Absenți:</h5>
+                <h5 class="mt-3">Listă Absenți (Total: {{ report_data.efectiv_absent_count }}):</h5>
                 <ul class="list-group list-group-flush">
                     {% for absent_student in report_data.efectiv_absent_list %}
-                        <li class="list-group-item">{{ loop.index }}. {{ absent_student }}</li>
+                        <li class="list-group-item list-group-item-action list-group-item-danger py-1">{{ loop.index }}. {{ absent_student }}</li>
                     {% endfor %}
                 </ul>
             {% elif report_data.efectiv_absent_count == 0 and report_data.efectiv_control > 0 %}
-                 <p class="text-success mt-3"><strong>Toți studenții sunt prezenți!</strong></p>
+                 <p class="text-success mt-3"><strong>Toți studenții sunt prezenți sau în serviciu!</strong></p>
             {% elif report_data.efectiv_control == 0 %}
                  <p class="text-info mt-3">Nu există studenți în evidență pentru a genera prezența.</p>
             {% endif %}
