@@ -1145,7 +1145,8 @@ def delete_student(student_id):
 @login_required
 def list_permissions():
     if current_user.role != 'gradat': flash('Acces neautorizat.', 'danger'); return redirect(url_for('dashboard'))
-    student_ids_managed_by_gradat = db.session.query(Student.id).filter_by(created_by_user_id=current_user.id).scalars().all()
+    student_id_tuples = db.session.query(Student.id).filter_by(created_by_user_id=current_user.id).all()
+    student_ids_managed_by_gradat = [s[0] for s in student_id_tuples]
     if not student_ids_managed_by_gradat: return render_template('list_permissions.html', active_permissions=[], upcoming_permissions=[], past_permissions=[], title="Listă Permisii")
     now = datetime.now(); base_query = Permission.query.filter(Permission.student_id.in_(student_ids_managed_by_gradat))
     active_permissions = base_query.filter(Permission.status == 'Aprobată', Permission.start_datetime <= now, Permission.end_datetime >= now).order_by(Permission.start_datetime).all()
@@ -1272,7 +1273,8 @@ def delete_permission(permission_id):
 @login_required
 def list_daily_leaves():
     if current_user.role != 'gradat': flash('Acces neautorizat.', 'danger'); return redirect(url_for('dashboard'))
-    student_ids = db.session.query(Student.id).filter_by(created_by_user_id=current_user.id).scalars().all()
+    student_id_tuples = db.session.query(Student.id).filter_by(created_by_user_id=current_user.id).all()
+    student_ids = [s[0] for s in student_id_tuples]
     today_string_for_form = date.today().strftime('%Y-%m-%d')
     if not student_ids: return render_template('list_daily_leaves.html', active_leaves=[], upcoming_leaves=[], past_leaves=[], title="Listă Învoiri Zilnice", today_str=today_string_for_form)
     all_relevant_leaves = DailyLeave.query.filter(DailyLeave.student_id.in_(student_ids)).order_by(DailyLeave.leave_date.desc(), DailyLeave.start_time.desc()).all()
@@ -1476,7 +1478,8 @@ def delete_daily_leave(leave_id):
 @login_required
 def list_weekend_leaves():
     if current_user.role != 'gradat': flash('Acces neautorizat.', 'danger'); return redirect(url_for('dashboard'))
-    student_ids = db.session.query(Student.id).filter_by(created_by_user_id=current_user.id).scalars().all()
+    student_id_tuples = db.session.query(Student.id).filter_by(created_by_user_id=current_user.id).all()
+    student_ids = [s[0] for s in student_id_tuples]
     if not student_ids: return render_template('list_weekend_leaves.html', active_or_upcoming_leaves=[], past_leaves=[], title="Listă Învoiri Weekend")
     all_relevant_leaves = WeekendLeave.query.filter(WeekendLeave.student_id.in_(student_ids)).order_by(WeekendLeave.weekend_start_date.desc()).all()
     active_or_upcoming_leaves = []; past_leaves = []
