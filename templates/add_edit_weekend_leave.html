@@ -64,11 +64,12 @@
                             </div>
                             {% endfor %}
                         </div>
-                        <input type="hidden" id="day1_start_time_proxy" name="day1_start_time">
-                        <input type="hidden" id="day1_end_time_proxy" name="day1_end_time">
-                        <input type="hidden" id="day2_start_time_proxy" name="day2_start_time">
-                        <input type="hidden" id="day2_end_time_proxy" name="day2_end_time">
-
+                        <!-- Aceste inputuri hidden vor fi populate de JS înainte de submit -->
+                        <!-- Backend-ul se așteaptă la aceste nume de câmpuri -->
+                        <input type="hidden" id="day1_start_time_hidden" name="day1_start_time">
+                        <input type="hidden" id="day1_end_time_hidden" name="day1_end_time">
+                        <input type="hidden" id="day2_start_time_hidden" name="day2_start_time">
+                        <input type="hidden" id="day2_end_time_hidden" name="day2_end_time">
 
                         <div class="mb-3">
                             <label for="reason" class="form-label">Motiv (Opțional)</label>
@@ -135,21 +136,46 @@ document.addEventListener('DOMContentLoaded', function() {
         form.addEventListener('submit', function(event) {
             const selectedCheckboxes = Array.from(checkboxes).filter(cb => cb.checked);
 
-            // Clear previous proxy values
-            document.getElementById('day1_start_time_proxy').value = '';
-            document.getElementById('day1_end_time_proxy').value = '';
-            document.getElementById('day2_start_time_proxy').value = '';
-            document.getElementById('day2_end_time_proxy').value = '';
+            // Inputurile hidden pe care le va citi backend-ul
+            const day1StartHidden = document.getElementById('day1_start_time_hidden');
+            const day1EndHidden = document.getElementById('day1_end_time_hidden');
+            const day2StartHidden = document.getElementById('day2_start_time_hidden');
+            const day2EndHidden = document.getElementById('day2_end_time_hidden');
+
+            // Resetează valorile inputurilor hidden
+            day1StartHidden.value = '';
+            day1EndHidden.value = '';
+            day2StartHidden.value = '';
+            day2EndHidden.value = '';
 
             if (selectedCheckboxes.length >= 1) {
                 let day1_id_prefix = selectedCheckboxes[0].value.toLowerCase();
-                document.getElementById('day1_start_time_proxy').value = document.getElementById(day1_id_prefix + '_start_time').value;
-                document.getElementById('day1_end_time_proxy').value = document.getElementById(day1_id_prefix + '_end_time').value;
+                let day1StartTimeInput = document.getElementById(day1_id_prefix + '_start_time');
+                let day1EndTimeInput = document.getElementById(day1_id_prefix + '_end_time');
+
+                day1StartHidden.value = day1StartTimeInput.value;
+                day1EndHidden.value = day1EndTimeInput.value;
+
+                // Validare simplă pe client că orele sunt completate dacă ziua e bifată
+                if (!day1StartTimeInput.value || !day1EndTimeInput.value) {
+                    alert('Vă rugăm completați orele pentru ' + selectedCheckboxes[0].value + '.');
+                    event.preventDefault(); // Oprește trimiterea formularului
+                    return;
+                }
             }
             if (selectedCheckboxes.length === 2) {
                  let day2_id_prefix = selectedCheckboxes[1].value.toLowerCase();
-                document.getElementById('day2_start_time_proxy').value = document.getElementById(day2_id_prefix + '_start_time').value;
-                document.getElementById('day2_end_time_proxy').value = document.getElementById(day2_id_prefix + '_end_time').value;
+                 let day2StartTimeInput = document.getElementById(day2_id_prefix + '_start_time');
+                 let day2EndTimeInput = document.getElementById(day2_id_prefix + '_end_time');
+
+                day2StartHidden.value = day2StartTimeInput.value;
+                day2EndHidden.value = day2EndTimeInput.value;
+
+                if (!day2StartTimeInput.value || !day2EndTimeInput.value) {
+                    alert('Vă rugăm completați orele pentru ' + selectedCheckboxes[1].value + '.');
+                    event.preventDefault(); // Oprește trimiterea formularului
+                    return;
+                }
             }
         });
     }

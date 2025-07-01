@@ -19,7 +19,7 @@
         <h4 class="mt-4">{{ table_title }} ({{ leaves|length }})</h4>
         <div class="table-responsive">
             <table class="table table-striped table-hover table-sm">
-                <thead class="table-dark">
+                <thead> <!-- Am eliminat clasa table-dark -->
                     <tr>
                         <th>Student</th>
                         <th>Weekend (Vineri)</th>
@@ -33,11 +33,11 @@
                     {% for leave in leaves %}
                     <tr class="{{ 'table-success' if leave.is_any_interval_active_now and leave.status == 'Aprobată' else ('table-warning' if leave.is_overall_active_or_upcoming else 'table-secondary') }}">
                         <td>{{ leave.student.nume }} {{ leave.student.prenume }}</td>
-                        <td>{{ leave.weekend_start_date.strftime('%d-%m-%Y') }}</td>
+                        <td>{{ leave.weekend_start_date.strftime('%d-%m-%y') }}</td>
                         <td>
                             {% for interval in leave.get_intervals() %}
                                 <div>
-                                    <strong>{{ interval.day_name }}</strong> ({{ interval.start.strftime('%d.%m') }}):
+                                    <strong>{{ interval.day_name }}</strong> ({{ interval.start.strftime('%d-%m') }}):
                                     {{ interval.start.strftime('%H:%M') }} - {{ interval.end.strftime('%H:%M') }}
                                     {% if interval.is_active_now and leave.status == 'Aprobată' %}
                                         <span class="badge bg-success ms-1">Activ acum</span>
