@@ -966,31 +966,62 @@ def volunteer_generate_students():
 @login_required
 def list_students():
     is_admin_view = current_user.role == 'admin' and request.path.startswith('/admin/')
+    page = request.args.get('page', 1, type=int)
+    per_page = 15
+
     students_query = Student.query
-    search_term = request.args.get('search', ''); filter_batalion = request.args.get('batalion', ''); filter_companie = request.args.get('companie', ''); filter_pluton = request.args.get('pluton', '')
-    page = request.args.get('page', 1, type=int); per_page = 15
-    all_students_for_filters = Student.query.all()
+    search_term = request.args.get('search', '').strip()
+    filter_batalion = request.args.get('batalion', '').strip()
+    filter_companie = request.args.get('companie', '').strip()
+    filter_pluton = request.args.get('pluton', '').strip()
+
+    # For populating filter dropdowns - consider optimizing if it becomes slow
+    all_students_for_filters = Student.query.with_entities(Student.batalion, Student.companie, Student.pluton).distinct().all()
     batalioane = sorted(list(set(s.batalion for s in all_students_for_filters if s.batalion)))
     companii = sorted(list(set(s.companie for s in all_students_for_filters if s.companie)))
     plutoane = sorted(list(set(s.pluton for s in all_students_for_filters if s.pluton)))
+
     if is_admin_view:
         if search_term:
             search_pattern = f"%{unidecode(search_term.lower())}%"
-            students_query = students_query.filter(or_(func.lower(unidecode(Student.nume)).like(search_pattern), func.lower(unidecode(Student.prenume)).like(search_pattern), func.lower(unidecode(Student.id_unic_student)).like(search_pattern)))
+            students_query = students_query.filter(or_(
+                func.lower(unidecode(Student.nume)).like(search_pattern),
+                func.lower(unidecode(Student.prenume)).like(search_pattern),
+                func.lower(unidecode(Student.id_unic_student)).like(search_pattern)
+            ))
         if filter_batalion: students_query = students_query.filter(Student.batalion == filter_batalion)
         if filter_companie: students_query = students_query.filter(Student.companie == filter_companie)
         if filter_pluton: students_query = students_query.filter(Student.pluton == filter_pluton)
-        students_pagination = students_query.order_by(Student.batalion, Student.companie, Student.pluton, Student.nume, Student.prenume).paginate(page=page, per_page=per_page, error_out=False)
-        students_list = students_pagination.items
-    else:
-        if current_user.role != 'gradat': flash('Acces neautorizat pentru rolul curent.', 'danger'); return redirect(url_for('dashboard'))
+        students_query = students_query.order_by(Student.batalion, Student.companie, Student.pluton, Student.nume, Student.prenume)
+    else: # Gradat view
+        if current_user.role != 'gradat':
+            flash('Acces neautorizat pentru rolul curent.', 'danger')
+            return redirect(url_for('dashboard'))
         students_query = students_query.filter_by(created_by_user_id=current_user.id)
         if search_term:
             search_pattern = f"%{unidecode(search_term.lower())}%"
-            students_query = students_query.filter(or_(func.lower(unidecode(Student.nume)).like(search_pattern), func.lower(unidecode(Student.prenume)).like(search_pattern), func.lower(unidecode(Student.id_unic_student)).like(search_pattern)))
-        students_list = students_query.order_by(Student.nume, Student.prenume).all()
-        students_pagination = None
-    return render_template('list_students.html', students=students_list, students_pagination=students_pagination, is_admin_view=is_admin_view, search_term=search_term, filter_batalion=filter_batalion, filter_companie=filter_companie, filter_pluton=filter_pluton, batalioane=batalioane if is_admin_view else [], companii=companii if is_admin_view else [], plutoane=plutoane if is_admin_view else [], title="Listă Studenți", active_gradati_count=Student.query.filter_by(is_platoon_graded_duty=True).count() if is_admin_view else 0) # max_gradati_activi eliminat
+            students_query = students_query.filter(or_(
+                func.lower(unidecode(Student.nume)).like(search_pattern),
+                func.lower(unidecode(Student.prenume)).like(search_pattern),
+                func.lower(unidecode(Student.id_unic_student)).like(search_pattern)
+            ))
+        students_query = students_query.order_by(Student.nume, Student.prenume)
+
+    students_pagination = students_query.paginate(page=page, per_page=per_page, error_out=False)
+    students_list = students_pagination.items
+
+    return render_template('list_students.html',
+                           students=students_list,
+                           students_pagination=students_pagination,
+                           is_admin_view=is_admin_view,
+                           search_term=search_term,
+                           filter_batalion=filter_batalion if is_admin_view else "",
+                           filter_companie=filter_companie if is_admin_view else "",
+                           filter_pluton=filter_pluton if is_admin_view else "",
+                           batalioane=batalioane if is_admin_view else [],
+                           companii=companii if is_admin_view else [],
+                           plutoane=plutoane if is_admin_view else [],
+                           title="Listă Studenți")
 
 @app.route('/gradat/student/add', methods=['GET', 'POST'])
 @login_required
@@ -1089,17 +1120,11 @@ def edit_student(student_id):
         except Exception as e:
             db.session.rollback()
             flash(f'Eroare la actualizarea studentului: {str(e)}', 'danger')
-            return render_template('add_edit_student.html', form_title=f"Editare Student: {s_edit.grad_militar} {s_edit.nume}", student=s_edit, genders=GENDERS, form_data=request.form)
+            return render_template('add_edit_student.html', form_title=f"Editare Student: {s_edit.grad_militar} {s_edit.nume} {s_edit.prenume}", student=s_edit, genders=GENDERS, form_data=request.form)
 
     return render_template('add_edit_student.html', form_title=f"Editare Student: {s_edit.grad_militar} {s_edit.nume} {s_edit.prenume}", student=s_edit, genders=GENDERS, form_data=s_edit)
 
-@app.route('/admin/student/toggle_company_grader/<int:student_id>', methods=['POST'])
-@login_required
-def admin_toggle_company_grader_status(student_id):
-    if not current_user.role == 'admin': flash('Acces neautorizat.', 'danger'); return redirect(url_for('dashboard'))
-    student = Student.query.get_or_404(student_id)
-    flash("Funcționalitate 'Gradat Companie' eliminată/neimplementată.", "warning")
-    return redirect(request.referrer or url_for('list_students'))
+# Funcționalitatea 'Gradat Companie' a fost eliminată. Am șters ruta și funcția admin_toggle_company_grader_status.
 
 @app.route('/gradat/delete_student/<int:student_id>', methods=['POST'])
 @login_required

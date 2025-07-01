@@ -74,9 +74,22 @@
             </div>
         </div>
     </form>
+    {% elif not is_admin_view %} {# Search form for gradat #}
+    <form method="GET" action="{{ url_for('list_students') }}" class="mb-3 bg-light p-3 rounded">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-9">
+                <label for="search" class="form-label form-label-sm">Caută în studenții gestionați:</label>
+                <input type="text" name="search" id="search" class="form-control form-control-sm" placeholder="Nume, prenume, ID unic..." value="{{ search_term or '' }}">
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary btn-sm w-100">Caută</button>
+                <a href="{{ url_for('list_students') }}" class="btn btn-outline-secondary btn-sm w-100 mt-1">Resetează Căutare</a>
+            </div>
+        </div>
+    </form>
     {% endif %}
 
-    {% set student_list = students_pagination.items if is_admin_view and students_pagination else students %}
+    {% set student_list = students_pagination.items if students_pagination else students %}
 
     {% if student_list %}
     <div class="table-responsive">
@@ -158,10 +171,15 @@
         </table>
     </div>
 
-    {% if is_admin_view and students_pagination and students_pagination.pages > 1 %}
+    {# Generalized Pagination for both Admin and Gradat #}
+    {% if students_pagination and students_pagination.total > students_pagination.per_page %}
     <nav aria-label="Page navigation">
         <ul class="pagination pagination-sm justify-content-center">
-            {% set base_args = {'search': search_term or '', 'batalion': filter_batalion or '', 'companie': filter_companie or '', 'pluton': filter_pluton or ''} %}
+            {% set base_args = {'search': search_term or ''} %}
+            {% if is_admin_view %}
+                {% set _ = base_args.update({'batalion': filter_batalion or '', 'companie': filter_companie or '', 'pluton': filter_pluton or ''}) %}
+            {% endif %}
+
             <li class="page-item {% if not students_pagination.has_prev %}disabled{% endif %}">
                 <a class="page-link" href="{{ url_for('list_students', page=students_pagination.prev_num, **base_args) if students_pagination.has_prev else '#'}}">Precedenta</a>
             </li>
@@ -171,7 +189,7 @@
                     <li class="page-item {% if students_pagination.page == page_num %}active{% endif %}">
                         <a class="page-link" href="{{ url_for('list_students', page=page_num, **base_args) }}">{{ page_num }}</a>
                     </li>
-                {% elif loop.index != 1 and loop.index != students_pagination.pages +1 %}
+                {% elif loop.index != 1 and loop.index != students_pagination.pages +1 %} {# Avoids multiple '...' for short lists #}
                      <li class="page-item disabled"><span class="page-link">...</span></li>
                 {% endif %}
             {% endfor %}
@@ -182,6 +200,8 @@
         </ul>
     </nav>
     <p class="text-center text-muted small">Afișare {{ students_pagination.items|length }} din {{ students_pagination.total }} studenți (Pagina {{ students_pagination.page }} din {{ students_pagination.pages }}).</p>
+    {% elif students and not students_pagination %} {# Case where there are students but not enough for pagination (e.g. gradat with few students) #}
+        <p class="text-center text-muted small">Total studenți: {{ student_list|length }}</p>
     {% endif %}
 
     {% elif is_admin_view %}
