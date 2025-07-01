@@ -362,9 +362,21 @@ def set_personal_code():
 @app.route('/admin/dashboard')
 @login_required
 def admin_dashboard_route():
-    if current_user.role != 'admin': flash('Acces neautorizat la panoul de administrare.', 'danger'); return redirect(url_for('dashboard'))
-    total_users = User.query.count(); total_students = Student.query.count()
-    return render_template('admin_dashboard.html', total_users=total_users, total_students=total_students)
+    if current_user.role != 'admin':
+        flash('Acces neautorizat la panoul de administrare.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Fetch all users that are not admins to display in the list
+    users_to_display = User.query.filter(User.role != 'admin').order_by(User.username).all()
+
+    # Statistics (can be kept or enhanced)
+    total_user_count = User.query.count() # Includes admin
+    total_students_count = Student.query.count()
+
+    return render_template('admin_dashboard.html',
+                           users=users_to_display,
+                           total_users=total_user_count,
+                           total_students=total_students_count)
 
 @app.route('/dashboard')
 @login_required
@@ -382,6 +394,571 @@ def dashboard():
     elif current_user.role == 'comandant_companie': return redirect(url_for('company_commander_dashboard'))
     elif current_user.role == 'comandant_batalion': return redirect(url_for('battalion_commander_dashboard'))
     return render_template('dashboard.html', name=current_user.username)
+
+# --- Admin User Management ---
+@app.route('/admin/users/create', methods=['POST']) # Form is on admin_dashboard, so this handles POST
+@login_required
+def admin_create_user():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('home'))
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        role = request.form.get('role')
+        valid_roles = ['gradat', 'comandant_companie', 'comandant_batalion']
+
+        if not username:
+            flash('Numele de utilizator este obligatoriu.', 'warning')
+            return redirect(url_for('admin_dashboard_route'))
+        if User.query.filter_by(username=username).first():
+            flash(f'Numele de utilizator "{username}" există deja.', 'warning')
+            return redirect(url_for('admin_dashboard_route'))
+        if not role or role not in valid_roles:
+            flash('Rolul selectat este invalid.', 'warning')
+            return redirect(url_for('admin_dashboard_route'))
+
+        unique_code = secrets.token_hex(8)
+        while User.query.filter_by(unique_code=unique_code).first(): # Ensure unique_code is truly unique
+            unique_code = secrets.token_hex(8)
+
+        new_user = User(
+            username=username,
+            role=role,
+            unique_code=unique_code,
+            is_first_login=True
+            # password_hash is not set, user will set personal_code
+        )
+        db.session.add(new_user)
+        try:
+            db.session.commit()
+            flash(f'Utilizatorul "{username}" ({role}) a fost creat cu succes! Cod unic de autentificare: {unique_code}', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Eroare la crearea utilizatorului: {str(e)}', 'danger')
+        return redirect(url_for('admin_dashboard_route'))
+
+    # GET request to this URL might redirect or show a specific form if desired later.
+    # For now, as the form is on admin_dashboard, a GET here is not expected for form display.
+    return redirect(url_for('admin_dashboard_route'))
+
+@app.route('/admin/users/reset_code/<int:user_id>', methods=['POST'])
+@login_required
+def admin_reset_user_code(user_id):
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('home'))
+
+    user_to_reset = db.session.get(User, user_id)
+    if not user_to_reset:
+        flash('Utilizatorul nu a fost găsit.', 'danger')
+        return redirect(url_for('admin_dashboard_route'))
+
+    if user_to_reset.role == 'admin':
+        flash('Codul utilizatorului admin nu poate fi resetat prin această metodă.', 'warning')
+        return redirect(url_for('admin_dashboard_route'))
+
+    new_unique_code = secrets.token_hex(8)
+    while User.query.filter_by(unique_code=new_unique_code).first():
+        new_unique_code = secrets.token_hex(8)
+
+    user_to_reset.unique_code = new_unique_code
+    user_to_reset.is_first_login = True
+    user_to_reset.password_hash = None  # Clear old password if any
+    user_to_reset.personal_code_hash = None # Clear personal code
+
+    try:
+        db.session.commit()
+        flash(f'Codul pentru utilizatorul "{user_to_reset.username}" a fost resetat. Noul cod unic de autentificare: {new_unique_code}', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la resetarea codului: {str(e)}', 'danger')
+    return redirect(url_for('admin_dashboard_route'))
+
+@app.route('/admin/users/delete/<int:user_id>', methods=['POST'])
+@login_required
+def admin_delete_user(user_id):
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('home'))
+
+    user_to_delete = db.session.get(User, user_id)
+    if not user_to_delete:
+        flash('Utilizatorul nu a fost găsit.', 'danger')
+        return redirect(url_for('admin_dashboard_route'))
+
+    if user_to_delete.role == 'admin': # Prevent deleting admin accounts
+        flash('Conturile de administrator nu pot fi șterse prin această interfață.', 'warning')
+        return redirect(url_for('admin_dashboard_route'))
+
+    username_deleted = user_to_delete.username # For flash message
+
+    try:
+        if user_to_delete.role == 'gradat':
+            # Cascading delete should handle associated student data due to `ondelete='CASCADE'` in models:
+            # Permission, DailyLeave, WeekendLeave, ServiceAssignment, ActivityParticipant
+            # So, deleting the student should delete their related items.
+            # And deleting the User (gradat) should ensure their created_students are handled.
+            # However, the relation User.students_created does not have cascade delete by default for the students themselves.
+            # We need to explicitly delete students created by this gradat.
+
+            students_to_delete = Student.query.filter_by(created_by_user_id=user_to_delete.id).all()
+            for student in students_to_delete:
+                # Related items like Permissions, DailyLeaves etc., are deleted due to cascade on Student model
+                db.session.delete(student)
+            flash(f'Toți studenții ({len(students_to_delete)}) și datele asociate pentru gradatul {username_deleted} au fost șterse.', 'info')
+
+        # Now delete the user
+        db.session.delete(user_to_delete)
+        db.session.commit()
+        flash(f'Utilizatorul "{username_deleted}" și toate datele asociate (dacă este cazul) au fost șterse cu succes.', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la ștergerea utilizatorului {username_deleted}: {str(e)}', 'danger')
+
+    return redirect(url_for('admin_dashboard_route'))
+
+# --- Helper function to parse commander's unit ID ---
+def _get_commander_unit_id(username, role_prefix):
+    # Assumes username like "CmdC1", "CmdB12"
+    # role_prefix should be "CmdC" or "CmdB"
+    if username.startswith(role_prefix):
+        try:
+            return username[len(role_prefix):]
+        except ValueError:
+            return None
+    return None
+
+# --- Helper function to determine standard roll call time ---
+def get_standard_roll_call_datetime(for_date=None):
+    target_date = for_date if for_date else date.today()
+    weekday = target_date.weekday() # Monday is 0 and Sunday is 6
+
+    if 0 <= weekday <= 3: # Monday to Thursday
+        roll_call_time = time(20, 0)
+    else: # Friday to Sunday
+        roll_call_time = time(22, 0)
+
+    return datetime.combine(target_date, roll_call_time)
+
+# --- Helper function to calculate presence data for a list of students ---
+def _calculate_presence_data(student_list, check_datetime):
+    efectiv_control = len(student_list)
+    in_formation_list = []
+    on_duty_list = []
+    platoon_graded_duty_list = [] # Students who are 'platoon_graded_duty' and not otherwise absent/on duty
+    absent_list = [] # List of strings with student name and reason
+
+    for s in student_list:
+        status_info = get_student_status(s, check_datetime)
+        student_display_name = f"{s.grad_militar} {s.nume} {s.prenume}"
+
+        if status_info["status_code"] == "present":
+            in_formation_list.append(student_display_name)
+        elif status_info["status_code"] == "on_duty":
+            # Only count as "on_duty" for roll call if they don't participate
+            # For general presence, always list them as on_duty.
+            # The commander dashboard is for roll call, so use participates_in_roll_call
+            if hasattr(status_info.get("object"), 'participates_in_roll_call') and not status_info["object"].participates_in_roll_call:
+                 on_duty_list.append(f"{student_display_name} - {status_info['reason']}")
+            else: # Participates in roll call or not applicable (e.g. old service without the field)
+                in_formation_list.append(student_display_name) # Counted as present if they participate
+        elif status_info["status_code"] == "platoon_graded_duty":
+            # This status means they are present but have a special role.
+            # They are not "absent" but might be reported separately from "in_formation_list"
+            # For commander's view, they are part of Ep (Efectiv Prezent)
+            platoon_graded_duty_list.append(f"{student_display_name} - {status_info['reason']}")
+        elif status_info["status_code"] in ["absent_permission", "absent_daily_leave", "absent_weekend_leave"]:
+            absent_list.append(f"{student_display_name} - {status_info['reason']}")
+        # Other statuses like 'undefined_for_user_role', 'unknown' are ignored for these counts
+        # or should be handled if they represent a form of absence.
+
+    # Adjust counts: Platoon Graded Duty students are present.
+    # The main "in_formation_count" for commander dashboards usually means "physically in ranks".
+    # "on_duty_count" means those in service *and not at roll call*.
+    # "platoon_graded_duty_count" are those present with that specific role.
+
+    in_formation_count = len(in_formation_list)
+    on_duty_count = len(on_duty_list) # These are specifically those NOT at roll call due to duty
+    platoon_graded_duty_count = len(platoon_graded_duty_list)
+    efectiv_absent_total = len(absent_list)
+
+    # Ep = (in formation) + (on duty not at roll call) + (platoon graded duty)
+    efectiv_prezent_total = in_formation_count + on_duty_count + platoon_graded_duty_count
+
+    # Ensure EC = Ep + Ea, if not, there's a discrepancy (e.g. student without clear status)
+    # This simplified model assumes all students fall into one of these categories.
+    # If EC != Ep + Ea, it means some students were not categorized, which could be an issue.
+
+    return {
+        "efectiv_control": efectiv_control,
+        "efectiv_prezent_total": efectiv_prezent_total,
+        "efectiv_absent_total": efectiv_absent_total,
+        "in_formation_count": in_formation_count,
+        "in_formation_students_details": sorted(in_formation_list),
+        "on_duty_count": on_duty_count,
+        "on_duty_students_details": sorted(on_duty_list),
+        "platoon_graded_duty_count": platoon_graded_duty_count,
+        "platoon_graded_duty_students_details": sorted(platoon_graded_duty_list),
+        "absent_students_details": sorted(absent_list)
+    }
+
+# --- Commander Dashboards ---
+@app.route('/dashboard/company')
+@login_required
+def company_commander_dashboard():
+    if current_user.role != 'comandant_companie':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    company_id_str = _get_commander_unit_id(current_user.username, "CmdC")
+    if not company_id_str:
+        flash('ID-ul companiei nu a putut fi determinat din numele de utilizator.', 'warning')
+        return redirect(url_for('dashboard'))
+
+    roll_call_datetime = get_standard_roll_call_datetime()
+    roll_call_time_str = roll_call_datetime.strftime('%d %B %Y, %H:%M')
+
+    # Fetch all students in this specific company
+    students_in_company = Student.query.filter_by(companie=company_id_str).all()
+
+    total_company_presence = _calculate_presence_data(students_in_company, roll_call_datetime)
+
+    platoons_data = {}
+    # Group students by platoon
+    platoons_in_company = sorted(list(set(s.pluton for s in students_in_company if s.pluton)))
+
+    for pluton_id_str in platoons_in_company:
+        students_in_pluton = [s for s in students_in_company if s.pluton == pluton_id_str]
+        platoon_name = f"Plutonul {pluton_id_str}" # or just pluton_id_str if preferred
+        platoons_data[platoon_name] = _calculate_presence_data(students_in_pluton, roll_call_datetime)
+
+    return render_template('company_commander_dashboard.html',
+                           company_id=company_id_str,
+                           roll_call_time_str=roll_call_time_str,
+                           total_company_presence=total_company_presence,
+                           platoons_data=platoons_data)
+
+@app.route('/dashboard/battalion')
+@login_required
+def battalion_commander_dashboard():
+    if current_user.role != 'comandant_batalion':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    battalion_id_str = _get_commander_unit_id(current_user.username, "CmdB")
+    if not battalion_id_str:
+        flash('ID-ul batalionului nu a putut fi determinat din numele de utilizator.', 'warning')
+        return redirect(url_for('dashboard'))
+
+    roll_call_datetime = get_standard_roll_call_datetime()
+    roll_call_time_str = roll_call_datetime.strftime('%d %B %Y, %H:%M')
+
+    students_in_battalion = Student.query.filter_by(batalion=battalion_id_str).all()
+
+    total_battalion_presence = _calculate_presence_data(students_in_battalion, roll_call_datetime)
+
+    companies_data = {}
+    companies_in_battalion = sorted(list(set(s.companie for s in students_in_battalion if s.companie)))
+
+    for company_id_str_loop in companies_in_battalion: # Renamed to avoid conflict with outer scope if any
+        students_in_company_loop = [s for s in students_in_battalion if s.companie == company_id_str_loop]
+        company_name = f"Compania {company_id_str_loop}"
+        companies_data[company_name] = _calculate_presence_data(students_in_company_loop, roll_call_datetime)
+
+    return render_template('battalion_commander_dashboard.html',
+                           battalion_id=battalion_id_str,
+                           roll_call_time_str=roll_call_time_str,
+                           total_battalion_presence=total_battalion_presence,
+                           companies_data=companies_data)
+
+# --- Presence Report Route ---
+@app.route('/reports/presence', methods=['GET', 'POST'])
+@login_required
+def presence_report():
+    if current_user.role not in ['gradat', 'admin', 'comandant_companie', 'comandant_batalion']: # Admin/Commanders might also want to see this for their unit? For now, primarily gradat.
+        flash('Acces neautorizat pentru rolul dumneavoastră.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    current_dt_str_for_form = datetime.now().strftime('%Y-%m-%dT%H:%M')
+    report_data_to_render = None
+
+    if request.method == 'POST':
+        report_type = request.form.get('report_type')
+        custom_datetime_str = request.form.get('custom_datetime')
+        datetime_to_check = None
+        report_title_detail = ""
+
+        if report_type == 'current':
+            datetime_to_check = datetime.now()
+            report_title_detail = "Prezență Curentă"
+        elif report_type == 'evening_roll_call':
+            datetime_to_check = get_standard_roll_call_datetime() # Uses today's date by default
+            report_title_detail = f"Apel de Seară ({datetime_to_check.strftime('%H:%M')})"
+        elif report_type == 'company_report':
+            datetime_to_check = datetime.combine(date.today(), time(14, 20))
+            report_title_detail = "Raport Companie (14:20)"
+        elif report_type == 'morning_check':
+            datetime_to_check = datetime.combine(date.today(), time(7, 0))
+            report_title_detail = "Prezență Dimineață (07:00)"
+        elif report_type == 'custom':
+            try:
+                datetime_to_check = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M')
+                report_title_detail = f"Dată Specifică ({datetime_to_check.strftime('%d.%m.%Y %H:%M')})"
+            except (ValueError, TypeError):
+                flash('Format dată și oră custom invalid. Folosiți formatul corect.', 'danger')
+                # Return to form without report_data, current_dt_str_for_form will be used
+                return render_template('presence_report.html', current_datetime_str=current_dt_str_for_form, report_data=None)
+        else:
+            flash('Tip de raport invalid selectat.', 'danger')
+            return render_template('presence_report.html', current_datetime_str=current_dt_str_for_form, report_data=None)
+
+        # Determine student list based on role
+        students_for_report = []
+        report_base_title = "Raport Prezență"
+
+        if current_user.role == 'gradat':
+            students_for_report = Student.query.filter_by(created_by_user_id=current_user.id).all()
+            gradat_pluton = students_for_report[0].pluton if students_for_report else "N/A" # Assuming gradat manages one platoon
+            report_base_title = f"Raport Prezență Plutonul {gradat_pluton}"
+        elif current_user.role == 'comandant_companie':
+            company_id = _get_commander_unit_id(current_user.username, "CmdC")
+            if company_id:
+                students_for_report = Student.query.filter_by(companie=company_id).all()
+                report_base_title = f"Raport Prezență Compania {company_id}"
+            else:
+                flash("Nu s-a putut determina ID-ul companiei.", "danger")
+        elif current_user.role == 'comandant_batalion':
+            battalion_id = _get_commander_unit_id(current_user.username, "CmdB")
+            if battalion_id:
+                students_for_report = Student.query.filter_by(batalion=battalion_id).all()
+                report_base_title = f"Raport Prezență Batalionul {battalion_id}"
+            else:
+                flash("Nu s-a putut determina ID-ul batalionului.", "danger")
+        # Admin might see all students or have a selection UI - for now, admin not generating this specific report via this UI
+
+        if not students_for_report and current_user.role == 'gradat': # Only flash if gradat has no students
+             flash('Nu aveți studenți în evidență pentru a genera raportul.', 'info')
+
+        if students_for_report:
+            report_data_calculated = _calculate_presence_data(students_for_report, datetime_to_check)
+            report_data_to_render = {
+                **report_data_calculated, # Spread the calculated data
+                "title": f"{report_base_title} - {report_title_detail}",
+                "datetime_checked": datetime_to_check.strftime('%d %B %Y, %H:%M:%S')
+            }
+        elif not students_for_report and current_user.role != 'gradat' and not request.form.get('suppress_no_students_flash'): # Avoid flash if no students for commanders unless explicitly generating
+            flash(f"Niciun student găsit pentru {current_user.role} {current_user.username} pentru a genera raportul.", "info")
+
+
+    return render_template('presence_report.html',
+                           current_datetime_str=current_dt_str_for_form,
+                           report_data=report_data_to_render)
+
+# --- Volunteer Module ---
+@app.route('/volunteer', methods=['GET', 'POST'])
+@login_required
+def volunteer_home():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat la modulul de voluntariat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST': # Creare activitate nouă
+        activity_name = request.form.get('activity_name', '').strip()
+        activity_description = request.form.get('activity_description', '').strip()
+        activity_date_str = request.form.get('activity_date')
+
+        if not activity_name or not activity_date_str:
+            flash('Numele activității și data sunt obligatorii.', 'warning')
+            # Re-render GET part
+            activities = VolunteerActivity.query.filter_by(created_by_user_id=current_user.id).order_by(VolunteerActivity.activity_date.desc()).all()
+            students_with_points = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.volunteer_points.desc(), Student.nume).all()
+            today_str_for_form = date.today().strftime('%Y-%m-%d')
+            return render_template('volunteer_home.html', activities=activities, students_with_points=students_with_points, today_str=today_str_for_form)
+
+        try:
+            activity_date_obj = datetime.strptime(activity_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Format dată invalid pentru activitate.', 'danger')
+            activities = VolunteerActivity.query.filter_by(created_by_user_id=current_user.id).order_by(VolunteerActivity.activity_date.desc()).all()
+            students_with_points = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.volunteer_points.desc(), Student.nume).all()
+            today_str_for_form = date.today().strftime('%Y-%m-%d')
+            return render_template('volunteer_home.html', activities=activities, students_with_points=students_with_points, today_str=today_str_for_form)
+
+        new_activity = VolunteerActivity(
+            name=activity_name,
+            description=activity_description,
+            activity_date=activity_date_obj,
+            created_by_user_id=current_user.id
+        )
+        db.session.add(new_activity)
+        try:
+            db.session.commit()
+            flash(f'Activitatea de voluntariat "{activity_name}" a fost creată cu succes.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Eroare la crearea activității: {str(e)}', 'danger')
+        return redirect(url_for('volunteer_home'))
+
+    # GET request
+    activities = VolunteerActivity.query.filter_by(created_by_user_id=current_user.id).order_by(VolunteerActivity.activity_date.desc()).all()
+    students_with_points = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.volunteer_points.desc(), Student.nume).all()
+    today_str_for_form = date.today().strftime('%Y-%m-%d')
+
+    return render_template('volunteer_home.html',
+                           activities=activities,
+                           students_with_points=students_with_points,
+                           today_str=today_str_for_form)
+
+@app.route('/volunteer/activity/<int:activity_id>', methods=['GET', 'POST'])
+@login_required
+def volunteer_activity_details(activity_id):
+    activity = VolunteerActivity.query.get_or_404(activity_id)
+    if current_user.role != 'gradat' or activity.created_by_user_id != current_user.id:
+        flash('Acces neautorizat la această activitate de voluntariat.', 'danger')
+        return redirect(url_for('volunteer_home'))
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+
+        if action == 'update_participants':
+            selected_student_ids = set(request.form.getlist('participant_ids[]', type=int))
+
+            # Remove participants not selected anymore
+            current_participants_in_activity = ActivityParticipant.query.filter_by(activity_id=activity.id).all()
+            for ap in current_participants_in_activity:
+                if ap.student_id not in selected_student_ids:
+                    # Before deleting, if points were awarded, subtract them from student's total.
+                    # This logic might need refinement: what if points were awarded for *this specific* participation?
+                    # For now, if a student is removed, their points from this activity are effectively "lost" from this AP record.
+                    # The Student.volunteer_points should ideally be a sum from all their AP records.
+                    student_obj = db.session.get(Student, ap.student_id)
+                    if student_obj: # Subtract points if student exists
+                         student_obj.volunteer_points = max(0, student_obj.volunteer_points - ap.points_awarded) # Ensure not negative
+                    db.session.delete(ap)
+
+            # Add new participants
+            for student_id_to_add in selected_student_ids:
+                exists = ActivityParticipant.query.filter_by(activity_id=activity.id, student_id=student_id_to_add).first()
+                if not exists:
+                    # Ensure the student belongs to the current gradat
+                    student_check = Student.query.filter_by(id=student_id_to_add, created_by_user_id=current_user.id).first()
+                    if student_check:
+                        new_participant = ActivityParticipant(activity_id=activity.id, student_id=student_id_to_add, points_awarded=0)
+                        db.session.add(new_participant)
+                    else:
+                        flash(f"Studentul cu ID {student_id_to_add} nu a putut fi adăugat (nu este gestionat de dvs).", "warning")
+
+            try:
+                db.session.commit()
+                # Recalculate total points for all affected students
+                all_involved_student_ids = selected_student_ids.union(set(ap.student_id for ap in current_participants_in_activity))
+                for s_id in all_involved_student_ids:
+                    stud = db.session.get(Student, s_id)
+                    if stud:
+                        stud.volunteer_points = db.session.query(func.sum(ActivityParticipant.points_awarded)).filter_by(student_id=s_id).scalar() or 0
+                db.session.commit()
+                flash('Lista de participanți a fost actualizată.', 'success')
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Eroare la actualizarea participanților: {str(e)}', 'danger')
+
+        elif action == 'award_points':
+            points_to_award_val = request.form.get('points_to_award', type=int)
+            participant_ids_for_points = set(request.form.getlist('points_participant_ids[]', type=int))
+
+            if points_to_award_val is None or points_to_award_val < 0:
+                flash('Numărul de puncte de acordat este invalid.', 'warning')
+            else:
+                updated_count = 0
+                for student_id_for_points in participant_ids_for_points:
+                    participant_record = ActivityParticipant.query.filter_by(activity_id=activity.id, student_id=student_id_for_points).first()
+                    if participant_record:
+                        # Option 1: Add to existing points for this activity
+                        # participant_record.points_awarded += points_to_award_val
+                        # Option 2: Set points for this activity (if points are per activity, not cumulative for it)
+                        participant_record.points_awarded = points_to_award_val
+                        updated_count +=1
+                    else:
+                        flash(f"Studentul cu ID {student_id_for_points} nu este participant la această activitate pentru a primi puncte.", "warning")
+
+                if updated_count > 0:
+                    try:
+                        db.session.commit()
+                        # Recalculate total points for all students who received points
+                        for s_id in participant_ids_for_points:
+                            stud = db.session.get(Student, s_id)
+                            if stud: # Check if student still exists
+                                total_points = db.session.query(func.sum(ActivityParticipant.points_awarded)).filter_by(student_id=s_id).scalar()
+                                stud.volunteer_points = total_points if total_points is not None else 0
+                        db.session.commit()
+                        flash(f'{points_to_award_val} puncte acordate pentru {updated_count} participanți selectați.', 'success')
+                    except Exception as e:
+                        db.session.rollback()
+                        flash(f'Eroare la acordarea punctelor: {str(e)}', 'danger')
+        else:
+            flash('Acțiune necunoscută.', 'danger')
+
+        return redirect(url_for('volunteer_activity_details', activity_id=activity.id))
+
+    # GET request
+    students_managed = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.nume).all()
+
+    # Get current participant student IDs for this activity
+    current_participant_ids = [ap.student_id for ap in ActivityParticipant.query.filter_by(activity_id=activity.id).all()]
+
+    # Get detailed participant info (ActivityParticipant object + Student object)
+    activity_participants_detailed_query = db.session.query(ActivityParticipant, Student).\
+        join(Student, ActivityParticipant.student_id == Student.id).\
+        filter(ActivityParticipant.activity_id == activity.id).all()
+
+    # activity_participants_detailed will be a list of (ActivityParticipant, Student) tuples
+    # The template already uses this structure in the loop: {% for participant, student_detail in activity_participants_detailed %}
+
+    return render_template('volunteer_activity_details.html',
+                           activity=activity,
+                           students_managed=students_managed,
+                           current_participant_ids=current_participant_ids,
+                           activity_participants_detailed=activity_participants_detailed_query)
+
+@app.route('/volunteer/generate', methods=['GET', 'POST'])
+@login_required
+def volunteer_generate_students():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    generated_students_list = None
+    num_students_req_val = 5 # Default value for GET
+    exclude_girls_val = False # Default value for GET
+
+    if request.method == 'POST':
+        try:
+            num_students_req_val = int(request.form.get('num_students', 5))
+            if num_students_req_val <= 0:
+                flash("Numărul de studenți necesari trebuie să fie pozitiv.", "warning")
+                num_students_req_val = 5 # Reset to default if invalid
+        except ValueError:
+            flash("Număr de studenți invalid.", "warning")
+            num_students_req_val = 5 # Reset to default
+
+        exclude_girls_val = 'exclude_girls' in request.form
+
+        students_query = Student.query.filter_by(created_by_user_id=current_user.id)
+        if exclude_girls_val:
+            students_query = students_query.filter(Student.gender != 'F')
+
+        generated_students_list = students_query.order_by(Student.volunteer_points.asc(), Student.nume.asc()).limit(num_students_req_val).all()
+
+        if not generated_students_list:
+            flash('Nu s-au găsit studenți conform criteriilor specificate sau nu aveți studenți în evidență.', 'info')
+
+    return render_template('volunteer_generate_students.html',
+                           generated_students=generated_students_list,
+                           num_students_requested=num_students_req_val,
+                           exclude_girls_opt=exclude_girls_val)
+
 
 # --- Management Studenți ---
 @app.route('/gradat/students')

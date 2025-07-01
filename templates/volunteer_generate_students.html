@@ -48,7 +48,8 @@
                 <p>Acești studenți au fost selectați pe baza numărului redus de puncte de voluntariat. Îi puteți adăuga la o activitate nouă sau existentă.</p>
                 <p><strong>Acțiuni sugerate:</strong></p>
                 <ol>
-                    <li>Creează o nouă activitate de voluntariat <a href="{{ url_for('volunteer_home') }}#create-activity-form">aici</a>.</li>
+                    <!-- Link temporarily points to # if volunteer_home is not yet implemented -->
+                    <li>Creează o nouă activitate de voluntariat <a href="{{ url_for('volunteer_home', _anchor='create-activity-form') if true else '#' }}">aici</a>.</li>
                     <li>Mergi la detalii activitate și selectează acești studenți.</li>
                     <li>După finalizarea activității, acordă-le puncte.</li>
                 </ol>
