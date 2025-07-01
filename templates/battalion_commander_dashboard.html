@@ -33,17 +33,23 @@
     <p class="text-muted">Situația efectivelor pentru Apelul de Seară din {{ roll_call_time_str }}</p>
     <hr>
 
-    {# Macro importată din dashboard-ul companiei sau definită aici dacă e nevoie de ajustări specifice #}
-    {# Presupunem că macro este disponibilă sau o copiem aici #}
     {% macro display_presence_details(data, id_prefix) %}
-        {% if data.in_formation_students_details %}
+        {# Afișăm Gradați Activi în Plutonul Evaluat (dacă există) și studenții normali în formație #}
+        {% if data.in_formation_students_details or data.gradati_activi_in_pluton_evaluat_details %}
             <h6 class="mt-2 mb-1">
-                Prezenți în Formație ({{ data.in_formation_count }})
+                Prezenți în Formație
+                (<span class="count-formation">{{ data.in_formation_count }}</span>
+                {% if data.gradati_activi_in_pluton_evaluat_details %}
+                + <span class="count-gradati-here">{{ data.gradati_activi_in_pluton_evaluat_details|length }}</span> Gradați Activi Aici
+                {% endif %})
                 <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-formation-details" aria-expanded="false" aria-controls="{{ id_prefix }}-formation-details">Detalii</button>
             </h6>
             <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-formation-details">
                 {% for item in data.in_formation_students_details %}
                     <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                {% endfor %}
+                {% for item in data.gradati_activi_in_pluton_evaluat_details %}
+                    <li class="list-group-item list-group-item-sm py-1 bg-light-info">{{ item }} <span class="badge bg-info-soft text-info">Gradat</span></li>
                 {% endfor %}
             </ul>
         {% endif %}
@@ -60,6 +66,19 @@
             </ul>
         {% endif %}
 
+        {# Afișăm Gradați din Plutonul curent (dacă e cazul) care sunt activi la ALT pluton #}
+        {% if data.gradati_activi_din_pluton_la_alt_pluton_details %}
+            <h6 class="mt-2 mb-1">
+                Gradați din Unitate Activi la Alt Pluton ({{ data.gradati_activi_din_pluton_la_alt_pluton_details|length }})
+                <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-gradati-altpl-details" aria-expanded="false" aria-controls="{{ id_prefix }}-gradati-altpl-details">Detalii</button>
+            </h6>
+            <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-gradati-altpl-details">
+                {% for item in data.gradati_activi_din_pluton_la_alt_pluton_details %}
+                    <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        
         {% if data.absent_students_details %}
             <h6 class="mt-2 mb-1">
                 Absenți Motivat ({{ data.efectiv_absent_total }})

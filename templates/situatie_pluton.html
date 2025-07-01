@@ -20,13 +20,21 @@
             <p>
                 <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ efectiv_control_now }}</span><br>
                 <strong>Efectiv Prezent Total (Ep):</strong> <span class="badge bg-success fs-6">{{ efectiv_prezent_total_now }}</span>
-                <small class="d-block ms-3">(Din care: În formație: {{ in_formation_now }}, La servicii: {{ on_duty_now_list|length }})</small><br>
+                <small class="d-block ms-3">(În formație: {{ in_formation_now }}, La servicii: {{ on_duty_now_list|length }}, Gradați Alt Pl.: {{ gradati_activi_alt_pluton_list|length }})</small><br>
                 <strong>Efectiv Absent (Ea):</strong> <span class="badge bg-danger fs-6">{{ efectiv_absent_now_count }}</span>
             </p>
             {% if on_duty_now_list %}
                 <h6 class="mt-2">Studenți la Servicii (Acum):</h6>
                 <ul class="list-group list-group-flush list-group-numbered" style="font-size: 0.9em;">
                     {% for item in on_duty_now_list %}
+                        <li class="list-group-item py-1">{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            {% if gradati_activi_alt_pluton_list %}
+                <h6 class="mt-2">Studenți Gradați Activi la Alte Plutoane (Acum):</h6>
+                <ul class="list-group list-group-flush list-group-numbered" style="font-size: 0.9em;">
+                    {% for item in gradati_activi_alt_pluton_list %}
                         <li class="list-group-item py-1">{{ item }}</li>
                     {% endfor %}
                 </ul>
@@ -56,13 +64,21 @@
             <p>
                 <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ next_report_info.ec }}</span><br>
                 <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ next_report_info.ep }}</span>
-                <small class="d-block ms-3">(Din care: În formație: {{ next_report_info.in_formation }}, La servicii: {{ next_report_info.on_duty_list|length }})</small><br>
+                <small class="d-block ms-3">(În formație: {{ next_report_info.in_formation }}, La servicii: {{ next_report_info.on_duty_list|length }}, Gradați Alt Pl.: {{ next_report_info.gradati_alt_pluton_list|length }})</small><br>
                 <strong>Efectiv Absent (Ea):</strong> <span class="badge bg-danger fs-6">{{ next_report_info.ea_count }}</span>
             </p>
             {% if next_report_info.on_duty_list %}
                 <h6 class="mt-2">Studenți la Servicii (la {{ next_report_info.type }}):</h6>
                 <ul class="list-group list-group-flush list-group-numbered" style="font-size: 0.9em;">
                     {% for item in next_report_info.on_duty_list %}
+                        <li class="list-group-item py-1">{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            {% if next_report_info.gradati_alt_pluton_list %}
+                <h6 class="mt-2">Studenți Gradați Activi la Alte Plutoane (la {{ next_report_info.type }}):</h6>
+                <ul class="list-group list-group-flush list-group-numbered" style="font-size: 0.9em;">
+                    {% for item in next_report_info.gradati_alt_pluton_list %}
                         <li class="list-group-item py-1">{{ item }}</li>
                     {% endfor %}
                 </ul>
