@@ -27,7 +27,7 @@
                             <label for="grad_militar" class="form-label">Grad Militar <span class="text-danger">*</span></label>
                             {# Ideal, aceasta ar fi o listă selectabilă predefinită, dar pentru simplitate începem cu text input #}
                             {# TODO: Transformă într-un dropdown cu opțiuni predefinite pentru grade #}
-                            <input type="text" class="form-control" id="grad_militar" name="grad_militar" value="{{ student.grad_militar if student else '' }}" placeholder="ex: Sdt., Cap., Sg." required>
+                            <input type="text" class="form-control" id="grad_militar" name="grad_militar" value="{{ student.grad_militar if student else '' }}" placeholder="ex: Sdt., Cap., Plt.maj." required>
                             <small class="form-text text-muted">Exemple: Sdt. (Soldat), Frt. (Fruntaș), Cap. (Caporal), Sg. (Sergent) etc.</small>
                         </div>
 

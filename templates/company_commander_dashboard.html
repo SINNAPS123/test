@@ -8,76 +8,66 @@
     <p class="text-muted">Situația efectivelor pentru Apelul de Seară din {{ roll_call_time_str }}</p>
     <hr>
 
-    {% if presence_data %}
+    {% if total_company_presence %}
     <div class="card shadow-sm mb-4">
-        <div class="card-header bg-primary text-white">
-            <h4 class="mb-0">Efective Compania {{ company_id }}</h4>
+        <div class="card-header bg-primary text-white" style="background-color: var(--accent-primary) !important;">
+            <h4 class="mb-0">Efective Totale Compania {{ company_id }}</h4>
         </div>
         <div class="card-body">
             <p>
-                <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ presence_data.efectiv_control }}</span><br>
-                <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ presence_data.efectiv_prezent }}</span><br>
-                <strong>Efectiv Absent (Ea):</strong> <span class="badge bg-danger fs-6">{{ presence_data.efectiv_absent_count }}</span>
+                <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ total_company_presence.efectiv_control }}</span><br>
+                <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ total_company_presence.efectiv_prezent_total }}</span> (Formație: {{total_company_presence.in_formation_count}}, Serviciu: {{total_company_presence.on_duty_count}})<br>
+                <strong>Efectiv Absent (Ea):</strong> <span class="badge bg-danger fs-6">{{ total_company_presence.efectiv_absent_total }}</span>
             </p>
-        </div>
-    </div>
-
-    {% if presence_data.absent_details_by_unit %}
-        <h4 class="mt-4">Detalii Absenți pe Plutoane:</h4>
-        {% for pluton_key, absent_list in presence_data.absent_details_by_unit.items()|sort %}
-            <div class="card shadow-sm mb-3">
-                <div class="card-header">
-                    <strong>{{ pluton_key }}</strong> (Absenți: {{ absent_list|length }})
-                </div>
-                <ul class="list-group list-group-flush">
-                    {% if absent_list %}
-                        {% for absent_student_detail in absent_list %}
-                            <li class="list-group-item">{{ loop.index }}. {{ absent_student_detail }}</li>
-                        {% endfor %}
-                    {% else %}
-                        <li class="list-group-item text-success">Niciun absent în acest pluton.</li>
-                    {% endif %}
+            {% if total_company_presence.efectiv_absent_total > 0 and not platoons_data %}
+                <p class="mb-1"><small><strong>Absenți din companie (detalii agregate):</strong></small></p>
+                <ul class="list-unstyled" style="font-size: 0.9em;">
+                    {% for absent_detail in total_company_presence.absent_students_details %}
+                        <li><small>{{ absent_detail }}</small></li>
+                    {% endfor %}
                 </ul>
-            </div>
-        {% endfor %}
-    {% elif presence_data.efectiv_absent_count == 0 and presence_data.efectiv_control > 0 %}
-        <div class="alert alert-success">
-            <strong>Toți studenții din companie sunt prezenți!</strong>
+            {% elif total_company_presence.efectiv_absent_total == 0 and total_company_presence.efectiv_control > 0 %}
+                 <p class="text-success mb-0"><small>Toți studenții din companie sunt prezenți sau în serviciu.</small></p>
+            {% endif %}
         </div>
-    {% elif presence_data.efectiv_control == 0 %}
-        <div class="alert alert-info">
-            Nu există studenți înregistrați pentru compania {{ company_id }}.
-        </div>
-    {% endif %}
-
-    {% else %}
-    <div class="alert alert-warning">Nu s-au putut încărca datele de prezență pentru companie.</div>
-    {% endif %}
-
-    <hr class="my-4">
-    <h4 class="mt-4">Statistici Rapide (Compania {{ company_id }} - Acum)</h4>
-    <div class="row">
-        <div class="col-md-4">
-            <div class="alert alert-info">
-                Total Studenți în Permisie: <strong>{{ total_on_permission }}</strong>
-            </div>
-        </div>
-        {# Aici se pot adăuga și alte statistici agregate pentru companie, ex: învoiri, servicii #}
-        {# Pentru aceasta, ar trebui adusă logica de calcul din get_student_status și aplicată pe toți studenții companiei #}
-        {# De exemplu:
-           total_on_daily_leave = 0
-           total_on_weekend_leave = 0
-           total_on_service = 0
-           all_students_in_company = Student.query.filter_by(companie=company_id_str).all()
-           now_check = datetime.now()
-           for stud in all_students_in_company:
-               status = get_student_status(stud, now_check)
-               if status.status_code == 'absent_daily_leave': total_on_daily_leave +=1
-               elif status.status_code == 'absent_weekend_leave': total_on_weekend_leave +=1
-               elif status.status_code == 'absent_service': total_on_service +=1
-        #}
     </div>
+    {% else %}
+    <div class="alert alert-warning">Nu s-au putut încărca datele de prezență agregate pentru companie.</div>
+    {% endif %}
 
+    <h4 class="mt-4">Detalii Efective pe Plutoane:</h4>
+    {% if platoons_data %}
+        {% for platoon_name, data in platoons_data.items()|sort %}
+        <div class="card shadow-sm mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">{{ platoon_name }}</h5>
+            </div>
+            <div class="card-body">
+                <p>
+                    EC: <span class="badge bg-dark">{{ data.efectiv_control }}</span> |
+                    Ep: <span class="badge bg-success">{{ data.efectiv_prezent_total }}</span> (Formație: {{data.in_formation_count}}, Serviciu: {{data.on_duty_count}}) |
+                    Ea: <span class="badge bg-danger">{{ data.efectiv_absent_total }}</span>
+                </p>
+                {% if data.absent_students_details %}
+                    <p class="mb-1"><small><strong>Absenți din {{ platoon_name }}:</strong></small></p>
+                    <ul class="list-unstyled" style="font-size: 0.9em;">
+                        {% for absent_detail in data.absent_students_details %}
+                            <li><small>{{ absent_detail }}</small></li>
+                        {% endfor %}
+                    </ul>
+                {% elif data.efectiv_absent_total == 0 and data.efectiv_control > 0 %}
+                    <p class="text-success mb-0"><small>Toți studenții din {{ platoon_name }} sunt prezenți sau în serviciu.</small></p>
+                {% elif data.efectiv_control == 0 %}
+                     <p class="text-muted mb-0"><small>Nu există studenți înregistrați pentru {{ platoon_name }}.</small></p>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="alert alert-info">Nu există plutoane cu studenți în această companie sau datele nu au putut fi încărcate.</div>
+    {% endif %}
+
+    {# Am eliminat secțiunea "Statistici Rapide" deocamdată #}
 
     <p class="mt-4">
         <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">

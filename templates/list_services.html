@@ -20,7 +20,7 @@
         <h4 class="mt-4">{{ table_title }} ({{ services|length }})</h4>
         <div class="table-responsive">
             <table class="table table-striped table-hover table-sm">
-                <thead class="table-dark">
+                <thead> <!-- Am eliminat clasa table-dark -->
                     <tr>
                         <th>Student</th>
                         <th>Tip Serviciu</th>
@@ -36,7 +36,7 @@
                     <tr class="{{ 'table-success' if assignment.is_active else ('table-warning' if assignment.is_upcoming else 'table-secondary') }}">
                         <td>{{ assignment.student.nume }} {{ assignment.student.prenume }}</td>
                         <td><span class="badge bg-info text-dark">{{ assignment.service_type }}</span></td>
-                        <td>{{ assignment.service_date.strftime('%d-%m-%Y') }} ({{ assignment.service_date.strftime('%A') }})</td>
+                        <td>{{ assignment.service_date.strftime('%d-%m-%y') }} ({{ assignment.service_date.strftime('%a') }})</td>
                         <td>{{ assignment.start_datetime.strftime('%H:%M') }} - {{ assignment.end_datetime.strftime('%H:%M') }}
                             {% if assignment.end_datetime.date() > assignment.start_datetime.date() %}
                                 <span class="badge bg-light text-dark">până a doua zi</span>

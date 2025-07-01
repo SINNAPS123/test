@@ -152,14 +152,18 @@ class WeekendLeave(db.Model):
         return sorted(intervals, key=lambda x: x['start'])
     @property
     def is_overall_active_or_upcoming(self):
-        if self.status != 'Aprobată': return False; now = datetime.now()
+        if self.status != 'Aprobată': return False
+        now = datetime.now() # Definim 'now' în scope-ul proprietății
         return any(interval["end"] >= now for interval in self.get_intervals())
     @property
     def is_any_interval_active_now(self):
-        if self.status != 'Aprobată': return False; now = datetime.now()
+        if self.status != 'Aprobată': return False
+        now = datetime.now() # Definim 'now' în scope-ul proprietății
         return any(interval["start"] <= now <= interval["end"] for interval in self.get_intervals())
     @property
-    def is_overall_past(self): return True if self.status == 'Anulată' else not self.is_overall_active_or_upcoming
+    def is_overall_past(self): # Și aici, deși nu a cauzat eroarea directă, e bine să fie explicit
+        now = datetime.now() # Definim 'now'
+        return True if self.status == 'Anulată' else not self.is_overall_active_or_upcoming
     @property
     def display_days_and_times(self):
         return "; ".join([f"{i['day_name']} ({i['start'].strftime('%d.%m')}) {i['start'].strftime('%H:%M')}-{i['end'].strftime('%H:%M')}" for i in self.get_intervals()]) or "Nespecificat"
@@ -295,6 +299,95 @@ def get_student_status(student, datetime_check):
                 "until": dl.end_datetime, "details": f"Învoire Zilnică: {dl.leave_type_display}", "object": dl
             }
     return {"status_code": "present", "reason": "Prezent", "until": None, "details": "Prezent", "object": None}
+
+# Funcție de parsare a liniei pentru învoiri, îmbunătățită
+def parse_student_line(line_text):
+    parts = line_text.strip().split()
+    grad = None
+    nume = None
+    prenume = None
+    end_hour_str = None
+    original_line = line_text.strip()
+
+    if not parts:
+        return {'grad': grad, 'nume': nume, 'prenume': prenume, 'end_hour_str': end_hour_str, 'original_line': original_line}
+
+    last_part = parts[-1]
+    time_extracted = False
+    if ':' in last_part and len(last_part.split(':')[0]) <= 2 and len(last_part.split(':')[-1]) == 2:
+        try:
+            datetime.strptime(last_part, '%H:%M')
+            end_hour_str = last_part
+            parts = parts[:-1]
+            time_extracted = True
+        except ValueError:
+            pass
+    elif len(last_part) == 4 and last_part.isdigit() and not time_extracted:
+        try:
+            h = last_part[:2]
+            m = last_part[2:]
+            datetime.strptime(f"{h}:{m}", '%H:%M')
+            end_hour_str = f"{h}:{m}"
+            parts = parts[:-1]
+            time_extracted = True
+        except ValueError:
+            pass
+
+    if not parts and time_extracted:
+         return {'grad': grad, 'nume': nume, 'prenume': prenume, 'end_hour_str': end_hour_str, 'original_line': original_line}
+    if not parts and not time_extracted:
+         return {'grad': grad, 'nume': nume, 'prenume': prenume, 'end_hour_str': end_hour_str, 'original_line': original_line}
+
+    current_search_text = ""
+    grad_parts_count = 0
+    # Iterăm prin părți pentru a identifica un posibil grad la început
+    # KNOWN_RANK_PATTERNS trebuie să fie accesibil (definit global)
+    temp_grad_candidate = ""
+    for i, part in enumerate(parts):
+        current_word_is_grad_part = False
+        # Verificăm dacă partea curentă, singură sau ca parte dintr-un text mai lung, formează un grad
+        test_text_for_grad = (temp_grad_candidate + " " + part).strip() if temp_grad_candidate else part
+
+        found_match_for_test_text = False
+        for pattern in KNOWN_RANK_PATTERNS:
+            # Verificăm dacă pattern-ul se potrivește cu începutul textului de testare urmat de un spațiu
+            # sau dacă se potrivește exact cu textul de testare (pentru grade dintr-un singur cuvânt fără spațiu după)
+            if pattern.match(test_text_for_grad + " ") or pattern.fullmatch(test_text_for_grad):
+                found_match_for_test_text = True
+                break
+
+        if found_match_for_test_text:
+            temp_grad_candidate = test_text_for_grad
+            grad = temp_grad_candidate # Actualizăm gradul cu cea mai lungă potrivire găsită
+            grad_parts_count = i + 1
+            current_word_is_grad_part = True
+        else:
+            # Dacă adăugarea cuvântului curent nu mai formează un grad valid,
+            # și am avut un grad valid înainte, ne oprim.
+            if grad: # grad a fost setat în iterația anterioară
+                break
+            # Dacă nu am avut grad și cuvântul curent nu e parte din grad, continuăm să căutăm nume/prenume
+            # (acoperă cazul când nu există grad deloc)
+            if not grad:
+                 break # Ieșim din bucla de căutare a gradului, începem procesarea numelui
+
+    name_parts_start_index = grad_parts_count
+    remaining_parts = parts[name_parts_start_index:]
+
+    if len(remaining_parts) >= 1:
+        nume = remaining_parts[0]
+    if len(remaining_parts) >= 2:
+        # Prenumele poate fi compus din mai multe cuvinte
+        prenume = " ".join(remaining_parts[1:])
+
+    # Caz special: dacă numele pare a fi Nume Prenume și nu există grad
+    if not grad and nume and ' ' in nume and not prenume:
+        name_parts_split = nume.split(' ', 1)
+        nume = name_parts_split[0]
+        prenume = name_parts_split[1] if len(name_parts_split) > 1 else None
+
+    return {'grad': grad, 'nume': nume, 'prenume': prenume, 'end_hour_str': end_hour_str, 'original_line': original_line}
+
 
 def check_leave_conflict(student_id, leave_start_dt, leave_end_dt, existing_leave_id=None, leave_type=None):
     # Verifică conflicte cu servicii GSS sau Intervenție
@@ -704,6 +797,7 @@ def process_daily_leaves_text():
     skipped_entries = [] 
     success_entries = []
 
+    # Acestea ar trebui să fie definite aici dacă nu sunt globale sau pasate altfel
     default_start_time = time(15, 0)
     default_end_time_if_no_hour = time(19, 0)
 
@@ -713,35 +807,64 @@ def process_daily_leaves_text():
         original_line_text = line.strip()
         if not original_line_text:
             continue
+
         parsed_data = parse_student_line(original_line_text)
+
         if not parsed_data['nume']:
-            skipped_entries.append(f"Linia {line_num+1} (format incorect): \"{original_line_text}\"")
+            skipped_entries.append(f"Linia {line_num+1} (format nume incorect sau linie goală): \"{parsed_data['original_line']}\"")
             continue
         
         student_found = None
-        search_nume = parsed_data['nume'].lower()
-        search_prenume = parsed_data['prenume'].lower() if parsed_data['prenume'] else None
-        for s in all_students_gradat:
-            s_nume_lower = s.nume.lower()
-            s_prenume_lower = s.prenume.lower()
-            match_nume_prenume = (search_nume == s_nume_lower and search_prenume == s_prenume_lower)
-            match_prenume_nume = (search_nume == s_prenume_lower and search_prenume == s_nume_lower) 
-            if search_prenume: 
-                if match_nume_prenume or match_prenume_nume:
-                    student_found = s; break
-            else: 
-                if search_nume == s_nume_lower or search_nume == s_prenume_lower:
-                    student_found = s; break 
+        search_nume_lower = parsed_data['nume'].lower()
+        search_prenume_lower = parsed_data['prenume'].lower() if parsed_data['prenume'] else None
+
+        # Încercare de potrivire exactă (Nume + Prenume dacă există)
+        if search_prenume_lower:
+            for s in all_students_gradat:
+                if (s.nume.lower() == search_nume_lower and s.prenume.lower() == search_prenume_lower) or \
+                   (s.nume.lower() == search_prenume_lower and s.prenume.lower() == search_nume_lower): # Invers
+                    student_found = s
+                    break
+
         if not student_found:
-            skipped_entries.append(f"Studentul '{parsed_data['nume']}{' ' + parsed_data['prenume'] if parsed_data['prenume'] else ''}' nu a fost găsit. (Linia: \"{original_line_text}\")")
+            possible_matches = []
+            for s in all_students_gradat:
+                # Caută numele extras (care poate fi nume sau prenume) în ambele câmpuri ale studentului
+                # sau dacă numele complet al studentului (nume + prenume) conține numele extras
+                student_full_name_lower = f"{s.nume.lower()} {s.prenume.lower()}"
+                if search_nume_lower == s.nume.lower() or \
+                   search_nume_lower == s.prenume.lower() or \
+                   (not search_prenume_lower and search_nume_lower in student_full_name_lower): # Dacă nu avem prenume din input, căutăm substring
+                    possible_matches.append(s)
+
+            if len(possible_matches) == 1:
+                student_found = possible_matches[0]
+            elif len(possible_matches) > 1:
+                # Dacă avem mai multe potriviri și există un prenume în input, încercăm să rafinăm
+                if search_prenume_lower:
+                    refined_matches = [s for s in possible_matches if search_prenume_lower == s.prenume.lower() or search_prenume_lower == s.nume.lower()]
+                    if len(refined_matches) == 1:
+                        student_found = refined_matches[0]
+                    else: # Tot ambiguu sau nicio potrivire rafinată
+                        skipped_entries.append(f"Numele '{parsed_data['nume']}{' ' + parsed_data['prenume'] if parsed_data['prenume'] else ''}' este ambiguu (găsiți: {', '.join([f'{sp.nume} {sp.prenume}' for sp in possible_matches])}). (Linia: \"{parsed_data['original_line']}\")")
+                        continue
+                else: # Fără prenume în input și multiple potriviri pe nume/prenume
+                    skipped_entries.append(f"Numele '{parsed_data['nume']}' este ambiguu (găsiți: {', '.join([f'{sp.nume} {sp.prenume}' for sp in possible_matches])}). (Linia: \"{parsed_data['original_line']}\")")
+                    continue
+            # else: student_found rămâne None (len(possible_matches) == 0)
+
+        if not student_found:
+            skipped_entries.append(f"Studentul '{parsed_data['nume']}{' ' + parsed_data['prenume'] if parsed_data['prenume'] else ''}' nu a fost găsit. (Linia: \"{parsed_data['original_line']}\")")
             continue
 
-        current_start_time = default_start_time
+        current_start_time = default_start_time # Folosim valorile default
         current_end_time = default_end_time_if_no_hour
+
         if parsed_data['end_hour_str']:
-            try: current_end_time = datetime.strptime(parsed_data['end_hour_str'], '%H:%M').time()
+            try:
+                current_end_time = datetime.strptime(parsed_data['end_hour_str'], '%H:%M').time()
             except ValueError:
-                skipped_entries.append(f"Ora de sfârșit invalidă pentru {student_found.nume} {student_found.prenume}: {parsed_data['end_hour_str']}. (Linia: \"{original_line_text}\")")
+                skipped_entries.append(f"Ora de sfârșit invalidă ({parsed_data['end_hour_str']}) pentru {student_found.nume} {student_found.prenume}. (Linia: \"{parsed_data['original_line']}\")")
                 continue
         
         is_valid_interval, interval_msg = validate_daily_leave_times(current_start_time, current_end_time, apply_date_obj)
@@ -1187,8 +1310,9 @@ def company_commander_dashboard():
 @login_required
 def battalion_commander_dashboard():
     if current_user.role != 'comandant_batalion': flash('Acces neautorizat.', 'danger'); return redirect(url_for('home'))
-    match = re.match(r"CmdB(\d+)", current_user.username)
-    if not match: flash('Format username invalid pentru comandant batalion.', 'danger'); return redirect(url_for('home'))
+    # Modificat re.match cu re.search pentru a permite prefixe în username (ex: Rent_CmdB1)
+    match = re.search(r"CmdB(\d+)", current_user.username)
+    if not match: flash(f'Format username invalid ({current_user.username}) pentru comandant batalion. Așteptat un format care conține CmdB<ID>.', 'danger'); return redirect(url_for('home'))
     battalion_id_str = match.group(1)
     now = datetime.now()
     roll_call_time = now.replace(hour=20 if now.weekday() < 4 else 22, minute=0, second=0, microsecond=0)
@@ -1254,9 +1378,56 @@ def get_next_friday(start_date=None):
         d += timedelta(days=1)
     return d
 
+# Definițiile duplicate de mai jos vor fi șterse, deoarece sunt deja definite global mai sus.
+# # Definiția funcției validate_daily_leave_times la nivel global
+# def validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj):
+#     if leave_date_obj.weekday() > 3: # 0-Luni, ..., 3-Joi
+#         return False, "Învoirile zilnice sunt permise doar de Luni până Joi."
+#
+#     in_program_start = time(7, 0)
+#     in_program_end = time(14, 20)
+#     out_program_evening_start = time(22, 0)
+#     out_program_morning_end = time(7, 0) # Sfârșitul intervalului de noapte
+#
+#     is_in_program = (in_program_start <= start_time_obj <= in_program_end and
+#                      in_program_start <= end_time_obj <= in_program_end and
+#                      start_time_obj < end_time_obj)
+#
+#     is_out_program_same_night = (start_time_obj >= out_program_evening_start and
+#                                  end_time_obj > start_time_obj and
+#                                  end_time_obj <= time(23,59,59))
+#
+#     is_out_program_overnight = (start_time_obj >= out_program_evening_start and
+#                                 end_time_obj < start_time_obj and
+#                                 end_time_obj <= out_program_morning_end)
+#
+#     is_out_program_early_morning_same_day = (start_time_obj < out_program_morning_end and
+#                                             end_time_obj <= out_program_morning_end and
+#                                             start_time_obj < end_time_obj)
+#
+#     is_out_program = is_out_program_same_night or is_out_program_overnight or is_out_program_early_morning_same_day
+#
+#     if not is_in_program and not is_out_program:
+#         return False, "Interval orar invalid. Permis: 07:00-14:20 sau 22:00-07:00 (poate fi a doua zi)."
+#
+#     if is_out_program:
+#         if in_program_start <= start_time_obj < in_program_end:
+#             return False, "Intervalul 'afară program' nu poate începe în timpul programului (07:00-14:20)."
+#         if in_program_start < end_time_obj <= in_program_end and not is_out_program_overnight:
+#              return False, "Intervalul 'afară program' nu se poate termina în timpul programului (07:00-14:20)."
+#
+#     return True, "Valid"
+#
+# # Funcția get_next_friday la nivel global
+# def get_next_friday(start_date=None):
+#     d = start_date if start_date else date.today()
+#     while d.weekday() != 4: # Vineri = 4
+#         d += timedelta(days=1)
+#     return d
+
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True, port=5001)
+    app.run(host='0.0.0.0', port=5001, debug=False)
 
 [end of app.py]
 
