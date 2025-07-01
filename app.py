@@ -1207,7 +1207,40 @@ def cancel_permission(permission_id):
 @app.route('/gradat/permissions/delete/<int:permission_id>', methods=['POST'])
 @app.route('/admin/permissions/delete/<int:permission_id>', methods=['POST'])
 @login_required
-def delete_permission(permission_id): return "Delete Permission Placeholder"
+def delete_permission(permission_id):
+    permission_to_delete = db.session.get(Permission, permission_id)
+    if not permission_to_delete:
+        flash('Permisia nu a fost găsită.', 'danger')
+        return redirect(url_for('list_permissions') if current_user.role == 'gradat' else url_for('admin_dashboard_route')) # Sau o pagină admin relevantă
+
+    student_owner = db.session.get(Student, permission_to_delete.student_id)
+
+    if current_user.role == 'gradat':
+        if not student_owner or student_owner.created_by_user_id != current_user.id:
+            flash('Nu aveți permisiunea să ștergeți această permisie.', 'danger')
+            return redirect(url_for('list_permissions'))
+        redirect_url = url_for('list_permissions')
+    elif current_user.role == 'admin':
+        # Admin poate șterge orice permisie, dar poate afișăm un warning dacă aparține altui gradat
+        if student_owner and student_owner.creator and student_owner.creator.username != current_user.username: # Presupunând că admin nu e creator direct
+             flash(f'Atenție: Ștergeți o permisie pentru studentul {student_owner.nume} {student_owner.prenume}, gestionat de {student_owner.creator.username}.', 'warning')
+        redirect_url = request.referrer or url_for('admin_dashboard_route') # sau o listă de permisii admin, dacă există
+    else:
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    student_name_for_flash = f"{student_owner.grad_militar} {student_owner.nume} {student_owner.prenume}" if student_owner else "N/A"
+    permission_details_for_flash = f"din {permission_to_delete.start_datetime.strftime('%d.%m.%Y %H:%M')} până în {permission_to_delete.end_datetime.strftime('%d.%m.%Y %H:%M')}"
+
+    try:
+        db.session.delete(permission_to_delete)
+        db.session.commit()
+        flash(f'Permisia pentru {student_name_for_flash} ({permission_details_for_flash}) a fost ștearsă.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la ștergerea permisiei: {str(e)}', 'danger')
+
+    return redirect(redirect_url)
 
 # --- Rute pentru Învoiri Zilnice ---
 @app.route('/gradat/daily_leaves')
@@ -1379,7 +1412,39 @@ def process_daily_leaves_text():
 @app.route('/gradat/daily_leaves/delete/<int:leave_id>', methods=['POST'])
 @app.route('/admin/daily_leaves/delete/<int:leave_id>', methods=['POST'])
 @login_required
-def delete_daily_leave(leave_id): return "Delete Daily Leave Placeholder"
+def delete_daily_leave(leave_id):
+    leave_to_delete = db.session.get(DailyLeave, leave_id)
+    if not leave_to_delete:
+        flash('Învoirea zilnică nu a fost găsită.', 'danger')
+        return redirect(url_for('list_daily_leaves') if current_user.role == 'gradat' else url_for('admin_dashboard_route'))
+
+    student_owner = db.session.get(Student, leave_to_delete.student_id)
+
+    if current_user.role == 'gradat':
+        if not student_owner or student_owner.created_by_user_id != current_user.id:
+            flash('Nu aveți permisiunea să ștergeți această învoire zilnică.', 'danger')
+            return redirect(url_for('list_daily_leaves'))
+        redirect_url = url_for('list_daily_leaves')
+    elif current_user.role == 'admin':
+        if student_owner and student_owner.creator and student_owner.creator.username != current_user.username:
+             flash(f'Atenție: Ștergeți o învoire zilnică pentru studentul {student_owner.nume} {student_owner.prenume}, gestionat de {student_owner.creator.username}.', 'warning')
+        redirect_url = request.referrer or url_for('admin_dashboard_route')
+    else:
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    student_name_for_flash = f"{student_owner.grad_militar} {student_owner.nume} {student_owner.prenume}" if student_owner else "N/A"
+    leave_details_for_flash = f"din {leave_to_delete.leave_date.strftime('%d.%m.%Y')} ({leave_to_delete.start_time.strftime('%H:%M')}-{leave_to_delete.end_time.strftime('%H:%M')})"
+
+    try:
+        db.session.delete(leave_to_delete)
+        db.session.commit()
+        flash(f'Învoirea zilnică pentru {student_name_for_flash} {leave_details_for_flash} a fost ștearsă.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la ștergerea învoirii zilnice: {str(e)}', 'danger')
+
+    return redirect(redirect_url)
 
 # --- Rute pentru Învoiri Weekend ---
 @app.route('/gradat/weekend_leaves')
@@ -1495,7 +1560,39 @@ def cancel_weekend_leave(leave_id):
 @app.route('/gradat/weekend_leaves/delete/<int:leave_id>', methods=['POST'])
 @app.route('/admin/weekend_leaves/delete/<int:leave_id>', methods=['POST'])
 @login_required
-def delete_weekend_leave(leave_id): return "Delete Weekend Leave Placeholder"
+def delete_weekend_leave(leave_id):
+    leave_to_delete = db.session.get(WeekendLeave, leave_id)
+    if not leave_to_delete:
+        flash('Învoirea de weekend nu a fost găsită.', 'danger')
+        return redirect(url_for('list_weekend_leaves') if current_user.role == 'gradat' else url_for('admin_dashboard_route'))
+
+    student_owner = db.session.get(Student, leave_to_delete.student_id)
+
+    if current_user.role == 'gradat':
+        if not student_owner or student_owner.created_by_user_id != current_user.id:
+            flash('Nu aveți permisiunea să ștergeți această învoire de weekend.', 'danger')
+            return redirect(url_for('list_weekend_leaves'))
+        redirect_url = url_for('list_weekend_leaves')
+    elif current_user.role == 'admin':
+        if student_owner and student_owner.creator and student_owner.creator.username != current_user.username:
+             flash(f'Atenție: Ștergeți o învoire de weekend pentru studentul {student_owner.nume} {student_owner.prenume}, gestionat de {student_owner.creator.username}.', 'warning')
+        redirect_url = request.referrer or url_for('admin_dashboard_route')
+    else:
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    student_name_for_flash = f"{student_owner.grad_militar} {student_owner.nume} {student_owner.prenume}" if student_owner else "N/A"
+    leave_details_for_flash = f"din weekend-ul {leave_to_delete.weekend_start_date.strftime('%d.%m.%Y')}"
+
+    try:
+        db.session.delete(leave_to_delete)
+        db.session.commit()
+        flash(f'Învoirea de weekend pentru {student_name_for_flash} {leave_details_for_flash} a fost ștearsă.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la ștergerea învoirii de weekend: {str(e)}', 'danger')
+
+    return redirect(redirect_url)
 
 # --- Rute pentru Servicii ---
 @app.route('/gradat/services')
@@ -1688,14 +1785,132 @@ def delete_service_assignment(assignment_id):
 @app.route('/company_commander/report/text', methods=['GET'])
 @login_required
 def text_report_display_company():
-    # ... (cod existent)
-    return "Text Report Display Company Placeholder" # Placeholder
+    if current_user.role != 'comandant_companie':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    company_id_str = _get_commander_unit_id(current_user.username, "CmdC")
+    if not company_id_str:
+        flash('ID-ul companiei nu a putut fi determinat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    roll_call_datetime = get_standard_roll_call_datetime()
+    report_datetime_str = roll_call_datetime.strftime('%d.%m.%Y, %H:%M')
+
+    students_in_company = Student.query.filter_by(companie=company_id_str).all()
+    if not students_in_company:
+        flash(f'Niciun student în compania {company_id_str} pentru a genera raportul.', 'info')
+        # Poate afișa un template gol sau un mesaj specific
+        return render_template('text_report_display.html', report_title=f"Raport Compania {company_id_str}", report_content="Niciun student în unitate.", report_datetime_str=report_datetime_str)
+
+    company_presence_data = _calculate_presence_data(students_in_company, roll_call_datetime)
+
+    report_lines = []
+    report_lines.append(f"RAPORT OPERATIV - COMPANIA {company_id_str}")
+    report_lines.append(f"Data și ora raportului: {report_datetime_str}")
+    report_lines.append("-" * 30)
+    report_lines.append(f"Efectiv control (Ec): {company_presence_data['efectiv_control']}")
+    report_lines.append(f"Efectiv prezent (Ep): {company_presence_data['efectiv_prezent_total']}")
+    report_lines.append(f"  - În formație: {company_presence_data['in_formation_count']}")
+    report_lines.append(f"  - În serviciu (nu participă la apel): {company_presence_data['on_duty_count']}")
+    report_lines.append(f"  - Gradat Pluton (prezent): {company_presence_data['platoon_graded_duty_count']}")
+    report_lines.append(f"Efectiv absent (Ea): {company_presence_data['efectiv_absent_total']}")
+    report_lines.append("-" * 30)
+
+    if company_presence_data['in_formation_students_details']:
+        report_lines.append("\nPREZENȚI ÎN FORMAȚIE:")
+        for detail in company_presence_data['in_formation_students_details']: report_lines.append(f"  - {detail}")
+
+    if company_presence_data['on_duty_students_details']:
+        report_lines.append("\nÎN SERVICIU (nu participă la apel):")
+        for detail in company_presence_data['on_duty_students_details']: report_lines.append(f"  - {detail}")
+
+    if company_presence_data['platoon_graded_duty_students_details']:
+        report_lines.append("\nGRADAȚI PLUTON (prezenți):")
+        for detail in company_presence_data['platoon_graded_duty_students_details']: report_lines.append(f"  - {detail}")
+
+    if company_presence_data['absent_students_details']:
+        report_lines.append("\nABSENȚI MOTIVAT:")
+        for detail in company_presence_data['absent_students_details']: report_lines.append(f"  - {detail}")
+
+    report_lines.append("\n" + "-" * 30)
+    report_lines.append("Raport generat de sistem.")
+
+    final_report_content = "\n".join(report_lines)
+
+    return render_template('text_report_display.html',
+                           report_title=f"Raport Text Compania {company_id_str}",
+                           report_content=final_report_content,
+                           report_datetime_str=report_datetime_str)
 
 @app.route('/battalion_commander/report/text', methods=['GET'])
 @login_required
 def text_report_display_battalion():
-    # ... (cod existent)
-    return "Text Report Display Battalion Placeholder" # Placeholder
+    if current_user.role != 'comandant_batalion':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    battalion_id_str = _get_commander_unit_id(current_user.username, "CmdB")
+    if not battalion_id_str:
+        flash('ID-ul batalionului nu a putut fi determinat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    roll_call_datetime = get_standard_roll_call_datetime()
+    report_datetime_str = roll_call_datetime.strftime('%d.%m.%Y, %H:%M')
+
+    students_in_battalion = Student.query.filter_by(batalion=battalion_id_str).all()
+    if not students_in_battalion:
+        flash(f'Niciun student în batalionul {battalion_id_str} pentru a genera raportul.', 'info')
+        return render_template('text_report_display.html', report_title=f"Raport Batalionul {battalion_id_str}", report_content="Niciun student în unitate.", report_datetime_str=report_datetime_str)
+
+    total_battalion_presence = _calculate_presence_data(students_in_battalion, roll_call_datetime)
+
+    report_lines = []
+    report_lines.append(f"RAPORT OPERATIV - BATALIONUL {battalion_id_str}")
+    report_lines.append(f"Data și ora raportului: {report_datetime_str}")
+    report_lines.append("=" * 40)
+    report_lines.append("SITUAȚIE CENTRALIZATOARE BATALION:")
+    report_lines.append(f"  Efectiv control (Ec): {total_battalion_presence['efectiv_control']}")
+    report_lines.append(f"  Efectiv prezent (Ep): {total_battalion_presence['efectiv_prezent_total']}")
+    report_lines.append(f"    - În formație: {total_battalion_presence['in_formation_count']}")
+    report_lines.append(f"    - În serviciu (nu participă la apel): {total_battalion_presence['on_duty_count']}")
+    report_lines.append(f"    - Gradat Pluton (prezent): {total_battalion_presence['platoon_graded_duty_count']}")
+    report_lines.append(f"  Efectiv absent (Ea): {total_battalion_presence['efectiv_absent_total']}")
+    report_lines.append("=" * 40)
+
+    companies_in_battalion = sorted(list(set(s.companie for s in students_in_battalion if s.companie)))
+    for company_id_loop in companies_in_battalion:
+        students_in_company_loop = [s for s in students_in_battalion if s.companie == company_id_loop]
+        company_presence_data = _calculate_presence_data(students_in_company_loop, roll_call_datetime)
+
+        report_lines.append(f"\nSITUAȚIE COMPANIA {company_id_loop}:")
+        report_lines.append(f"  Ec: {company_presence_data['efectiv_control']}, Ep: {company_presence_data['efectiv_prezent_total']}, Ea: {company_presence_data['efectiv_absent_total']}")
+        report_lines.append(f"    În formație: {company_presence_data['in_formation_count']}")
+        report_lines.append(f"    În serviciu (fără apel): {company_presence_data['on_duty_count']}")
+        report_lines.append(f"    Gradat Pluton (prezent): {company_presence_data['platoon_graded_duty_count']}")
+
+        if company_presence_data['absent_students_details']:
+            report_lines.append("    Absenți motivat:")
+            for detail in company_presence_data['absent_students_details']:
+                report_lines.append(f"      - {detail}")
+        report_lines.append("-" * 30)
+
+    report_lines.append("\n" + "=" * 40)
+    report_lines.append("DETALII ABSENȚE LA NIVEL DE BATALION (dacă există):")
+    if total_battalion_presence['absent_students_details']:
+        for detail in total_battalion_presence['absent_students_details']:
+            report_lines.append(f"  - {detail}")
+    else:
+        report_lines.append("  Nicio absență înregistrată la nivel de batalion.")
+
+    report_lines.append("\n" + "=" * 40)
+    report_lines.append("Raport generat de sistem.")
+    final_report_content = "\n".join(report_lines)
+
+    return render_template('text_report_display.html',
+                           report_title=f"Raport Text Batalionul {battalion_id_str}",
+                           report_content=final_report_content,
+                           report_datetime_str=report_datetime_str)
 
 if __name__ == '__main__':
     with app.app_context():
