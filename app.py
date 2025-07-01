@@ -211,6 +211,93 @@ def get_next_friday(start_date=None):
     while d.weekday() != 4: d += timedelta(days=1)
     return d
 
+def get_upcoming_fridays(num_fridays=5):
+    """
+    Generates a list of upcoming (and potentially the current or immediate past) Fridays.
+    Returns a list of dicts, each with 'value' (YYYY-MM-DD string) and 'display' (Month Day, Year string).
+    """
+    fridays_list = []
+    today = date.today()
+    # Start from the Friday of the current week or previous week if today is past Friday
+    current_friday_offset = today.weekday() - 4 # Friday is weekday 4
+    if current_friday_offset > 0: # If today is Sat (5) or Sun (6)
+        start_friday = today - timedelta(days=current_friday_offset)
+    else: # If today is Mon, Tue, Wed, Thu, or Fri itself
+        start_friday = today - timedelta(days=current_friday_offset) # Will be today if it's Friday, or upcoming Friday of current week
+
+    # Ensure we don't start too far in the past if today is, e.g., Monday and last Friday was for a weekend already started
+    # Let's adjust to start from the Friday of the week containing `today - 2 days`
+    # This ensures if it's Sunday, we can still select the Friday of that weekend.
+    # If it's Monday, we can select last Friday.
+    # If it's Friday, we select today.
+
+    # Simpler approach: find the Friday of the week of (today - 2 days)
+    # This means if today is Sunday, (today-2) is Friday.
+    # If today is Monday, (today-2) is Saturday of last week, so we find that Friday.
+    # If today is Friday, (today-2) is Wednesday, we find this Friday.
+
+    # Let's find the Friday of the current week. If today is past it, it's fine.
+    # Or, more simply, find the *next* Friday from (today - 7 days) to ensure we always get the closest ones.
+    # No, let's find the Friday of the week of `today`.
+    # If today is Monday (0), Friday is today + 4 days.
+    # If today is Friday (4), Friday is today + 0 days.
+    # If today is Sunday (6), Friday was today - 2 days.
+
+    # Let's find the Friday of the current calendar week (Mon-Sun)
+    # If today is Sunday (weekday 6), current week's Friday was 2 days ago.
+    # If today is Monday (weekday 0), current week's Friday is 4 days ahead.
+    start_point = today - timedelta(days=today.weekday()) # This is Monday of the current week
+    current_week_friday = start_point + timedelta(days=4)
+
+    # We want to offer the current weekend's Friday even if it just passed.
+    # So, if today is Sat/Sun, current_week_friday is the one that just passed.
+    # If today is Mon-Thu, current_week_friday is upcoming.
+    # If today is Fri, current_week_friday is today.
+
+    # Let's make sure we offer at least one past Friday if it's early in the week,
+    # but not too many.
+    # Consider the Friday of the week prior to the current week's Monday, if today is early in the week.
+
+    # Revised logic for start_friday:
+    # Find the Friday of the week that contains 'today'.
+    # If today is Sat/Sun, that Friday has passed.
+    # If today is Mon-Thu, that Friday is upcoming.
+    # If today is Fri, that Friday is today.
+
+    # We want to list the closest Friday (could be past if today is Sat/Sun)
+    # and then a few upcoming ones.
+
+    # Let initial_friday be the Friday of the week containing 'today'.
+    # If today is Monday (0), initial_friday is today + 4 days.
+    # If today is Friday (4), initial_friday is today.
+    # If today is Sunday (6), initial_friday is today - 2 days.
+    days_from_friday = today.weekday() - 4 # Monday: -4, Tuesday: -3, ..., Friday: 0, Saturday: 1, Sunday: 2
+    initial_friday = today - timedelta(days=days_from_friday)
+
+    for i in range(num_fridays):
+        loop_friday = initial_friday + timedelta(weeks=i)
+        fridays_list.append({
+            'value': loop_friday.strftime('%Y-%m-%d'),
+            'display': loop_friday.strftime('%d %B %Y') + f" (Vineri)"
+        })
+
+    # If today is Monday or Tuesday, the 'initial_friday' might be too far in the future.
+    # We might want to include the *previous* Friday as well.
+    # Let's ensure the list starts from the previous Friday if today is Mon/Tue/Wed.
+    if today.weekday() < 3: # Mon, Tue, Wed
+        previous_friday = initial_friday - timedelta(weeks=1)
+        # Check if it's already in the list (should not happen with current logic, but good for safety)
+        if not any(f['value'] == previous_friday.strftime('%Y-%m-%d') for f in fridays_list):
+            fridays_list.insert(0, {
+                'value': previous_friday.strftime('%Y-%m-%d'),
+                'display': previous_friday.strftime('%d %B %Y') + f" (Vineri)"
+            })
+            if len(fridays_list) > num_fridays: # Keep the list size consistent
+                fridays_list.pop()
+
+    return fridays_list
+
+
 def validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj):
     if leave_date_obj.weekday() > 3: return False, "Învoirile zilnice sunt permise doar de Luni până Joi."
     if start_time_obj == end_time_obj: return False, "Ora de început și de sfârșit nu pot fi identice."
@@ -557,13 +644,9 @@ def _calculate_presence_data(student_list, check_datetime):
         if status_info["status_code"] == "present":
             in_formation_list.append(student_display_name)
         elif status_info["status_code"] == "on_duty":
-            # Only count as "on_duty" for roll call if they don't participate
-            # For general presence, always list them as on_duty.
-            # The commander dashboard is for roll call, so use participates_in_roll_call
-            if hasattr(status_info.get("object"), 'participates_in_roll_call') and not status_info["object"].participates_in_roll_call:
-                 on_duty_list.append(f"{student_display_name} - {status_info['reason']}")
-            else: # Participates in roll call or not applicable (e.g. old service without the field)
-                in_formation_list.append(student_display_name) # Counted as present if they participate
+            # For company/battalion reports, all students on duty are listed under "on duty",
+            # regardless of their participation in roll call.
+            on_duty_list.append(f"{student_display_name} - {status_info['reason']}")
         elif status_info["status_code"] == "platoon_graded_duty":
             # This status means they are present but have a special role.
             # They are not "absent" but might be reported separately from "in_formation_list"
@@ -700,8 +783,17 @@ def presence_report():
             datetime_to_check = datetime.combine(date.today(), time(14, 20))
             report_title_detail = "Raport Companie (14:20)"
         elif report_type == 'morning_check':
-            datetime_to_check = datetime.combine(date.today(), time(7, 0))
-            report_title_detail = "Prezență Dimineață (07:00)"
+            # Use the date part from custom_datetime_str if available and valid, otherwise default to today
+            target_d = date.today() # Default to today
+            if custom_datetime_str: # If a custom date string is provided
+                try:
+                    # Attempt to parse the date part from the custom datetime input
+                    target_d = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M').date()
+                except (ValueError, TypeError):
+                    # If parsing fails, stick to the default (today)
+                    flash('Data custom specificată era invalidă, s-a folosit data curentă pentru raportul de dimineață.', 'warning')
+            datetime_to_check = datetime.combine(target_d, time(7, 0))
+            report_title_detail = f"Prezență Dimineață ({target_d.strftime('%d.%m.%Y')} 07:00)"
         elif report_type == 'custom':
             try:
                 datetime_to_check = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M')
@@ -1309,13 +1401,17 @@ def add_edit_daily_leave(leave_id=None):
         except ValueError: flash('Format dată sau oră invalid.', 'danger'); return render_template('add_edit_daily_leave.html', form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post)
         is_valid_day, day_message = validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj)
         if not is_valid_day: flash(day_message, 'danger'); return render_template('add_edit_daily_leave.html', form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post)
-        in_program_start, in_program_end = time(7,0), time(14,20); out_program_evening_start, out_program_morning_end = time(22,0), time(7,0)
-        is_in_program = (in_program_start <= start_time_obj < in_program_end and in_program_start < end_time_obj <= in_program_end and start_time_obj < end_time_obj)
-        is_out_program = ((start_time_obj >= out_program_evening_start or start_time_obj < out_program_morning_end) and (end_time_obj <= out_program_morning_end or end_time_obj > start_time_obj or start_time_obj > end_time_obj) and not (in_program_start <= start_time_obj < in_program_end and in_program_start < end_time_obj <= in_program_end) )
-        if not (is_in_program or is_out_program): flash('Intervalul orar nu este valid. Permis: 07:00-14:20 sau 22:00-07:00 (poate trece în ziua următoare).', 'danger'); return render_template('add_edit_daily_leave.html', form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post)
-        start_dt = datetime.combine(leave_date_obj, start_time_obj); effective_end_date = leave_date_obj
-        if end_time_obj < start_time_obj and is_out_program: effective_end_date += timedelta(days=1)
+
+        # Removed the restrictive is_in_program and is_out_program checks.
+        # The primary validation will be that end_datetime is after start_datetime.
+
+        start_dt = datetime.combine(leave_date_obj, start_time_obj)
+        effective_end_date = leave_date_obj
+        # Determine if end_time implies the next day
+        if end_time_obj < start_time_obj: # This condition means it spans midnight
+            effective_end_date += timedelta(days=1)
         end_dt = datetime.combine(effective_end_date, end_time_obj)
+
         if end_dt <= start_dt : flash('Data/ora de sfârșit trebuie să fie după data/ora de început, chiar și când trece în ziua următoare.', 'warning'); return render_template('add_edit_daily_leave.html', form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post)
         student_to_check = Student.query.get(student_id)
         if student_to_check:
@@ -1397,7 +1493,7 @@ def process_daily_leaves_text():
     default_start_time_obj = time(15, 0); default_end_time_obj = time(19, 0)
     processed_count, error_count, already_exists_count = 0,0,0; not_found_or_ambiguous = []
     for line_raw in lines:
-        line = line_raw.strip();_ = _; __ = __
+        line = line_raw.strip()
         if not line: continue
         parsed_name_norm, parsed_grad, parsed_time_str = parse_leave_line(line)
         if not parsed_name_norm: error_count +=1; flash(f"Linie ignorată (format nume invalid): '{line_raw}'", "info"); continue
@@ -1840,7 +1936,7 @@ def text_report_display_company():
     report_lines.append(f"Efectiv control (Ec): {company_presence_data['efectiv_control']}")
     report_lines.append(f"Efectiv prezent (Ep): {company_presence_data['efectiv_prezent_total']}")
     report_lines.append(f"  - În formație: {company_presence_data['in_formation_count']}")
-    report_lines.append(f"  - În serviciu (nu participă la apel): {company_presence_data['on_duty_count']}")
+    report_lines.append(f"  - La Servicii: {company_presence_data['on_duty_count']}") # Changed label
     report_lines.append(f"  - Gradat Pluton (prezent): {company_presence_data['platoon_graded_duty_count']}")
     report_lines.append(f"Efectiv absent (Ea): {company_presence_data['efectiv_absent_total']}")
     report_lines.append("-" * 30)
@@ -1850,7 +1946,7 @@ def text_report_display_company():
         for detail in company_presence_data['in_formation_students_details']: report_lines.append(f"  - {detail}")
 
     if company_presence_data['on_duty_students_details']:
-        report_lines.append("\nÎN SERVICIU (nu participă la apel):")
+        report_lines.append("\nLA SERVICII:") # Changed label
         for detail in company_presence_data['on_duty_students_details']: report_lines.append(f"  - {detail}")
 
     if company_presence_data['platoon_graded_duty_students_details']:
@@ -1901,7 +1997,7 @@ def text_report_display_battalion():
     report_lines.append(f"  Efectiv control (Ec): {total_battalion_presence['efectiv_control']}")
     report_lines.append(f"  Efectiv prezent (Ep): {total_battalion_presence['efectiv_prezent_total']}")
     report_lines.append(f"    - În formație: {total_battalion_presence['in_formation_count']}")
-    report_lines.append(f"    - În serviciu (nu participă la apel): {total_battalion_presence['on_duty_count']}")
+    report_lines.append(f"    - La Servicii: {total_battalion_presence['on_duty_count']}") # Changed label
     report_lines.append(f"    - Gradat Pluton (prezent): {total_battalion_presence['platoon_graded_duty_count']}")
     report_lines.append(f"  Efectiv absent (Ea): {total_battalion_presence['efectiv_absent_total']}")
     report_lines.append("=" * 40)
@@ -1914,7 +2010,7 @@ def text_report_display_battalion():
         report_lines.append(f"\nSITUAȚIE COMPANIA {company_id_loop}:")
         report_lines.append(f"  Ec: {company_presence_data['efectiv_control']}, Ep: {company_presence_data['efectiv_prezent_total']}, Ea: {company_presence_data['efectiv_absent_total']}")
         report_lines.append(f"    În formație: {company_presence_data['in_formation_count']}")
-        report_lines.append(f"    În serviciu (fără apel): {company_presence_data['on_duty_count']}")
+        report_lines.append(f"    La Servicii: {company_presence_data['on_duty_count']}") # Changed label
         report_lines.append(f"    Gradat Pluton (prezent): {company_presence_data['platoon_graded_duty_count']}")
 
         if company_presence_data['absent_students_details']:
