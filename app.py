@@ -245,14 +245,20 @@ def validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj):
     is_out_program_early_morning_same_day = (start_time_obj < out_program_morning_end and 
                                             end_time_obj <= out_program_morning_end and 
                                             start_time_obj < end_time_obj)
-    is_out_program = is_out_program_same_night or is_out_program_overnight or is_out_program_early_morning_same_day
-    if not is_in_program and not is_out_program:
-        return False, "Interval orar invalid. Permis: 07:00-14:20 sau 22:00-07:00 (poate fi a doua zi)."
-    if is_out_program:
-        if in_program_start <= start_time_obj < in_program_end:
-            return False, "Intervalul 'afară program' nu poate începe în timpul programului (07:00-14:20)."
-        if in_program_start < end_time_obj <= in_program_end and not is_out_program_overnight:
-             return False, "Intervalul 'afară program' nu se poate termina în timpul programului (07:00-14:20)."
+    # is_out_program = is_out_program_same_night or is_out_program_overnight or is_out_program_early_morning_same_day
+    # if not is_in_program and not is_out_program:
+    #     return False, "Interval orar invalid. Permis: 07:00-14:20 sau 22:00-07:00 (poate fi a doua zi)."
+    # if is_out_program:
+    #     if in_program_start <= start_time_obj < in_program_end:
+    #         return False, "Intervalul 'afară program' nu poate începe în timpul programului (07:00-14:20)."
+    #     if in_program_start < end_time_obj <= in_program_end and not is_out_program_overnight:
+    #          return False, "Intervalul 'afară program' nu se poate termina în timpul programului (07:00-14:20)."
+
+    # Noua validare: doar Luni-Joi. Orice interval orar este permis.
+    # Verificarea ca end_time să fie după start_time (sau a doua zi) se face la crearea obiectului DailyLeave.
+    if start_time_obj == end_time_obj: # Adăugat pentru a preveni intervale de 0 minute care pot da probleme la "<" vs "<="
+        return False, "Ora de început și de sfârșit nu pot fi identice."
+
     return True, "Valid"
 
 def get_student_status(student, datetime_check):
@@ -302,43 +308,74 @@ def get_student_status(student, datetime_check):
 
 # Funcție de parsare a liniei pentru învoiri, îmbunătățită
 def parse_student_line(line_text):
-    parts = line_text.strip().split()
+    original_line = line_text.strip()
+    parts = original_line.split()
+
     grad = None
     nume = None
     prenume = None
-    end_hour_str = None
-    original_line = line_text.strip()
+    start_hour_interval_str = None
+    end_hour_interval_str = None
+    end_hour_individual_str = None
 
     if not parts:
-        return {'grad': grad, 'nume': nume, 'prenume': prenume, 'end_hour_str': end_hour_str, 'original_line': original_line}
+        return {'grad': grad, 'nume': nume, 'prenume': prenume,
+                'start_hour_interval_str': start_hour_interval_str,
+                'end_hour_interval_str': end_hour_interval_str,
+                'end_hour_individual_str': end_hour_individual_str, 'original_line': original_line}
 
-    last_part = parts[-1]
-    time_extracted = False
-    if ':' in last_part and len(last_part.split(':')[0]) <= 2 and len(last_part.split(':')[-1]) == 2:
+    # 1. Verifică interval HH:MM-HH:MM la început
+    time_interval_match = re.match(r"(\d{1,2}:\d{2})-(\d{1,2}:\d{2})", parts[0])
+    if time_interval_match:
         try:
-            datetime.strptime(last_part, '%H:%M')
-            end_hour_str = last_part
-            parts = parts[:-1]
-            time_extracted = True
+            # Validează orele extrase
+            start_h_str = time_interval_match.group(1)
+            end_h_str = time_interval_match.group(2)
+            datetime.strptime(start_h_str, '%H:%M') # validează formatul
+            datetime.strptime(end_h_str, '%H:%M')   # validează formatul
+            start_hour_interval_str = start_h_str
+            end_hour_interval_str = end_h_str
+            parts = parts[1:] # Elimină intervalul din parts
         except ValueError:
-            pass
-    elif len(last_part) == 4 and last_part.isdigit() and not time_extracted:
-        try:
-            h = last_part[:2]
-            m = last_part[2:]
-            datetime.strptime(f"{h}:{m}", '%H:%M')
-            end_hour_str = f"{h}:{m}"
-            parts = parts[:-1]
-            time_extracted = True
-        except ValueError:
-            pass
+            # Nu este un interval valid, va fi tratat ca parte a numelui/gradului
+            pass # start_hour_interval_str și end_hour_interval_str rămân None
 
-    if not parts and time_extracted:
-         return {'grad': grad, 'nume': nume, 'prenume': prenume, 'end_hour_str': end_hour_str, 'original_line': original_line}
-    if not parts and not time_extracted:
-         return {'grad': grad, 'nume': nume, 'prenume': prenume, 'end_hour_str': end_hour_str, 'original_line': original_line}
+    if not parts: # Dacă linia conținea doar intervalul orar
+        return {'grad': grad, 'nume': nume, 'prenume': prenume,
+                'start_hour_interval_str': start_hour_interval_str,
+                'end_hour_interval_str': end_hour_interval_str,
+                'end_hour_individual_str': end_hour_individual_str, 'original_line': original_line}
 
-    current_search_text = ""
+    # 2. Verifică ora individuală la sfârșit (doar dacă nu s-a găsit interval la început)
+    if not start_hour_interval_str and parts: # Verifică dacă parts nu e goală după extragerea intervalului
+        last_part = parts[-1]
+        time_extracted_individual = False
+        if ':' in last_part and len(last_part.split(':')[0]) <= 2 and len(last_part.split(':')[-1]) == 2:
+            try:
+                datetime.strptime(last_part, '%H:%M')
+                end_hour_individual_str = last_part
+                parts = parts[:-1]
+                time_extracted_individual = True
+            except ValueError:
+                pass
+        elif len(last_part) == 4 and last_part.isdigit() and not time_extracted_individual: # ex: 2000
+            try:
+                h = last_part[:2]
+                m = last_part[2:]
+                datetime.strptime(f"{h}:{m}", '%H:%M')
+                end_hour_individual_str = f"{h}:{m}"
+                parts = parts[:-1]
+                time_extracted_individual = True
+            except ValueError:
+                pass
+
+    if not parts: # Dacă linia conținea doar interval la început și/sau oră la sfârșit
+         return {'grad': grad, 'nume': nume, 'prenume': prenume,
+                'start_hour_interval_str': start_hour_interval_str,
+                'end_hour_interval_str': end_hour_interval_str,
+                'end_hour_individual_str': end_hour_individual_str, 'original_line': original_line}
+
+    # 3. Extrage Grad, Nume, Prenume din ce a rămas
     grad_parts_count = 0
     # Iterăm prin părți pentru a identifica un posibil grad la început
     # KNOWN_RANK_PATTERNS trebuie să fie accesibil (definit global)
@@ -372,7 +409,7 @@ def parse_student_line(line_text):
                  break # Ieșim din bucla de căutare a gradului, începem procesarea numelui
 
     name_parts_start_index = grad_parts_count
-    remaining_parts = parts[name_parts_start_index:]
+    remaining_parts = parts[name_parts_start_index:] if parts else [] # Asigură-te că parts nu e None
 
     if len(remaining_parts) >= 1:
         nume = remaining_parts[0]
@@ -386,7 +423,10 @@ def parse_student_line(line_text):
         nume = name_parts_split[0]
         prenume = name_parts_split[1] if len(name_parts_split) > 1 else None
 
-    return {'grad': grad, 'nume': nume, 'prenume': prenume, 'end_hour_str': end_hour_str, 'original_line': original_line}
+    return {'grad': grad, 'nume': nume, 'prenume': prenume,
+            'start_hour_interval_str': start_hour_interval_str,
+            'end_hour_interval_str': end_hour_interval_str,
+            'end_hour_individual_str': end_hour_individual_str, 'original_line': original_line}
 
 
 def check_leave_conflict(student_id, leave_start_dt, leave_end_dt, existing_leave_id=None, leave_type=None):
@@ -797,9 +837,9 @@ def process_daily_leaves_text():
     skipped_entries = [] 
     success_entries = []
 
-    # Acestea ar trebui să fie definite aici dacă nu sunt globale sau pasate altfel
-    default_start_time = time(15, 0)
-    default_end_time_if_no_hour = time(19, 0)
+    # Valori default pentru orele de început și sfârșit
+    default_start_processing_time = time(15, 0)
+    default_end_processing_time = time(19, 0)
 
     all_students_gradat = Student.query.filter_by(created_by_user_id=current_user.id).all()
 
@@ -810,63 +850,68 @@ def process_daily_leaves_text():
 
         parsed_data = parse_student_line(original_line_text)
 
-        if not parsed_data['nume']:
+        if not parsed_data['nume'] and not parsed_data['start_hour_interval_str']: # Permite linii doar cu interval și nume, sau doar nume
             skipped_entries.append(f"Linia {line_num+1} (format nume incorect sau linie goală): \"{parsed_data['original_line']}\"")
             continue
         
         student_found = None
-        search_nume_lower = parsed_data['nume'].lower()
-        search_prenume_lower = parsed_data['prenume'].lower() if parsed_data['prenume'] else None
+        if parsed_data['nume']: # Caută student doar dacă există un nume parsat
+            search_nume_lower = parsed_data['nume'].lower()
+            search_prenume_lower = parsed_data['prenume'].lower() if parsed_data['prenume'] else None
 
-        # Încercare de potrivire exactă (Nume + Prenume dacă există)
-        if search_prenume_lower:
-            for s in all_students_gradat:
-                if (s.nume.lower() == search_nume_lower and s.prenume.lower() == search_prenume_lower) or \
-                   (s.nume.lower() == search_prenume_lower and s.prenume.lower() == search_nume_lower): # Invers
-                    student_found = s
-                    break
+            if search_prenume_lower:
+                for s in all_students_gradat:
+                    if (s.nume.lower() == search_nume_lower and s.prenume.lower() == search_prenume_lower) or \
+                       (s.nume.lower() == search_prenume_lower and s.prenume.lower() == search_nume_lower):
+                        student_found = s
+                        break
 
-        if not student_found:
-            possible_matches = []
-            for s in all_students_gradat:
-                # Caută numele extras (care poate fi nume sau prenume) în ambele câmpuri ale studentului
-                # sau dacă numele complet al studentului (nume + prenume) conține numele extras
-                student_full_name_lower = f"{s.nume.lower()} {s.prenume.lower()}"
-                if search_nume_lower == s.nume.lower() or \
-                   search_nume_lower == s.prenume.lower() or \
-                   (not search_prenume_lower and search_nume_lower in student_full_name_lower): # Dacă nu avem prenume din input, căutăm substring
-                    possible_matches.append(s)
+            if not student_found: # Căutare mai largă dacă potrivirea exactă a eșuat sau nu a existat prenume
+                possible_matches = []
+                for s in all_students_gradat:
+                    student_full_name_lower = f"{s.nume.lower()} {s.prenume.lower()}"
+                    if search_nume_lower == s.nume.lower() or \
+                       search_nume_lower == s.prenume.lower() or \
+                       (not search_prenume_lower and search_nume_lower in student_full_name_lower):
+                        possible_matches.append(s)
 
-            if len(possible_matches) == 1:
-                student_found = possible_matches[0]
-            elif len(possible_matches) > 1:
-                # Dacă avem mai multe potriviri și există un prenume în input, încercăm să rafinăm
-                if search_prenume_lower:
-                    refined_matches = [s for s in possible_matches if search_prenume_lower == s.prenume.lower() or search_prenume_lower == s.nume.lower()]
-                    if len(refined_matches) == 1:
-                        student_found = refined_matches[0]
-                    else: # Tot ambiguu sau nicio potrivire rafinată
-                        skipped_entries.append(f"Numele '{parsed_data['nume']}{' ' + parsed_data['prenume'] if parsed_data['prenume'] else ''}' este ambiguu (găsiți: {', '.join([f'{sp.nume} {sp.prenume}' for sp in possible_matches])}). (Linia: \"{parsed_data['original_line']}\")")
+                if len(possible_matches) == 1:
+                    student_found = possible_matches[0]
+                elif len(possible_matches) > 1:
+                    if search_prenume_lower: # Rafinare dacă avem prenume din input
+                        refined_matches = [s_match for s_match in possible_matches if (search_prenume_lower == s_match.prenume.lower() if s_match.prenume else False) or (search_prenume_lower == s_match.nume.lower() if s_match.nume else False)]
+                        if len(refined_matches) == 1: student_found = refined_matches[0]
+                        else:
+                            skipped_entries.append(f"Numele '{parsed_data['nume']}{' ' + parsed_data['prenume'] if parsed_data['prenume'] else ''}' este ambiguu. (Linia: \"{original_line_text}\")")
+                            continue
+                    else: # Fără prenume în input și multiple potriviri
+                        skipped_entries.append(f"Numele '{parsed_data['nume']}' este ambiguu. (Linia: \"{original_line_text}\")")
                         continue
-                else: # Fără prenume în input și multiple potriviri pe nume/prenume
-                    skipped_entries.append(f"Numele '{parsed_data['nume']}' este ambiguu (găsiți: {', '.join([f'{sp.nume} {sp.prenume}' for sp in possible_matches])}). (Linia: \"{parsed_data['original_line']}\")")
-                    continue
-            # else: student_found rămâne None (len(possible_matches) == 0)
 
         if not student_found:
-            skipped_entries.append(f"Studentul '{parsed_data['nume']}{' ' + parsed_data['prenume'] if parsed_data['prenume'] else ''}' nu a fost găsit. (Linia: \"{parsed_data['original_line']}\")")
+            skipped_entries.append(f"Studentul '{parsed_data['nume']}{' ' + parsed_data['prenume'] if parsed_data['prenume'] else ''}' nu a fost găsit. (Linia: \"{original_line_text}\")")
             continue
 
-        current_start_time = default_start_time # Folosim valorile default
-        current_end_time = default_end_time_if_no_hour
+        # Stabilire ore conform noii logici
+        current_start_time = default_start_processing_time
+        current_end_time = default_end_processing_time
 
-        if parsed_data['end_hour_str']:
+        if parsed_data['start_hour_interval_str'] and parsed_data['end_hour_interval_str']:
             try:
-                current_end_time = datetime.strptime(parsed_data['end_hour_str'], '%H:%M').time()
+                current_start_time = datetime.strptime(parsed_data['start_hour_interval_str'], '%H:%M').time()
+                current_end_time = datetime.strptime(parsed_data['end_hour_interval_str'], '%H:%M').time()
             except ValueError:
-                skipped_entries.append(f"Ora de sfârșit invalidă ({parsed_data['end_hour_str']}) pentru {student_found.nume} {student_found.prenume}. (Linia: \"{parsed_data['original_line']}\")")
+                skipped_entries.append(f"Interval orar invalid ({parsed_data['start_hour_interval_str']}-{parsed_data['end_hour_interval_str']}) pentru {student_found.nume} {student_found.prenume}. (Linia: \"{original_line_text}\")")
                 continue
-        
+        elif parsed_data['end_hour_individual_str']: # Doar ora de sfârșit specificată, startul e default 15:00
+            try:
+                current_start_time = default_start_processing_time # Explicit
+                current_end_time = datetime.strptime(parsed_data['end_hour_individual_str'], '%H:%M').time()
+            except ValueError:
+                skipped_entries.append(f"Ora de sfârșit individuală invalidă ({parsed_data['end_hour_individual_str']}) pentru {student_found.nume} {student_found.prenume}. (Linia: \"{original_line_text}\")")
+                continue
+        # else: se folosesc default_start_processing_time și default_end_processing_time deja setate
+
         is_valid_interval, interval_msg = validate_daily_leave_times(current_start_time, current_end_time, apply_date_obj)
         if not is_valid_interval:
             skipped_entries.append(f"Interval invalid ({current_start_time.strftime('%H:%M')}-{current_end_time.strftime('%H:%M')}) pentru {student_found.nume} {student_found.prenume}: {interval_msg}. (Linia: \"{original_line_text}\")")
@@ -1215,6 +1260,7 @@ def presence_report():
         ec = len(students)
         # Modificări pentru raportul de prezență
         in_formation_count = 0
+        in_formation_list_details = [] # Listă nouă pentru detalii prezenți în formație
         on_duty_list_details = [] # Va stoca stringuri cu detalii
         absent_list_details = []  # Va stoca stringuri cu detalii
 
@@ -1222,6 +1268,7 @@ def presence_report():
             s_info = get_student_status(stud, dt_check)
             if s_info['status_code'] == 'present':
                 in_formation_count += 1
+                in_formation_list_details.append(f"{stud.grad_militar} {stud.nume} {stud.prenume} - Prezent în formație")
             elif s_info['status_code'] == 'on_duty':
                 on_duty_list_details.append(f"{stud.grad_militar} {stud.nume} {stud.prenume} - {s_info['reason']}")
             else: # absent_permission, absent_daily_leave, absent_weekend_leave
@@ -1235,7 +1282,8 @@ def presence_report():
         report_data = {
             "title": report_title, "datetime_checked": report_time_str, 
             "efectiv_control": ec, "efectiv_prezent_total": efectiv_prezent_total,
-            "in_formation_count": in_formation_count, 
+            "in_formation_count": in_formation_count,
+            "in_formation_list": sorted(in_formation_list_details), # Adăugare listă prezenți în formație
             "on_duty_list": sorted(on_duty_list_details),
             "efectiv_absent_count": efectiv_absent_count, 
             "efectiv_absent_list": sorted(absent_list_details)

@@ -65,13 +65,18 @@
                 </tbody>
             </table>
         </div>
-        {% else %}
-        <p class="text-muted"><em>Nu există servicii în această categorie.</em></p>
+        {# Am eliminat clauza else de aici pentru a gestiona mesajul global #}
         {% endif %}
     {% endmacro %}
 
-    {{ render_services_table(upcoming_services, 'Servicii Curente și Viitoare') }}
-    {{ render_services_table(past_services, 'Servicii Trecute (ultimele 20)') }}
+    {% if upcoming_services or past_services %}
+        {{ render_services_table(upcoming_services, 'Servicii Curente și Viitoare') }}
+        {{ render_services_table(past_services, 'Servicii Trecute (ultimele 20)') }}
+    {% else %}
+        <div class="alert alert-info mt-4" role="alert">
+            Nu există servicii de afișat. Puteți adăuga un <a href="{{ url_for('assign_service') }}" class="alert-link">serviciu nou aici</a>.
+        </div>
+    {% endif %}
 
     <p class="mt-4">
         <a href="{{ url_for('gradat_dashboard') }}" class="btn btn-outline-secondary btn-sm">
