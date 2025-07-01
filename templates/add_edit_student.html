@@ -84,7 +84,9 @@
                             </div>
                         </div>
                         
-                        {% if current_user.role == 'admin' %}
+                        {# Checkbox-ul va fi vizibil pentru gradat și admin (dacă adminul ajunge aici) #}
+                        {# Momentan, ne concentrăm pe funcționalitatea gradatului #}
+                        {% if current_user.role == 'gradat' or current_user.role == 'admin' %}
                         <hr>
                         <div class="mb-3 form-check">
                             <input type="checkbox" class="form-check-input" id="is_platoon_graded_duty" name="is_platoon_graded_duty" {% if student and student.is_platoon_graded_duty %}checked{% elif form_data and form_data.get('is_platoon_graded_duty') %}checked{% endif %}>
