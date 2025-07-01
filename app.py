@@ -18,7 +18,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
-login_manager.login_view = 'admin_login' # Changed 'login' to 'admin_login'
+login_manager.login_view = 'home' # Redirect to home, which offers login choices
 login_manager.login_message_category = 'info'
 login_manager.login_message = "Te rugăm să te autentifici pentru a accesa această pagină."
 
@@ -363,10 +363,89 @@ def dashboard():
 @login_required
 def logout(): logout_user(); flash('Ai fost deconectat.', 'success'); return redirect(url_for('home'))
 
+# --- Autentificare Utilizator (Non-Admin) ---
+@app.route('/user_login', methods=['GET', 'POST'])
+def user_login():
+    if current_user.is_authenticated and current_user.role != 'admin':
+        return redirect(url_for('dashboard'))
+    if current_user.is_authenticated and current_user.role == 'admin': # Admin already logged in
+        return redirect(url_for('admin_dashboard'))
+
+    if request.method == 'POST':
+        login_code = request.form.get('login_code')
+        # Încercare autentificare cu cod unic (pentru prima logare)
+        user_by_unique_code = User.query.filter_by(unique_code=login_code).filter(User.role != 'admin').first()
+
+        if user_by_unique_code:
+            if user_by_unique_code.is_first_login:
+                login_user(user_by_unique_code)
+                flash('Cod unic valid. Setează-ți codul personal.', 'info')
+                return redirect(url_for('set_personal_code'))
+            else:
+                # Acest user ar trebui să se logheze cu codul personal, dar a introdus codul unic din nou
+                # Sau admin a resetat codul unic și userul nu și-a setat încă noul cod personal
+                 login_user(user_by_unique_code) # Loghează-l temporar pentru a ajunge la set_personal_code
+                 flash('Cod unic detectat. Este necesar să (re)setați codul personal.', 'info')
+                 return redirect(url_for('set_personal_code'))
+
+
+        # Încercare autentificare cu cod personal
+        users_non_admin = User.query.filter(User.role != 'admin').all()
+        user_by_personal_code = None
+        for user in users_non_admin:
+            if not user.is_first_login and user.check_personal_code(login_code):
+                user_by_personal_code = user
+                break
+
+        if user_by_personal_code:
+            login_user(user_by_personal_code)
+            flash('Autentificare utilizator reușită!', 'success')
+            return redirect(url_for('dashboard'))
+
+        flash('Cod invalid sau expirat.', 'danger')
+    return render_template('user_login.html')
+
+@app.route('/set_personal_code', methods=['GET', 'POST'])
+@login_required
+def set_personal_code():
+    if current_user.role == 'admin': # Adminii nu folosesc cod personal în acest flux
+        flash('Administratorii nu setează cod personal prin acest formular.', 'warning')
+        return redirect(url_for('admin_dashboard'))
+
+    if not current_user.is_first_login and current_user.personal_code_hash:
+         # Verificăm dacă nu cumva a ajuns aici un user care are deja cod setat și nu e un reset
+         # Ar putea fi cazul în care adminul i-a resetat unique_code, și is_first_login e True din nou.
+         # Dacă personal_code_hash există și is_first_login e false, tehnic nu ar trebui să fie aici decât dacă admin a resetat.
+         pass # Permitem să continue și să reseteze dacă dorește
+
+    if request.method == 'POST':
+        new_personal_code = request.form.get('new_personal_code')
+        confirm_personal_code = request.form.get('confirm_personal_code')
+
+        if not new_personal_code or len(new_personal_code) < 4:
+            flash('Codul personal trebuie să aibă cel puțin 4 caractere.', 'warning')
+        elif new_personal_code != confirm_personal_code:
+            flash('Codurile personale nu coincid.', 'warning')
+        else:
+            current_user.set_personal_code(new_personal_code)
+            current_user.is_first_login = False # Asigură că e fals după setare
+            current_user.unique_code = None # Invalidează codul unic după setarea celui personal
+            db.session.commit()
+            flash('Codul personal a fost setat cu succes! Te poți autentifica acum cu el.', 'success')
+            # Deconectare pentru a forța re-autentificarea cu noul cod personal
+            # Sau direct redirect la dashboard dacă login_user încă e activ și sesiunea e validă
+            # Alegem redirect la dashboard, deoarece login_user a fost apelat anterior.
+            return redirect(url_for('dashboard'))
+
+    return render_template('set_personal_code.html')
+
 # --- Autentificare Admin ---
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
     if current_user.is_authenticated and current_user.role == 'admin': return redirect(url_for('admin_dashboard'))
+    if current_user.is_authenticated and current_user.role != 'admin': # Alt tip de user logat
+        flash('Ești deja autentificat ca utilizator. Deloghează-te pentru a accesa contul de admin.', 'info')
+        return redirect(url_for('dashboard'))
     if request.method == 'POST':
         user = User.query.filter_by(username=request.form.get('username'), role='admin').first()
         if user and user.check_password(request.form.get('password')):
