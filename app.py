@@ -1187,8 +1187,9 @@ def company_commander_dashboard():
 @login_required
 def battalion_commander_dashboard():
     if current_user.role != 'comandant_batalion': flash('Acces neautorizat.', 'danger'); return redirect(url_for('home'))
-    match = re.match(r"CmdB(\d+)", current_user.username)
-    if not match: flash('Format username invalid pentru comandant batalion.', 'danger'); return redirect(url_for('home'))
+    # Modificat re.match cu re.search pentru a permite prefixe în username (ex: Rent_CmdB1)
+    match = re.search(r"CmdB(\d+)", current_user.username)
+    if not match: flash(f'Format username invalid ({current_user.username}) pentru comandant batalion. Așteptat un format care conține CmdB<ID>.', 'danger'); return redirect(url_for('home'))
     battalion_id_str = match.group(1)
     now = datetime.now()
     roll_call_time = now.replace(hour=20 if now.weekday() < 4 else 22, minute=0, second=0, microsecond=0)
