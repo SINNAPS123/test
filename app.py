@@ -236,46 +236,52 @@ def validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj):
 def get_student_status(student_obj_or_user_obj, datetime_check):
     # Determină dacă obiectul pasat este Student sau User
     # și obține user_id și student_id (dacă e cazul)
-    user_id_to_check = None
-    student_id_to_check = None
     is_student_object = isinstance(student_obj_or_user_obj, Student)
+    # Va stoca informații despre creatorul studentului, dacă acesta e SGS.
+    # Nu va influența status_code-ul principal al studentului.
+    sgs_info_for_student_context = None
 
     if is_student_object:
         student_id_to_check = student_obj_or_user_obj.id
-        if student_obj_or_user_obj.creator: # student.creator este obiectul User
-             user_id_to_check = student_obj_or_user_obj.creator.id
-    elif isinstance(student_obj_or_user_obj, User):
-        user_id_to_check = student_obj_or_user_obj.id
-        # Încercăm să găsim un student asociat acestui user, dacă e relevant (ex: user e gradat)
-        # Dar pentru statusul general, ne bazăm pe User pentru SpecialGradedUser
-    else: # Tip necunoscut
-        return {"status_code": "unknown", "reason": "Tip obiect necunoscut", "until": None, "details": "Eroare internă"}
 
-    # Prioritățile rămân aceleași, dar verificarea SpecialGradedUser se face pe user_id_to_check
-    # Verificările pentru Service, Permission, DailyLeave, WeekendLeave se fac pe student_id_to_check (dacă există)
+        # Verificăm statusul SGS al creatorului studentului pentru context, dar nu pentru a seta statusul studentului ca SGS.
+        if student_obj_or_user_obj.creator:
+            creator_sgs = SpecialGradedUser.query.filter_by(user_id=student_obj_or_user_obj.creator.id, is_active=True).first()
+            if creator_sgs:
+                sgs_info_for_student_context = {
+                    "creator_username": student_obj_or_user_obj.creator.username,
+                    "assigned_platoon_info": creator_sgs.assigned_platoon_info
+                }
 
-    if student_id_to_check: # Aceste statusuri sunt specifice studenților
+        # Verificări statusuri specifice studentului (serviciu, permisie, etc.)
         active_service = ServiceAssignment.query.filter(ServiceAssignment.student_id == student_id_to_check, ServiceAssignment.start_datetime <= datetime_check, ServiceAssignment.end_datetime >= datetime_check).order_by(ServiceAssignment.start_datetime).first()
-        if active_service: return {"status_code": "on_duty", "reason": f"Serviciu ({active_service.service_type})", "until": active_service.end_datetime, "details": f"Serviciu: {active_service.service_type}", "object": active_service, "participates_in_roll_call": active_service.participates_in_roll_call }
+        if active_service:
+            return {"status_code": "on_duty", "reason": f"Serviciu ({active_service.service_type})", "until": active_service.end_datetime, "details": f"Serviciu: {active_service.service_type}", "object": active_service, "participates_in_roll_call": active_service.participates_in_roll_call, "sgs_info_for_student_context": sgs_info_for_student_context}
         
         active_permission = Permission.query.filter(Permission.student_id == student_id_to_check, Permission.status == 'Aprobată', Permission.start_datetime <= datetime_check, Permission.end_datetime >= datetime_check).order_by(Permission.start_datetime).first()
-        if active_permission: return {"status_code": "absent_permission", "reason": "Permisie", "until": active_permission.end_datetime, "details": "Permisie", "object": active_permission}
+        if active_permission:
+            return {"status_code": "absent_permission", "reason": "Permisie", "until": active_permission.end_datetime, "details": "Permisie", "object": active_permission, "sgs_info_for_student_context": sgs_info_for_student_context}
         
         weekend_leaves = WeekendLeave.query.filter(WeekendLeave.student_id == student_id_to_check, WeekendLeave.status == 'Aprobată').all()
         for wl in weekend_leaves:
             for interval in wl.get_intervals():
-                if interval['start'] <= datetime_check <= interval['end']: return {"status_code": "absent_weekend_leave", "reason": f"Învoire Weekend ({interval['day_name']})", "until": interval['end'], "details": f"Învoire Weekend: {interval['day_name']}", "object": wl}
+                if interval['start'] <= datetime_check <= interval['end']:
+                    return {"status_code": "absent_weekend_leave", "reason": f"Învoire Weekend ({interval['day_name']})", "until": interval['end'], "details": f"Învoire Weekend: {interval['day_name']}", "object": wl, "sgs_info_for_student_context": sgs_info_for_student_context}
         
         daily_leaves = DailyLeave.query.filter(DailyLeave.student_id == student_id_to_check, DailyLeave.status == 'Aprobată').all()
         for dl in daily_leaves:
-            if dl.start_datetime <= datetime_check <= dl.end_datetime: return {"status_code": "absent_daily_leave", "reason": f"Învoire Zilnică ({dl.leave_type_display})", "until": dl.end_datetime, "details": f"Învoire Zilnică: {dl.leave_type_display}", "object": dl}
+            if dl.start_datetime <= datetime_check <= dl.end_datetime:
+                return {"status_code": "absent_daily_leave", "reason": f"Învoire Zilnică ({dl.leave_type_display})", "until": dl.end_datetime, "details": f"Învoire Zilnică: {dl.leave_type_display}", "object": dl, "sgs_info_for_student_context": sgs_info_for_student_context}
 
-    # Verifică dacă utilizatorul (fie el student.creator sau direct User) este un Gradat Special Activ
-    if user_id_to_check:
+        # Dacă studentul nu are niciunul din statusurile de mai sus, este prezent.
+        return {"status_code": "present", "reason": "Prezent", "until": None, "details": "Prezent", "object": student_obj_or_user_obj, "sgs_info_for_student_context": sgs_info_for_student_context}
+
+    elif isinstance(student_obj_or_user_obj, User):
+        user_id_to_check = student_obj_or_user_obj.id
+        # Verifică dacă User-ul este un Gradat Special Activ
         sgs = SpecialGradedUser.query.filter_by(user_id=user_id_to_check, is_active=True).first()
         if sgs:
-            user_obj_for_sgs = User.query.get(user_id_to_check) # Obținem obiectul User pentru username
-            username_sgs = user_obj_for_sgs.username if user_obj_for_sgs else "N/A"
+            username_sgs = student_obj_or_user_obj.username # Userul este direct student_obj_or_user_obj
             reason_sgs = f"Gradat Special ({username_sgs})"
             if sgs.assigned_platoon_info:
                 reason_sgs += f" - {sgs.assigned_platoon_info}"
@@ -283,24 +289,20 @@ def get_student_status(student_obj_or_user_obj, datetime_check):
                 reason_sgs += " - Activitate Comandă/Gradat"
             
             return {
-                "status_code": "special_graded_duty",
+                "status_code": "special_graded_duty", # Acest status este corect aici, pentru un User
                 "reason": reason_sgs,
                 "until": None, 
                 "details": reason_sgs,
                 "object": sgs, 
                 "assigned_platoon_info": sgs.assigned_platoon_info,
-                # Dacă este un student, putem adăuga plutonul lui de bază
-                "pluton_baza_student": student_obj_or_user_obj.pluton if is_student_object else None 
+                "pluton_baza_student": None # Nu e un student, deci nu are pluton de bază în acest context
             }
-            
-    # Dacă nu e niciunul de mai sus și e un student, e prezent în formația lui de bază
-    if is_student_object:
-        return {"status_code": "present", "reason": "Prezent", "until": None, "details": "Prezent", "object": student_obj_or_user_obj}
-    
-    # Dacă e un User (ex: admin, comandant ne-gradat special) și nu are alt status, nu avem un status de prezență definit aici
-    # Acest caz ar trebui gestionat de funcțiile care apelează get_student_status pentru Useri non-student.
-    # Sau, returnăm un status neutru.
-    return {"status_code": "undefined_for_user_role", "reason": "Status nedefinit pentru acest rol de utilizator fără atribuții de student/gradat special", "until": None, "details": "N/A"}
+
+        # Dacă User-ul nu este SGS activ și nu e student, statusul e nedefinit pentru prezență
+        return {"status_code": "undefined_for_user_role", "reason": "Status nedefinit pentru acest rol de utilizator fără atribuții de student/gradat special activ", "until": None, "details": "N/A"}
+
+    else: # Tip necunoscut
+        return {"status_code": "unknown", "reason": "Tip obiect necunoscut", "until": None, "details": "Eroare internă"}
 
 
 def parse_student_line(line_text):
@@ -855,20 +857,23 @@ def get_aggregated_presence_data(target_students_query, datetime_check, unit_typ
     efectiv_control = len(students_list)
     
     in_formation_count = 0
-    on_duty_count = 0 # Servicii clasice
-    special_graded_present_count = 0 # Gradați speciali prezenți în unitate (nu neapărat în formație)
+    on_duty_count = 0
     
     in_formation_students_details = []
     on_duty_students_details = []
     absent_students_details = []
-    special_graded_details = [] # Listă pentru toți gradații speciali din unitatea evaluată
+    # Lista special_graded_details nu se mai populează din studenți în această funcție.
+    # Ar trebui populată separat dacă se dorește afișarea User-ilor SGS.
+    sgs_users_in_unit_details = [] # Placeholder pentru Useri SGS, dacă se adaugă logica
 
     for student_obj in students_list: # Iterăm peste obiectele Student
-        user_obj = student_obj.creator # Userul care a creat studentul (gradat, admin)
-        # Obținem statusul pentru student (care va verifica și User-ul asociat pentru SpecialGradedUser)
         status_info = get_student_status(student_obj, datetime_check) 
+        sgs_context = status_info.get('sgs_info_for_student_context')
         
         student_display_info = f"{student_obj.grad_militar} {student_obj.nume} {student_obj.prenume} (Pl.Bază: {student_obj.pluton})"
+
+        # Opțional: Adaugă informații despre creatorul SGS în detalii, dacă există
+        # Exemplu: if sgs_context: student_display_info += f" [CmdSef: {sgs_context['creator_username']}(SGS)]"
 
         if status_info['status_code'] == 'present':
             in_formation_count += 1
@@ -878,58 +883,30 @@ def get_aggregated_presence_data(target_students_query, datetime_check, unit_typ
             detail = f"{student_display_info} - {status_info['reason']}"
             if status_info.get('until'): detail += f" (până la {status_info['until'].strftime('%d.%m %H:%M')})"
             on_duty_students_details.append(detail)
-        elif status_info['status_code'] == 'special_graded_duty':
-            special_graded_present_count +=1
-            # Verificăm dacă gradatul special activează în unitatea curentă (pluton/companie)
-            # Această logică e importantă pentru a decide dacă e "în formație" sau doar "prezent în unitate"
-            # `assigned_platoon_info` poate fi "Plutonul X / Compania Y" sau "Comandant Compania Z"
-            # Trebuie o metodă de a verifica apartenența la unit_id_str
-            
-            # Simplificare pentru moment: Dacă unit_type e 'pluton' și assigned_platoon_info menționează plutonul, e în formație.
-            # Altfel, e doar prezent în unitate.
-            # Pentru comandanți de companie/batalion, ei sunt în formația unității lor.
-            is_in_formation_here = False
-            if unit_type == "pluton" and unit_id_str and status_info.get('assigned_platoon_info') and unit_id_str in status_info.get('assigned_platoon_info'):
-                is_in_formation_here = True
-            elif user_obj.role == 'comandant_companie' and unit_type == 'companie' and unit_id_str == student_obj.companie : # Comandantul e in formatia companiei lui
-                 is_in_formation_here = True
-            elif user_obj.role == 'comandant_batalion' and unit_type == 'batalion' and unit_id_str == student_obj.batalion : # Comandantul e in formatia batalionului lui
-                 is_in_formation_here = True
-            # Ar mai fi cazul studentului gradat special la plutonul X, care e și plutonul lui de bază.
-            elif is_student_object and student_obj.pluton == unit_id_str and (not status_info.get('assigned_platoon_info') or unit_id_str in status_info.get('assigned_platoon_info')):
-                 is_in_formation_here = True
-
-
-            if is_in_formation_here:
-                in_formation_count += 1
-                in_formation_students_details.append(f"{student_display_info} - {status_info['reason']} (În Formație Aici)")
-            else:
-                # Este prezent în unitatea mai mare, dar nu în formația specifică (dacă unit_id_str e un pluton specific)
-                # Sau e un gradat special la nivel de companie/batalion, pur și simplu prezent.
-                special_graded_details.append(f"{student_display_info} - {status_info['reason']}")
-        else: # Absențe
+        # Ramura 'special_graded_duty' nu va mai fi atinsă pentru un student_obj.
+        # Un student este acum clasificat strict pe baza stării sale (prezent, serviciu, învoire etc.).
+        else: # Absențe (absent_permission, absent_daily_leave, absent_weekend_leave etc.)
             absent_detail = f"{student_display_info} - {status_info['reason']}"
             if status_info.get('until'): absent_detail += f" (până la {status_info['until'].strftime('%d.%m %H:%M')})"
             absent_students_details.append(absent_detail)
 
-    efectiv_prezent_total = in_formation_count + on_duty_count + len(special_graded_details) 
-    # Am eliminat special_graded_present_count din suma Ep, deoarece gradații sunt fie în formație, fie în special_graded_details
-    # `in_formation_count` include acum și gradații speciali care sunt în formație în unitatea evaluată.
-    # `special_graded_details` îi conține pe cei prezenți în unitate dar nu în formația specifică (ex: gradat la alt pluton).
-    
     efectiv_absent_total = len(absent_students_details)
-    # Asigurare consistență EC = EP + EA
-    efectiv_prezent_total = efectiv_control - efectiv_absent_total
+    efectiv_prezent_total = in_formation_count + on_duty_count
 
+    # Verificare de consistență opțională:
+    # if efectiv_control != (efectiv_prezent_total + efectiv_absent_total):
+    #     flash(f"Inconsistență calcul efective pentru {unit_type} {unit_id_str}: EC={efectiv_control}, EP={efectiv_prezent_total}, EA={efectiv_absent_total}", "warning")
+    #     # Aici s-ar putea recalcula EP sau EA pentru a forța consistența, de ex:
+    #     # efectiv_prezent_total = efectiv_control - efectiv_absent_total
 
     return {
         "efectiv_control": efectiv_control,
         "efectiv_prezent_total": efectiv_prezent_total,
-        "in_formation_count": in_formation_count, # Include și gradații speciali în formația unității evaluate
+        "in_formation_count": in_formation_count,
         "in_formation_students_details": sorted(in_formation_students_details),
         "on_duty_count": on_duty_count, 
         "on_duty_students_details": sorted(on_duty_students_details),
-        "special_graded_details": sorted(special_graded_details), # Gradați speciali prezenți, dar nu neapărat în formație
+        "special_graded_details": sorted(sgs_users_in_unit_details), # Populată separat dacă e nevoie
         "efectiv_absent_total": efectiv_absent_total,
         "absent_students_details": sorted(absent_students_details) 
     }
