@@ -50,7 +50,13 @@
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('logout') }}">Deconectare</a>
                         </li>
-                    {% else %}
+                    {% endif %}
+                    <li class="nav-item d-flex align-items-center me-2 ms-lg-2">
+                        <button class="btn btn-outline-secondary btn-sm" id="darkModeToggle" type="button" title="Comută tema vizuală">
+                            <i class="fas fa-moon"></i> <!-- Icon will be updated by JS -->
+                        </button>
+                    </li>
+                    {% if not current_user.is_authenticated %}
                         <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('user_login') }}">Autentificare Utilizator</a>
                         </li>

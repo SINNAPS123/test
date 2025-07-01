@@ -34,6 +34,92 @@
     --shadow-lg: 0 1rem 3rem rgba(0, 0, 0, .175);
 }
 
+/* Dark Mode Variables */
+body.dark-mode {
+    --bg-main: #1a1a1a;                     /* Very dark grey */
+    --bg-surface: #2c2c2c;                  /* Dark grey for cards, surfaces */
+    --bg-surface-hover: #383838;           /* Slightly lighter grey for hover */
+
+    --text-primary: #e0e0e0;                /* Light grey for primary text */
+    --text-secondary: #a0a0a0;              /* Medium-light grey for secondary text */
+    /* --text-on-accent remains #ffffff or could be adjusted if accent changes drastically */
+
+    /* Accents can often remain the same, or be slightly desaturated/adjusted if needed */
+    /* --accent-primary: #007bff; (keep or adjust) */
+    /* --accent-primary-darker: #0056b3; (keep or adjust) */
+
+    --border-color: #444444;                /* Darker border color */
+    --input-bg: #333333;
+    --input-border: #555555;
+    --input-focus-border: #007bff;          /* Keep accent for focus, or use a lighter variant */
+    --input-focus-shadow: rgba(0, 123, 255, 0.35); /* Adjusted alpha for dark bg */
+
+    --link-color: #4dabf7; /* Lighter blue for links in dark mode */
+    --link-hover-color: #74c0fc;
+
+    /* Shadows might need to be less pronounced or use a lighter color if the background is very dark */
+    /* For simplicity, we'll keep them for now, but they might be less effective */
+}
+
+body.dark-mode .table-striped > tbody > tr:nth-of-type(odd) > * {
+    background-color: rgba(255, 255, 255, 0.04); /* Subtle light stripe */
+}
+body.dark-mode .table-hover > tbody > tr:hover > * {
+    background-color: rgba(255, 255, 255, 0.08); /* Subtle light hover */
+}
+
+body.dark-mode .badge.bg-light { /* Make .bg-light distinct in dark mode */
+    background-color: var(--border-color) !important; /* Using a variable that's dark */
+    color: var(--text-primary) !important; /* Text should be light */
+}
+body.dark-mode .badge.bg-warning { /* Ensure warning badge text is readable */
+    color: #212529 !important; /* Keep dark text on yellow */
+}
+
+body.dark-mode .navbar-toggler-icon {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28224, 224, 224, 0.75%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e"); /* Lighter stroke for dark mode */
+}
+
+body.dark-mode .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%); /* Common trick to make black SVGs white */
+}
+
+body.dark-mode input[type="date"]::-webkit-calendar-picker-indicator,
+body.dark-mode input[type="time"]::-webkit-calendar-picker-indicator,
+body.dark-mode input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+}
+
+body.dark-mode .card-header {
+    background-color: var(--bg-surface-hover);
+    border-bottom: 1px solid var(--border-color);
+}
+body.dark-mode .table thead th {
+    background-color: var(--bg-surface-hover);
+    border-bottom: 2px solid var(--border-color);
+}
+
+/* Minimal alert adjustments for readability */
+body.dark-mode .alert-warning {
+    /* Bootstrap's default .alert-warning has dark text on light yellow. */
+    /* This should remain readable if the var(--accent-warning) isn't changed for dark mode. */
+    /* If --accent-warning was made dark, this would need inversion. */
+}
+body.dark-mode .alert-warning a.alert-link, body.dark-mode .alert-warning .alert-link {
+    color: #4d3802; /* Ensure link color is dark enough on yellow background */
+}
+body.dark-mode .alert-light { /* Bootstrap's .alert-light */
+    color: var(--text-primary);
+    background-color: var(--bg-surface-hover);
+    border-color: var(--border-color);
+}
+body.dark-mode .alert-secondary {
+     color: var(--text-primary);
+    background-color: var(--bg-surface-hover);
+    border-color: var(--border-color);
+}
+
+
 /* Stiluri Globale */
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -387,3 +473,35 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
 .fw-bold { font-weight: bold !important; }
 .fs-sm { font-size: 0.875rem !important; }
 .fs-lg { font-size: 1.25rem !important; }
+
+/* Responsive adjustments for Navbar */
+@media (max-width: 991.98px) { /* Below lg breakpoint (when navbar collapses) */
+    .navbar-nav {
+        margin-top: 0.5rem; /* Add some space above nav items when collapsed */
+    }
+    .navbar-nav .nav-item {
+        text-align: center; /* Center nav items when collapsed for a cleaner look */
+    }
+    .navbar-nav .nav-link {
+        padding-left: 0.5rem; /* Ensure padding is consistent */
+        padding-right: 0.5rem;
+    }
+    .navbar-text { /* Ensure user info span is also centered and has some margin */
+        display: block;
+        text-align: center;
+        margin-bottom: 0.5rem;
+        margin-right: 0 !important; /* Override me-2 for centering */
+    }
+}
+
+@media (max-width: 575.98px) { /* Extra small devices (phones) */
+    /* Navbar brand logo text defined in base.html, style it here for small screens */
+    /* Assuming .unap-logo-text is a child of .navbar-brand */
+    .navbar .navbar-brand .unap-logo-text { /* More specific selector if needed */
+        font-size: 1.35rem !important; /* Slightly reduce logo text size, use !important if defined inline with higher specificity */
+    }
+    .navbar .navbar-brand {
+        padding-top: 0.1rem;
+        padding-bottom: 0.1rem;
+    }
+}
