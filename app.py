@@ -229,28 +229,28 @@ def get_student_status(student_obj_or_user_obj, datetime_check):
     if is_student_object:
         student_id_to_check = student_obj_or_user_obj.id
         # Logica pentru sgs_info_for_student_context a fost eliminată deoarece SpecialGradedUser a fost eliminat.
-
+        
         # Verificări statusuri specifice studentului (serviciu, permisie, etc.)
         # Acestea vor fi extinse ulterior pentru a include noul status is_platoon_graded_duty
         active_service = ServiceAssignment.query.filter(ServiceAssignment.student_id == student_id_to_check, ServiceAssignment.start_datetime <= datetime_check, ServiceAssignment.end_datetime >= datetime_check).order_by(ServiceAssignment.start_datetime).first()
-        if active_service:
+        if active_service: 
             return {"status_code": "on_duty", "reason": f"Serviciu ({active_service.service_type})", "until": active_service.end_datetime, "details": f"Serviciu: {active_service.service_type}", "object": active_service, "participates_in_roll_call": active_service.participates_in_roll_call }
         
         active_permission = Permission.query.filter(Permission.student_id == student_id_to_check, Permission.status == 'Aprobată', Permission.start_datetime <= datetime_check, Permission.end_datetime >= datetime_check).order_by(Permission.start_datetime).first()
-        if active_permission:
+        if active_permission: 
             return {"status_code": "absent_permission", "reason": "Permisie", "until": active_permission.end_datetime, "details": "Permisie", "object": active_permission }
         
         weekend_leaves = WeekendLeave.query.filter(WeekendLeave.student_id == student_id_to_check, WeekendLeave.status == 'Aprobată').all()
         for wl in weekend_leaves:
             for interval in wl.get_intervals():
-                if interval['start'] <= datetime_check <= interval['end']:
+                if interval['start'] <= datetime_check <= interval['end']: 
                     return {"status_code": "absent_weekend_leave", "reason": f"Învoire Weekend ({interval['day_name']})", "until": interval['end'], "details": f"Învoire Weekend: {interval['day_name']}", "object": wl }
         
         daily_leaves = DailyLeave.query.filter(DailyLeave.student_id == student_id_to_check, DailyLeave.status == 'Aprobată').all()
         for dl in daily_leaves:
-            if dl.start_datetime <= datetime_check <= dl.end_datetime:
+            if dl.start_datetime <= datetime_check <= dl.end_datetime: 
                 return {"status_code": "absent_daily_leave", "reason": f"Învoire Zilnică ({dl.leave_type_display})", "until": dl.end_datetime, "details": f"Învoire Zilnică: {dl.leave_type_display}", "object": dl }
-
+        
         # Verifică dacă studentul are statutul de "Gradat Pluton"
         # Acest status are prioritate mai mică decât permisiile, învoirile și serviciile normale.
         if student_obj_or_user_obj.is_platoon_graded_duty:
@@ -362,12 +362,12 @@ def user_login():
             if not user.is_first_login and user.check_personal_code(login_code):
                 user_by_personal_code = user
                 break
-
+        
         if user_by_personal_code:
             login_user(user_by_personal_code)
             flash('Autentificare utilizator reușită!', 'success')
             return redirect(url_for('dashboard'))
-
+        
         flash('Cod invalid sau expirat.', 'danger')
     return render_template('user_login.html')
 
@@ -377,7 +377,7 @@ def set_personal_code():
     if current_user.role == 'admin': # Adminii nu folosesc cod personal în acest flux
         flash('Administratorii nu setează cod personal prin acest formular.', 'warning')
         return redirect(url_for('admin_dashboard'))
-
+    
     if not current_user.is_first_login and current_user.personal_code_hash:
          # Verificăm dacă nu cumva a ajuns aici un user care are deja cod setat și nu e un reset
          # Ar putea fi cazul în care adminul i-a resetat unique_code, și is_first_login e True din nou.
@@ -402,7 +402,7 @@ def set_personal_code():
             # Sau direct redirect la dashboard dacă login_user încă e activ și sesiunea e validă
             # Alegem redirect la dashboard, deoarece login_user a fost apelat anterior.
             return redirect(url_for('dashboard'))
-
+    
     return render_template('set_personal_code.html')
 
 # --- Autentificare Admin ---
@@ -569,7 +569,7 @@ def edit_student(student_id):
         # Setare pentru is_platoon_graded_duty - doar adminii pot modifica acest câmp
         if current_user.role == 'admin':
             s_edit.is_platoon_graded_duty = 'is_platoon_graded_duty' in form # Checkbox value
-
+        
         if not all([s_edit.nume, s_edit.prenume, s_edit.grad_militar, s_edit.pluton, s_edit.companie, s_edit.batalion, s_edit.gender]): flash('Toate câmpurile marcate cu * sunt obligatorii (inclusiv genul).', 'warning')
         elif s_edit.gender not in GENDERS: flash('Valoare invalidă pentru gen.', 'warning')
         else:
@@ -718,7 +718,7 @@ def presence_report():
         on_duty_count = 0
         platoon_graded_duty_count = 0
         absent_count = 0
-
+        
         in_formation_list_details = []
         on_duty_list_details = []
         platoon_graded_duty_list_details = []
@@ -747,10 +747,10 @@ def presence_report():
         # efectiv_absent_count = ec - efectiv_prezent_total # Sau absent_count, ar trebui să fie la fel
 
         report_data = {
-            "title": report_title,
-            "datetime_checked": report_time_str,
-            "efectiv_control": ec,
-            "efectiv_prezent_total": efectiv_prezent_total,
+            "title": report_title, 
+            "datetime_checked": report_time_str, 
+            "efectiv_control": ec, 
+            "efectiv_prezent_total": efectiv_prezent_total, 
             "in_formation_count": in_formation_count,
             "in_formation_list": sorted(in_formation_list_details), 
             "on_duty_count": on_duty_count,
@@ -771,7 +771,7 @@ def get_aggregated_presence_data(target_students_query, datetime_check, unit_typ
     efectiv_control = len(students_list)
     
     in_formation_count = 0
-    on_duty_count = 0
+    on_duty_count = 0 
     
     in_formation_students_details = []
     on_duty_students_details = []
@@ -785,7 +785,7 @@ def get_aggregated_presence_data(target_students_query, datetime_check, unit_typ
         sgs_context = status_info.get('sgs_info_for_student_context')
         
         student_display_info = f"{student_obj.grad_militar} {student_obj.nume} {student_obj.prenume} (Pl.Bază: {student_obj.pluton})"
-
+        
         # Opțional: Adaugă informații despre creatorul SGS în detalii, dacă există
         # Exemplu: if sgs_context: student_display_info += f" [CmdSef: {sgs_context['creator_username']}(SGS)]"
 
@@ -805,8 +805,8 @@ def get_aggregated_presence_data(target_students_query, datetime_check, unit_typ
             absent_students_details.append(absent_detail)
 
     efectiv_absent_total = len(absent_students_details)
-    efectiv_prezent_total = in_formation_count + on_duty_count
-
+    efectiv_prezent_total = in_formation_count + on_duty_count 
+    
     # Verificare de consistență opțională:
     # if efectiv_control != (efectiv_prezent_total + efectiv_absent_total):
     #     flash(f"Inconsistență calcul efective pentru {unit_type} {unit_id_str}: EC={efectiv_control}, EP={efectiv_prezent_total}, EA={efectiv_absent_total}", "warning")
