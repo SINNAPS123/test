@@ -135,3 +135,28 @@
     </p>
 </div>
 {% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const leaveListTextarea = document.getElementById('leave_list_text');
+    if (leaveListTextarea) {
+        // Golește textarea la încărcarea paginii pentru a evita probleme de cache la reîncărcare
+        // Acest lucru este util mai ales dacă redirect-ul nu forțează mereu o reîmprospătare completă a stării formularului.
+        if (performance.navigation.type === performance.navigation.TYPE_RELOAD ||
+            performance.getEntriesByType("navigation")[0].type === 'reload') {
+            // Doar dacă e un reload explicit, nu la prima încărcare sau navigare normală.
+            // Sau, mai simplu, îl golim mereu dacă nu suntem într-un context de eroare de validare unde vrem să păstrăm inputul.
+            // Pentru moment, îl golim la fiecare încărcare a paginii list_daily_leaves,
+            // presupunând că datele sunt procesate și nu mai e nevoie de textul vechi.
+            // O abordare mai bună ar fi ca backend-ul să nu retrimită textul dacă procesarea a fost cu succes.
+        }
+         // Cel mai simplu: Golește-l mereu la încărcare, cu excepția cazului în care există un mesaj de eroare specific de la procesare.
+         // Dar pentru că redirectăm, starea de eroare nu e direct aici.
+         // Deci, golirea la încărcare ar trebui să fie sigură.
+        leaveListTextarea.value = '';
+    }
+});
+</script>
+{% endblock %}

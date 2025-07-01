@@ -1,23 +1,87 @@
 {% extends "base.html" %}
 
-{% block title %}Listă Studenți - {{ current_user.username }}{% endblock %}
+{% block title %}
+    {% if is_admin_view %}Listă Studenți (Admin){% else %}Listă Studenți - {{ current_user.username }}{% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Listă Studenți Gestionați</h2>
-        <a href="{{ url_for('add_student') }}" class="btn btn-success">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-circle-fill" viewBox="0 0 16 16">
-                <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8.5 4.5a.5.5 0 0 0-1 0v3h-3a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0v-3h3a.5.5 0 0 0 0-1h-3v-3z"/>
-            </svg>
-            Adaugă Student Nou
-        </a>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>
+            {% if is_admin_view %}
+                Listă Studenți (Total: {{ students_pagination.total if students_pagination else 0 }})
+            {% elif students %}
+                Listă Studenți Gestionați ({{ students|length }})
+            {% else %}
+                 Listă Studenți Gestionați (0)
+            {% endif %}
+        </h2>
+        <div>
+            {# Butonul de adăugare student este vizibil pentru Gradat. Adminul poate adăuga prin altă interfață dacă e necesar, sau se poate adăuga aici #}
+            {% if not is_admin_view %}
+            <a href="{{ url_for('add_student') }}" class="btn btn-success">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-circle-fill" viewBox="0 0 16 16">
+                    <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8.5 4.5a.5.5 0 0 0-1 0v3h-3a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0v-3h3a.5.5 0 0 0 0-1h-3v-3z"/>
+                </svg>
+                Adaugă Student Nou
+            </a>
+            {% endif %}
+            {% if is_admin_view %}
+                 <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Panou Admin</a>
+            {% else %}
+                <a href="{{ url_for('gradat_dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Panou Gradat</a>
+            {% endif %}
+        </div>
     </div>
 
-    {% if students %}
+    {% if is_admin_view %}
+    <form method="GET" action="{{ url_for('list_students') }}" class="mb-3 bg-light p-3 rounded">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label for="search" class="form-label form-label-sm">Caută:</label>
+                <input type="text" name="search" id="search" class="form-control form-control-sm" placeholder="Nume, prenume, ID unic..." value="{{ search_term or '' }}">
+            </div>
+            <div class="col-md-2">
+                <label for="batalion" class="form-label form-label-sm">Batalion:</label>
+                <select name="batalion" id="batalion" class="form-select form-select-sm">
+                    <option value="">Toate</option>
+                    {% for b in batalioane %}
+                    <option value="{{ b }}" {% if b == filter_batalion %}selected{% endif %}>{{ b }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="companie" class="form-label form-label-sm">Companie:</label>
+                <select name="companie" id="companie" class="form-select form-select-sm">
+                    <option value="">Toate</option>
+                    {% for c in companii %}
+                    <option value="{{ c }}" {% if c == filter_companie %}selected{% endif %}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="pluton" class="form-label form-label-sm">Pluton:</label>
+                <select name="pluton" id="pluton" class="form-select form-select-sm">
+                    <option value="">Toate</option>
+                    {% for p in plutoane %}
+                    <option value="{{ p }}" {% if p == filter_pluton %}selected{% endif %}>{{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-auto">
+                <button type="submit" class="btn btn-primary btn-sm">Filtrează</button>
+                <a href="{{ url_for('list_students') }}" class="btn btn-outline-secondary btn-sm">Resetează</a>
+            </div>
+        </div>
+    </form>
+    {% endif %}
+
+    {% set student_list = students_pagination.items if is_admin_view and students_pagination else students %}
+
+    {% if student_list %}
     <div class="table-responsive">
-        <table class="table table-striped table-hover">
-            <thead> <!-- Am eliminat clasa table-dark -->
+        <table class="table table-striped table-hover table-sm">
+            <thead class="table-light">
                 <tr>
                     <th>Nr. Crt.</th>
                     <th>Grad</th>
@@ -27,32 +91,51 @@
                     <th>Pluton</th>
                     <th>Companie</th>
                     <th>Batalion</th>
+                    <th>Gen</th>
+                    <th>Puncte Vol.</th>
+                    {% if is_admin_view %}<th>Creat De</th>{% endif %}
                     <th>Acțiuni</th>
                 </tr>
             </thead>
             <tbody>
-                {% for student in students %}
+                {% for student in student_list %}
                 <tr>
-                    <td>{{ loop.index }}</td>
+                    <td>
+                        {% if is_admin_view and students_pagination %}
+                            {{ students_pagination.first + loop.index0 }}
+                        {% else %}
+                            {{ loop.index }}
+                        {% endif %}
+                    </td>
                     <td>{{ student.grad_militar }}</td>
                     <td>{{ student.nume }}</td>
                     <td>{{ student.prenume }}</td>
-                    <td>{{ student.id_unic_student if student.id_unic_student else 'N/A' }}</td>
+                    <td>{{ student.id_unic_student if student.id_unic_student else '-' }}</td>
                     <td>{{ student.pluton }}</td>
                     <td>{{ student.companie }}</td>
                     <td>{{ student.batalion }}</td>
+                    <td>{{ student.gender }}</td>
+                    <td>{{ student.volunteer_points }}</td>
+                    {% if is_admin_view %}
                     <td>
-                        <a href="{{ url_for('edit_student', student_id=student.id) }}" class="btn btn-sm btn-outline-primary me-1" title="Editează">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pencil-square" viewBox="0 0 16 16">
-                                <path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"/>
-                                <path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5v11z"/>
-                            </svg>
+                        {% if student.creator %}
+                            {{ student.creator.username }}
+                            <small class="text-muted">({{ student.creator.role }})</small>
+                        {% else %}
+                            <small class="text-muted">N/A</small>
+                        {% endif %}
+                    </td>
+                    {% endif %}
+                    <td>
+                        {# Adminul poate edita/șterge orice student. Gradatul doar pe ai lui. #}
+                        {# Momentan, rutele de edit/delete sunt sub /gradat/. Pentru admin, ar trebui rute separate sau logica în funcțiile existente. #}
+                        {# Presupunem că adminul va folosi aceleași rute, dar verificarea permisiunilor se va face în view-uri. #}
+                        <a href="{{ url_for('edit_student', student_id=student.id) }}" class="btn btn-warning btn-sm py-0 px-1 me-1" title="Editare">
+                            <i class="fas fa-edit"></i>
                         </a>
-                        <form method="POST" action="{{ url_for('delete_student', student_id=student.id) }}" style="display: inline;" onsubmit="return confirm('Ești sigur că vrei să ștergi studentul {{ student.nume }} {{ student.prenume }}? Această acțiune este ireversibilă.');">
-                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Șterge">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash3-fill" viewBox="0 0 16 16">
-                                    <path d="M11 1.5v1h3.5a.5.5 0 0 1 0 1h-.538l-.853 10.66A2 2 0 0 1 11.115 16h-6.23a2 2 0 0 1-1.994-1.84L2.038 3.5H1.5a.5.5 0 0 1 0-1H5v-1A1.5 1.5 0 0 1 6.5 0h3A1.5 1.5 0 0 1 11 1.5Zm-5 0v1h4v-1a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5ZM4.5 5.024l.5 8.5a.5.5 0 1 0 .998-.06l-.5-8.5a.5.5 0 1 0-.998.06Zm6.53-.528a.5.5 0 0 0-.528.47l-.5 8.5a.5.5 0 0 0 .998.058l.5-8.5a.5.5 0 0 0-.47-.528ZM8 4.5a.5.5 0 0 0-.5.5v8.5a.5.5 0 0 0 1 0V5a.5.5 0 0 0-.5-.5Z"/>
-                                </svg>
+                        <form action="{{ url_for('delete_student', student_id=student.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Sigur doriți să ștergeți studentul {{ student.nume }} {{ student.prenume }} și toate datele asociate?');">
+                            <button type="submit" class="btn btn-danger btn-sm py-0 px-1" title="Ștergere">
+                                <i class="fas fa-trash-alt"></i>
                             </button>
                         </form>
                     </td>
@@ -61,15 +144,47 @@
             </tbody>
         </table>
     </div>
-    {% else %}
-    <div class="alert alert-info" role="alert">
-        Nu ai adăugat încă niciun student. <a href="{{ url_for('add_student') }}" class="alert-link">Adaugă primul student aici</a>.
-    </div>
+
+    {% if is_admin_view and students_pagination and students_pagination.pages > 1 %}
+    <nav aria-label="Page navigation">
+        <ul class="pagination pagination-sm justify-content-center">
+            {% set base_args = {'search': search_term or '', 'batalion': filter_batalion or '', 'companie': filter_companie or '', 'pluton': filter_pluton or ''} %}
+            <li class="page-item {% if not students_pagination.has_prev %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('list_students', page=students_pagination.prev_num, **base_args) if students_pagination.has_prev else '#'}}">Precedenta</a>
+            </li>
+
+            {% for page_num in students_pagination.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=1) %}
+                {% if page_num %}
+                    <li class="page-item {% if students_pagination.page == page_num %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('list_students', page=page_num, **base_args) }}">{{ page_num }}</a>
+                    </li>
+                {% elif loop.index != 1 and loop.index != students_pagination.pages +1 %}
+                     <li class="page-item disabled"><span class="page-link">...</span></li>
+                {% endif %}
+            {% endfor %}
+
+            <li class="page-item {% if not students_pagination.has_next %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('list_students', page=students_pagination.next_num, **base_args) if students_pagination.has_next else '#'}}">Următoarea</a>
+            </li>
+        </ul>
+    </nav>
+    <p class="text-center text-muted small">Afișare {{ students_pagination.items|length }} din {{ students_pagination.total }} studenți (Pagina {{ students_pagination.page }} din {{ students_pagination.pages }}).</p>
     {% endif %}
+
+    {% elif is_admin_view %}
+         <div class="alert alert-info">Nu s-au găsit studenți conform filtrelor aplicate sau nu există studenți în baza de date.</div>
+    {% else %}
+        <div class="alert alert-info" role="alert">
+            Nu ai adăugat încă niciun student. <a href="{{ url_for('add_student') }}" class="alert-link">Adaugă primul student aici</a>.
+        </div>
+    {% endif %}
+
+    {% if not is_admin_view %}
     <p class="mt-4">
         <a href="{{ url_for('gradat_dashboard') }}" class="btn btn-outline-secondary btn-sm">
             &laquo; Înapoi la Panoul Gradat
         </a>
     </p>
+    {% endif %}
 </div>
 {% endblock %}
