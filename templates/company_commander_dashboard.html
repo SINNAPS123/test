@@ -36,7 +36,7 @@
     {% macro display_presence_details(data, id_prefix) %}
         {% if data.in_formation_students_details or data.gradati_activi_in_pluton_evaluat_details %}
             <h6 class="mt-2 mb-1">
-                Prezenți în Formație
+                Prezenți în Formație 
                 (<span class="count-formation">{{ data.in_formation_count }}</span>
                 {% if data.gradati_activi_in_pluton_evaluat_details %}
                 + <span class="count-gradati-here">{{ data.gradati_activi_in_pluton_evaluat_details|length }}</span> Gradați Activi Aici
@@ -76,7 +76,7 @@
                 {% endfor %}
             </ul>
         {% endif %}
-
+        
         {% if data.absent_students_details %}
             <h6 class="mt-2 mb-1">
                 Absenți Motivat ({{ data.efectiv_absent_total }})
@@ -100,7 +100,7 @@
         <div class="card-body">
             <p>
                 <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ total_company_presence.efectiv_control }}</span><br>
-                <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ total_company_presence.efectiv_prezent_total }}</span>
+                <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ total_company_presence.efectiv_prezent_total }}</span> 
                 <small class="d-block ms-3">(Din care: În formație: {{total_company_presence.in_formation_count}}, La servicii: {{total_company_presence.on_duty_count}})</small><br>
                 <strong>Efectiv Absent Motivat (Ea):</strong> <span class="badge bg-danger fs-6">{{ total_company_presence.efectiv_absent_total }}</span>
             </p>
@@ -121,12 +121,12 @@
             <div class="card-body">
                 <p>
                     EC: <span class="badge bg-dark">{{ data.efectiv_control }}</span> |
-                    Ep: <span class="badge bg-success">{{ data.efectiv_prezent_total }}</span>
+                    Ep: <span class="badge bg-success">{{ data.efectiv_prezent_total }}</span> 
                     <small>(Formație: {{data.in_formation_count}}, Serviciu: {{data.on_duty_count}})</small> |
                     Ea: <span class="badge bg-danger">{{ data.efectiv_absent_total }}</span>
                 </p>
                 {{ display_presence_details(data, "platoon-" ~ loop.index) }}
-
+                
                 {% if data.efectiv_control == 0 %}
                      <p class="text-muted mb-0 mt-2"><small>Nu există studenți înregistrați pentru {{ platoon_name }}.</small></p>
                 {% elif data.efectiv_absent_total == 0 and data.efectiv_prezent_total == data.efectiv_control %}
