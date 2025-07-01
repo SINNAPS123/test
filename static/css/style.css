@@ -65,19 +65,27 @@ a:hover {
     border-bottom: 1px solid var(--border-color);
     box-shadow: var(--shadow-sm);
 }
+.navbar {
+    padding-top: 0.3rem; /* Redus padding-ul navbar-ului */
+    padding-bottom: 0.3rem; /* Redus padding-ul navbar-ului */
+}
 .navbar .navbar-brand {
     font-weight: 600;
-    font-size: 1.5rem; /* Mărit puțin pentru logo */
-    display: flex; /* Pentru aliniere logo și text */
-    align-items: center; /* Pentru aliniere logo și text */
+    font-size: 1.25rem; /* Redus font-size pentru brand */
+    display: flex;
+    align-items: center;
+    padding-top: 0.2rem; /* Redus padding-ul brand-ului */
+    padding-bottom: 0.2rem; /* Redus padding-ul brand-ului */
 }
 .navbar .navbar-brand img {
-    max-height: 40px; /* Ajustează după dimensiunea logo-ului */
-    margin-right: 0.75rem;
+    max-height: 30px; /* Redus înălțimea logo-ului */
+    margin-right: 0.5rem; /* Redus marginea logo-ului */
 }
 .navbar .nav-link {
     color: var(--text-secondary) !important;
     font-weight: 500;
+    padding-top: 0.4rem; /* Redus padding-ul link-urilor */
+    padding-bottom: 0.4rem; /* Redus padding-ul link-urilor */
 }
 .navbar .nav-link:hover, .navbar .nav-link.active {
     color: var(--accent-primary) !important;
@@ -325,7 +333,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
 
 /* Footer specific styles */
 .footer {
-    padding: 2rem 0;
+    padding: 1rem 0; /* Redus padding-ul footer-ului */
     background-color: var(--bg-surface);
     border-top: 1px solid var(--border-color);
     color: var(--text-secondary);

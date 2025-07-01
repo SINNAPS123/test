@@ -2,33 +2,119 @@
 
 {% block title %}Panou Comandant Batalion {{ battalion_id }}{% endblock %}
 
+{% block styles %}
+{{ super() }}
+<style>
+    .details-list {
+        display: none;
+        font-size: 0.85em;
+        padding-left: 1.5rem; /* Indentare pentru liste */
+    }
+    .list-group-item-sm {
+        padding-top: 0.25rem;
+        padding-bottom: 0.25rem;
+    }
+    .toggle-details-btn {
+        font-size: 0.8em;
+        padding: 0.1rem 0.4rem;
+        margin-left: 10px;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
-    <h2 class="mb-3">Panou Comandant Batalionul {{ battalion_id }}</h2>
+    <div class="d-flex justify-content-between align-items-center">
+        <h2 class="mb-3">Panou Comandant Batalionul {{ battalion_id }}</h2>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
+            &laquo; Înapoi la Panoul Principal
+        </a>
+    </div>
     <p class="text-muted">Situația efectivelor pentru Apelul de Seară din {{ roll_call_time_str }}</p>
     <hr>
 
+    {% macro display_presence_details(data, id_prefix) %}
+        {# Afișăm Gradați Activi în Plutonul Evaluat (dacă există) și studenții normali în formație #}
+        {% if data.in_formation_students_details or data.gradati_activi_in_pluton_evaluat_details %}
+            <h6 class="mt-2 mb-1">
+                Prezenți în Formație
+                (<span class="count-formation">{{ data.in_formation_count }}</span>
+                {% if data.gradati_activi_in_pluton_evaluat_details %}
+                + <span class="count-gradati-here">{{ data.gradati_activi_in_pluton_evaluat_details|length }}</span> Gradați Activi Aici
+                {% endif %})
+                <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-formation-details" aria-expanded="false" aria-controls="{{ id_prefix }}-formation-details">Detalii</button>
+            </h6>
+            <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-formation-details">
+                {% for item in data.in_formation_students_details %}
+                    <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                {% endfor %}
+                {% for item in data.gradati_activi_in_pluton_evaluat_details %}
+                    <li class="list-group-item list-group-item-sm py-1 bg-light-info">{{ item }} <span class="badge bg-info-soft text-info">Gradat</span></li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        {% if data.on_duty_students_details %}
+            <h6 class="mt-2 mb-1">
+                La Servicii ({{ data.on_duty_count }})
+                <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-onduty-details" aria-expanded="false" aria-controls="{{ id_prefix }}-onduty-details">Detalii</button>
+            </h6>
+            <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-onduty-details">
+                {% for item in data.on_duty_students_details %}
+                    <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        {# Afișăm Gradați din Plutonul curent (dacă e cazul) care sunt activi la ALT pluton #}
+        {% if data.gradati_activi_din_pluton_la_alt_pluton_details %}
+            <h6 class="mt-2 mb-1">
+                Gradați din Unitate Activi la Alt Pluton ({{ data.gradati_activi_din_pluton_la_alt_pluton_details|length }})
+                <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-gradati-altpl-details" aria-expanded="false" aria-controls="{{ id_prefix }}-gradati-altpl-details">Detalii</button>
+            </h6>
+            <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-gradati-altpl-details">
+                {% for item in data.gradati_activi_din_pluton_la_alt_pluton_details %}
+                    <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        {% if data.absent_students_details %}
+            <h6 class="mt-2 mb-1">
+                Absenți Motivat ({{ data.efectiv_absent_total }})
+                <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-absent-details" aria-expanded="false" aria-controls="{{ id_prefix }}-absent-details">Detalii</button>
+            </h6>
+            <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-absent-details">
+                {% for item in data.absent_students_details %}
+                    <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                {% endfor %}
+            </ul>
+        {% elif data.efectiv_absent_total == 0 and data.efectiv_control > 0 and data.efectiv_prezent_total == data.efectiv_control %}
+             <p class="text-success mt-2 mb-0"><small>Niciun student absent motivat.</small></p>
+        {% endif %}
+    {% endmacro %}
+
+
     {% if total_battalion_presence %}
     <div class="card shadow-sm mb-4">
-        <div class="card-header bg-success text-white">
+        <div class="card-header bg-success text-white" style="background-color: var(--bs-success) !important;">
             <h4 class="mb-0">Efective Totale Batalionul {{ battalion_id }}</h4>
         </div>
         <div class="card-body">
             <p>
                 <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ total_battalion_presence.efectiv_control }}</span><br>
-                <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ total_battalion_presence.efectiv_prezent_total }}</span><br>
-                <strong>Efectiv Absent (Ea):</strong> <span class="badge bg-danger fs-6">{{ total_battalion_presence.efectiv_absent_total }}</span>
+                <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ total_battalion_presence.efectiv_prezent_total }}</span>
+                <small class="d-block ms-3">(Din care: În formație: {{total_battalion_presence.in_formation_count}}, La servicii: {{total_battalion_presence.on_duty_count}})</small><br>
+                <strong>Efectiv Absent Motivat (Ea):</strong> <span class="badge bg-danger fs-6">{{ total_battalion_presence.efectiv_absent_total }}</span>
             </p>
-            {% if total_battalion_presence.efectiv_absent_total > 0 %}
-                <small class="text-muted">Detalii absenți pe companii mai jos.</small>
-            {% endif %}
+            {{ display_presence_details(total_battalion_presence, "total-battalion") }}
         </div>
     </div>
     {% else %}
     <div class="alert alert-warning">Nu s-au putut încărca datele de prezență pentru batalion.</div>
     {% endif %}
 
-    <h4 class="mt-4">Detalii Efective pe Companii:</h4>
+    <h3 class="mt-5 mb-3">Detalii Efective pe Companii:</h3>
     {% if companies_data %}
         {% for company_name, data in companies_data.items()|sort %}
         <div class="card shadow-sm mb-3">
@@ -38,32 +124,29 @@
             <div class="card-body">
                 <p>
                     EC: <span class="badge bg-dark">{{ data.efectiv_control }}</span> |
-                    Ep: <span class="badge bg-success">{{ data.efectiv_prezent_total }}</span> |
+                    Ep: <span class="badge bg-success">{{ data.efectiv_prezent_total }}</span>
+                    <small>(Formație: {{data.in_formation_count}}, Serviciu: {{data.on_duty_count}})</small> |
                     Ea: <span class="badge bg-danger">{{ data.efectiv_absent_total }}</span>
                 </p>
-                {% if data.absent_students_details %}
-                    <p class="mb-1"><small><strong>Absenți din {{ company_name }}:</strong></small></p>
-                    <ul class="list-unstyled" style="font-size: 0.9em;">
-                        {% for absent_detail in data.absent_students_details %}
-                            <li><small>{{ absent_detail }}</small></li>
-                        {% endfor %}
-                    </ul>
-                {% elif data.efectiv_absent_total == 0 and data.efectiv_control > 0 %}
-                    <p class="text-success mb-0"><small>Toți studenții prezenți în {{ company_name }}.</small></p>
-                {% elif data.efectiv_control == 0 %}
-                    <p class="text-info mb-0"><small>Nu există studenți înregistrați pentru {{ company_name }}.</small></p>
+                {{ display_presence_details(data, "company-" ~ loop.index) }}
+
+                {% if data.efectiv_control == 0 %}
+                     <p class="text-muted mb-0 mt-2"><small>Nu există studenți înregistrați pentru {{ company_name }}.</small></p>
+                {% elif data.efectiv_absent_total == 0 and data.efectiv_prezent_total == data.efectiv_control %}
+                     <p class="text-success mt-2 mb-0"><small>Toți studenții din {{ company_name }} sunt prezenți sau în serviciu.</small></p>
                 {% endif %}
             </div>
         </div>
         {% endfor %}
     {% else %}
-        <div class="alert alert-info">Nu există companii cu studenți în acest batalion.</div>
+        <div class="alert alert-info">Nu există companii cu studenți în acest batalion sau datele nu au putut fi încărcate.</div>
     {% endif %}
-
-    <p class="mt-4">
-        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
-            &laquo; Înapoi la Panoul Principal
-        </a>
-    </p>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{# Scriptul pentru toggle este implicit gestionat de Bootstrap 5 Collapse, nu e nevoie de JS custom simplu. #}
+{# Asigură-te că ai Bootstrap JS inclus în base.html sau global. #}
+{# Exemplu: <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"><\/script> #}
 {% endblock %}

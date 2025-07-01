@@ -1,10 +1,25 @@
 {% extends "base.html" %}
 
-{% block title %}{{ form_title }} - Management Studenți{% endblock %}
+{% block title %}
+    {{ form_title }}
+    {% if current_user.role == 'admin' %} (Admin)
+    {% elif current_user.role == 'gradat' and not student %} - Adăugare Student
+    {% elif current_user.role == 'gradat' and student %} - Editare {{ student.nume }} {{ student.prenume }}
+    {% else %} - Management Studenți
+    {% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-    <h2>{{ form_title }}</h2>
+    <div class="d-flex justify-content-between align-items-center">
+        <h2>
+            {{ form_title }}
+            {% if current_user.role == 'admin' %}<span class="badge bg-info">Admin</span>{% endif %}
+        </h2>
+        <a href="{{ url_for('list_students') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Înapoi la Listă Studenți
+        </a>
+    </div>
     <hr>
 
     <div class="row justify-content-center">
@@ -15,35 +30,38 @@
                         {# Campuri comune pentru adăugare și editare #}
                         <div class="mb-3">
                             <label for="nume" class="form-label">Nume <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="nume" name="nume" value="{{ student.nume if student else '' }}" required>
+                            <input type="text" class="form-control" id="nume" name="nume" value="{{ student.nume if student else (form_data.nume if form_data else '') }}" required>
                         </div>
 
                         <div class="mb-3">
                             <label for="prenume" class="form-label">Prenume <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="prenume" name="prenume" value="{{ student.prenume if student else '' }}" required>
+                            <input type="text" class="form-control" id="prenume" name="prenume" value="{{ student.prenume if student else (form_data.prenume if form_data else '') }}" required>
                         </div>
 
                         <div class="mb-3">
                             <label for="grad_militar" class="form-label">Grad Militar <span class="text-danger">*</span></label>
-                            {# Ideal, aceasta ar fi o listă selectabilă predefinită, dar pentru simplitate începem cu text input #}
-                            {# TODO: Transformă într-un dropdown cu opțiuni predefinite pentru grade #}
-                            <input type="text" class="form-control" id="grad_militar" name="grad_militar" value="{{ student.grad_militar if student else '' }}" placeholder="ex: Sdt., Cap., Plt.maj." required>
+                            <input type="text" class="form-control" id="grad_militar" name="grad_militar" value="{{ student.grad_militar if student else (form_data.grad_militar if form_data else '') }}" placeholder="ex: Sdt., Cap., Plt.maj." required>
                             <small class="form-text text-muted">Exemple: Sdt. (Soldat), Frt. (Fruntaș), Cap. (Caporal), Sg. (Sergent) etc.</small>
                         </div>
 
                         <div class="mb-3">
                             <label for="id_unic_student" class="form-label">ID Unic Student (Opțional)</label>
-                            <input type="text" class="form-control" id="id_unic_student" name="id_unic_student" value="{{ student.id_unic_student if student and student.id_unic_student else '' }}" placeholder="ex: Număr matricol, CNP">
+                            <input type="text" class="form-control" id="id_unic_student" name="id_unic_student" value="{{ student.id_unic_student if student and student.id_unic_student else (form_data.id_unic_student if form_data else '') }}" placeholder="ex: Număr matricol, CNP">
                             <small class="form-text text-muted">Acest ID trebuie să fie unic în tot sistemul dacă este completat.</small>
                         </div>
 
                         <div class="mb-3">
                             <label for="gender" class="form-label">Gen <span class="text-danger">*</span></label>
                             <select class="form-select" id="gender" name="gender" required>
-                                <option value="" disabled {% if not student or not student.gender %}selected{% endif %}>Selectează genul...</option>
-                                <option value="M" {% if student and student.gender == 'M' %}selected{% endif %}>Masculin</option>
-                                <option value="F" {% if student and student.gender == 'F' %}selected{% endif %}>Feminin</option>
-                                <option value="Nespecificat" {% if student and student.gender == 'Nespecificat' %}selected{% endif %}>Nespecificat</option>
+                                <option value="" disabled {% if not student and not (form_data and form_data.gender) %}selected{% endif %}>Selectează genul...</option>
+                                {% for g_val in genders %} {# Presupunând că 'genders' este pasat din view #}
+                                <option value="{{ g_val }}"
+                                        {% if student and student.gender == g_val %}selected
+                                        {% elif form_data and form_data.gender == g_val %}selected
+                                        {% endif %}>
+                                    {{ g_val }}
+                                </option>
+                                {% endfor %}
                             </select>
                         </div>
 
@@ -51,33 +69,41 @@
                         <div class="row">
                             <div class="col-md-4 mb-3">
                                 <label for="pluton" class="form-label">Pluton <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="pluton" name="pluton" value="{{ student.pluton if student else (current_user.username.split('_')[0] if '_' in current_user.username else '') }}" required placeholder="ex: 1, 2, 3">
+                                <input type="text" class="form-control" id="pluton" name="pluton" value="{{ student.pluton if student else (form_data.pluton if form_data else (current_user.username.split('_')[0] if '_' in current_user.username and current_user.role == 'gradat' else '')) }}" required placeholder="ex: 1, 2, 3">
                                 <small class="form-text text-muted">Plutonul.</small>
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label for="companie" class="form-label">Companie <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="companie" name="companie" value="{{ student.companie if student else '' }}" required placeholder="ex: 1, 2, 3">
+                                <input type="text" class="form-control" id="companie" name="companie" value="{{ student.companie if student else (form_data.companie if form_data else '') }}" required placeholder="ex: 1, 2, 3">
                                  <small class="form-text text-muted">Compania.</small>
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label for="batalion" class="form-label">Batalion <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="batalion" name="batalion" value="{{ student.batalion if student else '' }}" required placeholder="ex: 1, 2, 3">
+                                <input type="text" class="form-control" id="batalion" name="batalion" value="{{ student.batalion if student else (form_data.batalion if form_data else '') }}" required placeholder="ex: 1, 2, 3">
                                 <small class="form-text text-muted">Batalionul.</small>
                             </div>
                         </div>
 
+                        {% if current_user.role == 'admin' and student and student.este_gradat_activ %}
+                        <h5 class="mt-4 mb-3">Detalii Gradat Activ</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="pluton_gradat_la" class="form-label">Plutonul la care este Gradat:</label>
+                                <input type="text" class="form-control" id="pluton_gradat_la" name="pluton_gradat_la" value="{{ student.pluton_gradat_la if student.pluton_gradat_la else '' }}" placeholder="Ex: 1 (din aceeași companie)">
+                                <small class="form-text text-muted">Lăsați gol dacă își exercită funcția în plutonul de bază ({{ student.pluton }}).</small>
+                            </div>
+                        </div>
+                        {% elif current_user.role == 'admin' and student and not student.este_gradat_activ %}
+                        <p class="mt-3 text-muted"><small>Studentul nu este marcat ca "Gradat Activ". Puteți activa statusul din <a href="{{url_for('list_students')}}">lista de studenți</a>.</small></p>
+                        {% endif %}
+
                         <hr>
                         <div class="d-flex justify-content-between">
                             <a href="{{ url_for('list_students') }}" class="btn btn-outline-secondary">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-left-circle" viewBox="0 0 16 16">
-                                    <path fill-rule="evenodd" d="M1 8a7 7 0 1 0 14 0A7 7 0 0 0 1 8zm15 0A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-4.5-.5a.5.5 0 0 1 0 1H5.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L5.707 7.5H11.5z"/>
-                                </svg>
-                                Anulare
+                                <i class="fas fa-times me-1"></i> Anulare
                             </a>
                             <button type="submit" class="btn btn-primary">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check-circle-fill" viewBox="0 0 16 16">
-                                    <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
-                                </svg>
+                                <i class="fas fa-save me-1"></i>
                                 {% if student %}Salvează Modificările{% else %}Adaugă Student{% endif %}
                             </button>
                         </div>
