@@ -18,7 +18,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
-login_manager.login_view = 'login'
+login_manager.login_view = 'admin_login' # Changed 'login' to 'admin_login'
 login_manager.login_message_category = 'info'
 login_manager.login_message = "Te rugăm să te autentifici pentru a accesa această pagină."
 
