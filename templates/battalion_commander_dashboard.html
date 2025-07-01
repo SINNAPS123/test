@@ -34,22 +34,14 @@
     <hr>
 
     {% macro display_presence_details(data, id_prefix) %}
-        {# Afișăm Gradați Activi în Plutonul Evaluat (dacă există) și studenții normali în formație #}
-        {% if data.in_formation_students_details or data.gradati_activi_in_pluton_evaluat_details %}
+        {% if data.in_formation_students_details %}
             <h6 class="mt-2 mb-1">
-                Prezenți în Formație
-                (<span class="count-formation">{{ data.in_formation_count }}</span>
-                {% if data.gradati_activi_in_pluton_evaluat_details %}
-                + <span class="count-gradati-here">{{ data.gradati_activi_in_pluton_evaluat_details|length }}</span> Gradați Activi Aici
-                {% endif %})
+                Prezenți în Formație (<span class="count-formation">{{ data.in_formation_count }}</span>)
                 <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-formation-details" aria-expanded="false" aria-controls="{{ id_prefix }}-formation-details">Detalii</button>
             </h6>
             <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-formation-details">
                 {% for item in data.in_formation_students_details %}
                     <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
-                {% endfor %}
-                {% for item in data.gradati_activi_in_pluton_evaluat_details %}
-                    <li class="list-group-item list-group-item-sm py-1 bg-light-info">{{ item }} <span class="badge bg-info-soft text-info">Gradat</span></li>
                 {% endfor %}
             </ul>
         {% endif %}
@@ -66,14 +58,13 @@
             </ul>
         {% endif %}
 
-        {# Afișăm Gradați din Plutonul curent (dacă e cazul) care sunt activi la ALT pluton #}
-        {% if data.gradati_activi_din_pluton_la_alt_pluton_details %}
+        {% if data.platoon_graded_duty_students_details %}
             <h6 class="mt-2 mb-1">
-                Gradați din Unitate Activi la Alt Pluton ({{ data.gradati_activi_din_pluton_la_alt_pluton_details|length }})
-                <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-gradati-altpl-details" aria-expanded="false" aria-controls="{{ id_prefix }}-gradati-altpl-details">Detalii</button>
+                Gradați Pluton ({{ data.platoon_graded_duty_count }})
+                <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-platoon-graded-details" aria-expanded="false" aria-controls="{{ id_prefix }}-platoon-graded-details">Detalii</button>
             </h6>
-            <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-gradati-altpl-details">
-                {% for item in data.gradati_activi_din_pluton_la_alt_pluton_details %}
+            <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-platoon-graded-details">
+                {% for item in data.platoon_graded_duty_students_details %}
                     <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
                 {% endfor %}
             </ul>
@@ -104,7 +95,7 @@
             <p>
                 <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ total_battalion_presence.efectiv_control }}</span><br>
                 <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ total_battalion_presence.efectiv_prezent_total }}</span>
-                <small class="d-block ms-3">(Din care: În formație: {{total_battalion_presence.in_formation_count}}, La servicii: {{total_battalion_presence.on_duty_count}})</small><br>
+                <small class="d-block ms-3">(Din care: În formație: {{total_battalion_presence.in_formation_count}}, La servicii: {{total_battalion_presence.on_duty_count}}, Gradați Pluton: {{total_battalion_presence.platoon_graded_duty_count}})</small><br>
                 <strong>Efectiv Absent Motivat (Ea):</strong> <span class="badge bg-danger fs-6">{{ total_battalion_presence.efectiv_absent_total }}</span>
             </p>
             {{ display_presence_details(total_battalion_presence, "total-battalion") }}
@@ -125,7 +116,7 @@
                 <p>
                     EC: <span class="badge bg-dark">{{ data.efectiv_control }}</span> |
                     Ep: <span class="badge bg-success">{{ data.efectiv_prezent_total }}</span>
-                    <small>(Formație: {{data.in_formation_count}}, Serviciu: {{data.on_duty_count}})</small> |
+                    <small>(Formație: {{data.in_formation_count}}, Serviciu: {{data.on_duty_count}}, Gradat Pluton: {{data.platoon_graded_duty_count}})</small> |
                     Ea: <span class="badge bg-danger">{{ data.efectiv_absent_total }}</span>
                 </p>
                 {{ display_presence_details(data, "company-" ~ loop.index) }}

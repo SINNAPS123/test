@@ -32,7 +32,7 @@ KNOWN_RANK_PATTERNS = [
     re.compile(r"^(Frt\.?)\s+", re.IGNORECASE), re.compile(r"^(Plt\.? Adj\.?)\s+", re.IGNORECASE), 
     re.compile(r"^(Plt\.? Maj\.?)\s+", re.IGNORECASE), re.compile(r"^(Plt\.?)\s+", re.IGNORECASE),
 ]
-MAX_GRADATI_ACTIVI = 14
+# MAX_GRADATI_ACTIVI a fost eliminat
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -42,8 +42,7 @@ class User(db.Model, UserMixin):
     unique_code = db.Column(db.String(100), unique=True, nullable=True)
     personal_code_hash = db.Column(db.String(256), nullable=True)
     is_first_login = db.Column(db.Boolean, default=True)
-    # Relație către SpecialGradedUser
-    special_graded_status = db.relationship('SpecialGradedUser', backref='user', uselist=False, cascade="all, delete-orphan")
+    # Relația către SpecialGradedUser a fost eliminată
 
     def set_password(self, password): self.password_hash = generate_password_hash(password)
     def check_password(self, password): return check_password_hash(self.password_hash, password) if self.password_hash else False
@@ -66,25 +65,14 @@ class Student(db.Model):
     created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     creator = db.relationship('User', backref=db.backref('students_created', lazy=True))
     # Câmpurile este_gradat_activ și pluton_gradat_la au fost eliminate
+    # Noul câmp pentru a marca un student ca având funcții de gradat pluton
+    is_platoon_graded_duty = db.Column(db.Boolean, default=False, nullable=False)
 
     def __repr__(self): 
-        user_obj = getattr(self, 'creator', None) # User object (creator of student record)
-        sgs_info = ""
-        if user_obj and user_obj.special_graded_status and user_obj.special_graded_status.is_active:
-            sgs_info = f" (SGS Activ la: {user_obj.special_graded_status.assigned_platoon_info or 'N/A'})"
-        return f'<Student {self.grad_militar} {self.nume} {self.prenume} - Pl.{self.pluton}{sgs_info}>'
-
-# Model nou pentru Gradați Speciali
-class SpecialGradedUser(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
-    is_active = db.Column(db.Boolean, default=False, nullable=False)
-    # Stochează informații despre unde își exercită atribuțiile (ex: "Plutonul 1 / Compania 1", "Comandant Compania 2", "Comandant Batalion 1")
-    assigned_platoon_info = db.Column(db.String(100), nullable=True) 
-    # user = definit prin backref din User.special_graded_status
-
-    def __repr__(self):
-        return f'<SpecialGradedUser UserID: {self.user_id} Active: {self.is_active} At: {self.assigned_platoon_info}>'
+        # sgs_info a fost eliminat deoarece SpecialGradedUser este eliminat
+        # și statusul de gradat pluton este acum direct pe student.
+        graded_duty_info = " (Gradat Pluton)" if self.is_platoon_graded_duty else ""
+        return f'<Student {self.grad_militar} {self.nume} {self.prenume} - Pl.{self.pluton}{graded_duty_info}>'
 
 class Permission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -237,69 +225,45 @@ def get_student_status(student_obj_or_user_obj, datetime_check):
     # Determină dacă obiectul pasat este Student sau User
     # și obține user_id și student_id (dacă e cazul)
     is_student_object = isinstance(student_obj_or_user_obj, Student)
-    # Va stoca informații despre creatorul studentului, dacă acesta e SGS.
-    # Nu va influența status_code-ul principal al studentului.
-    sgs_info_for_student_context = None
 
     if is_student_object:
         student_id_to_check = student_obj_or_user_obj.id
-
-        # Verificăm statusul SGS al creatorului studentului pentru context, dar nu pentru a seta statusul studentului ca SGS.
-        if student_obj_or_user_obj.creator:
-            creator_sgs = SpecialGradedUser.query.filter_by(user_id=student_obj_or_user_obj.creator.id, is_active=True).first()
-            if creator_sgs:
-                sgs_info_for_student_context = {
-                    "creator_username": student_obj_or_user_obj.creator.username,
-                    "assigned_platoon_info": creator_sgs.assigned_platoon_info
-                }
-
+        # Logica pentru sgs_info_for_student_context a fost eliminată deoarece SpecialGradedUser a fost eliminat.
+        
         # Verificări statusuri specifice studentului (serviciu, permisie, etc.)
+        # Acestea vor fi extinse ulterior pentru a include noul status is_platoon_graded_duty
         active_service = ServiceAssignment.query.filter(ServiceAssignment.student_id == student_id_to_check, ServiceAssignment.start_datetime <= datetime_check, ServiceAssignment.end_datetime >= datetime_check).order_by(ServiceAssignment.start_datetime).first()
-        if active_service:
-            return {"status_code": "on_duty", "reason": f"Serviciu ({active_service.service_type})", "until": active_service.end_datetime, "details": f"Serviciu: {active_service.service_type}", "object": active_service, "participates_in_roll_call": active_service.participates_in_roll_call, "sgs_info_for_student_context": sgs_info_for_student_context}
+        if active_service: 
+            return {"status_code": "on_duty", "reason": f"Serviciu ({active_service.service_type})", "until": active_service.end_datetime, "details": f"Serviciu: {active_service.service_type}", "object": active_service, "participates_in_roll_call": active_service.participates_in_roll_call }
         
         active_permission = Permission.query.filter(Permission.student_id == student_id_to_check, Permission.status == 'Aprobată', Permission.start_datetime <= datetime_check, Permission.end_datetime >= datetime_check).order_by(Permission.start_datetime).first()
-        if active_permission:
-            return {"status_code": "absent_permission", "reason": "Permisie", "until": active_permission.end_datetime, "details": "Permisie", "object": active_permission, "sgs_info_for_student_context": sgs_info_for_student_context}
+        if active_permission: 
+            return {"status_code": "absent_permission", "reason": "Permisie", "until": active_permission.end_datetime, "details": "Permisie", "object": active_permission }
         
         weekend_leaves = WeekendLeave.query.filter(WeekendLeave.student_id == student_id_to_check, WeekendLeave.status == 'Aprobată').all()
         for wl in weekend_leaves:
             for interval in wl.get_intervals():
-                if interval['start'] <= datetime_check <= interval['end']:
-                    return {"status_code": "absent_weekend_leave", "reason": f"Învoire Weekend ({interval['day_name']})", "until": interval['end'], "details": f"Învoire Weekend: {interval['day_name']}", "object": wl, "sgs_info_for_student_context": sgs_info_for_student_context}
+                if interval['start'] <= datetime_check <= interval['end']: 
+                    return {"status_code": "absent_weekend_leave", "reason": f"Învoire Weekend ({interval['day_name']})", "until": interval['end'], "details": f"Învoire Weekend: {interval['day_name']}", "object": wl }
         
         daily_leaves = DailyLeave.query.filter(DailyLeave.student_id == student_id_to_check, DailyLeave.status == 'Aprobată').all()
         for dl in daily_leaves:
-            if dl.start_datetime <= datetime_check <= dl.end_datetime:
-                return {"status_code": "absent_daily_leave", "reason": f"Învoire Zilnică ({dl.leave_type_display})", "until": dl.end_datetime, "details": f"Învoire Zilnică: {dl.leave_type_display}", "object": dl, "sgs_info_for_student_context": sgs_info_for_student_context}
-
-        # Dacă studentul nu are niciunul din statusurile de mai sus, este prezent.
-        return {"status_code": "present", "reason": "Prezent", "until": None, "details": "Prezent", "object": student_obj_or_user_obj, "sgs_info_for_student_context": sgs_info_for_student_context}
+            if dl.start_datetime <= datetime_check <= dl.end_datetime: 
+                return {"status_code": "absent_daily_leave", "reason": f"Învoire Zilnică ({dl.leave_type_display})", "until": dl.end_datetime, "details": f"Învoire Zilnică: {dl.leave_type_display}", "object": dl }
+        
+        # Verifică dacă studentul are statutul de "Gradat Pluton"
+        # Acest status are prioritate mai mică decât permisiile, învoirile și serviciile normale.
+        if student_obj_or_user_obj.is_platoon_graded_duty:
+            return {"status_code": "platoon_graded_duty", "reason": "Gradat Pluton", "until": None, "details": "Activitate Gradat Pluton", "object": student_obj_or_user_obj }
+            
+        # Dacă studentul nu are niciunul din statusurile de mai sus, este prezent în formație.
+        return {"status_code": "present", "reason": "Prezent în formație", "until": None, "details": "Prezent în formație", "object": student_obj_or_user_obj }
 
     elif isinstance(student_obj_or_user_obj, User):
-        user_id_to_check = student_obj_or_user_obj.id
-        # Verifică dacă User-ul este un Gradat Special Activ
-        sgs = SpecialGradedUser.query.filter_by(user_id=user_id_to_check, is_active=True).first()
-        if sgs:
-            username_sgs = student_obj_or_user_obj.username # Userul este direct student_obj_or_user_obj
-            reason_sgs = f"Gradat Special ({username_sgs})"
-            if sgs.assigned_platoon_info:
-                reason_sgs += f" - {sgs.assigned_platoon_info}"
-            else:
-                reason_sgs += " - Activitate Comandă/Gradat"
-            
-            return {
-                "status_code": "special_graded_duty", # Acest status este corect aici, pentru un User
-                "reason": reason_sgs,
-                "until": None, 
-                "details": reason_sgs,
-                "object": sgs, 
-                "assigned_platoon_info": sgs.assigned_platoon_info,
-                "pluton_baza_student": None # Nu e un student, deci nu are pluton de bază în acest context
-            }
-
-        # Dacă User-ul nu este SGS activ și nu e student, statusul e nedefinit pentru prezență
-        return {"status_code": "undefined_for_user_role", "reason": "Status nedefinit pentru acest rol de utilizator fără atribuții de student/gradat special activ", "until": None, "details": "N/A"}
+        # Logica pentru SpecialGradedUser a fost eliminată.
+        # Un User nu mai are status de 'special_graded_duty' prin această funcție.
+        # Statusul de gradat este acum doar la nivel de Student (is_platoon_graded_duty).
+        return {"status_code": "undefined_for_user_role", "reason": "Status de prezență nedefinit pentru un User. Doar Studenții au status de prezență.", "until": None, "details": "N/A"}
 
     else: # Tip necunoscut
         return {"status_code": "unknown", "reason": "Tip obiect necunoscut", "until": None, "details": "Eroare internă"}
@@ -398,12 +362,12 @@ def user_login():
             if not user.is_first_login and user.check_personal_code(login_code):
                 user_by_personal_code = user
                 break
-
+        
         if user_by_personal_code:
             login_user(user_by_personal_code)
             flash('Autentificare utilizator reușită!', 'success')
             return redirect(url_for('dashboard'))
-
+        
         flash('Cod invalid sau expirat.', 'danger')
     return render_template('user_login.html')
 
@@ -413,7 +377,7 @@ def set_personal_code():
     if current_user.role == 'admin': # Adminii nu folosesc cod personal în acest flux
         flash('Administratorii nu setează cod personal prin acest formular.', 'warning')
         return redirect(url_for('admin_dashboard'))
-
+    
     if not current_user.is_first_login and current_user.personal_code_hash:
          # Verificăm dacă nu cumva a ajuns aici un user care are deja cod setat și nu e un reset
          # Ar putea fi cazul în care adminul i-a resetat unique_code, și is_first_login e True din nou.
@@ -438,7 +402,7 @@ def set_personal_code():
             # Sau direct redirect la dashboard dacă login_user încă e activ și sesiunea e validă
             # Alegem redirect la dashboard, deoarece login_user a fost apelat anterior.
             return redirect(url_for('dashboard'))
-
+    
     return render_template('set_personal_code.html')
 
 # --- Autentificare Admin ---
@@ -459,12 +423,9 @@ def admin_login():
 @login_required
 def admin_dashboard():
     if current_user.role != 'admin': flash('Acces neautorizat.', 'danger'); return redirect(url_for('home'))
-    # Numărul de gradați activi se va lua acum din tabela SpecialGradedUser
-    active_special_graded_count = SpecialGradedUser.query.filter_by(is_active=True).count()
+    # Logica pentru active_special_graded_count și MAX_GRADATI_ACTIVI a fost eliminată
     return render_template('admin_dashboard.html', 
-                           users=User.query.filter(User.role != 'admin').all(),
-                           active_special_graded_count=active_special_graded_count, # Actualizat
-                           max_gradati_activi=MAX_GRADATI_ACTIVI)
+                           users=User.query.filter(User.role != 'admin').all())
 
 
 @app.route('/admin/create_user', methods=['POST'])
@@ -534,77 +495,12 @@ def admin_delete_user(user_id):
 
 # ... (restul rutelor admin, user, gradat, student management vor fi actualizate pentru a elimina referințele la student.este_gradat_activ)
 # ... și pentru a integra logica SpecialGradedUser unde e necesar.
-# ... De exemplu, list_students pentru admin nu va mai afișa coloana "Gradat Activ" din Student, ci va trebui să facă un join sau o verificare separată cu SpecialGradedUser.
+# ... De exemplu, list_students pentru admin nu va mai afișa coloana "Gradat Activ" din Student, ci va trebui să facă un join sau o verificare separată cu SpecialGradedUser. # Comentariu vechi, irelevant.
 
-# --- Rută nouă pentru managementul Gradaților Speciali ---
-@app.route('/admin/special_graded_users', methods=['GET', 'POST'])
-@login_required
-def admin_manage_special_graded():
-    if current_user.role != 'admin':
-        flash("Acces neautorizat.", "danger")
-        return redirect(url_for('dashboard'))
+# --- Ruta pentru managementul Gradaților Speciali a fost eliminată ---
 
-    if request.method == 'POST':
-        user_id = request.form.get('user_id', type=int)
-        action = request.form.get('action')
-        assigned_info = request.form.get(f'assigned_platoon_info_{user_id}', '').strip()
-
-        user_to_manage = User.query.get_or_404(user_id)
-        sgs_entry = SpecialGradedUser.query.filter_by(user_id=user_id).first()
-        active_special_graded_count = SpecialGradedUser.query.filter_by(is_active=True).count()
-
-        if action == 'activate':
-            if active_special_graded_count >= MAX_GRADATI_ACTIVI and (not sgs_entry or not sgs_entry.is_active):
-                flash(f'Nu se pot activa mai mult de {MAX_GRADATI_ACTIVI} gradați speciali.', 'warning')
-            else:
-                if not sgs_entry:
-                    sgs_entry = SpecialGradedUser(user_id=user_id, is_active=True, assigned_platoon_info=assigned_info if assigned_info else None)
-                    db.session.add(sgs_entry)
-                else:
-                    sgs_entry.is_active = True
-                    sgs_entry.assigned_platoon_info = assigned_info if assigned_info else None
-                flash(f'Utilizatorul {user_to_manage.username} a fost setat ca Gradat Special Activ.', 'success')
-                db.session.commit()
-        elif action == 'deactivate':
-            if sgs_entry:
-                sgs_entry.is_active = False
-                # Opțional: sgs_entry.assigned_platoon_info = None
-                flash(f'Utilizatorul {user_to_manage.username} a fost dezactivat ca Gradat Special.', 'success')
-                db.session.commit()
-        elif action == 'update_info': # Doar pentru actualizarea informației, fără a schimba statusul activ
-            if sgs_entry:
-                sgs_entry.assigned_platoon_info = assigned_info if assigned_info else None
-                flash(f'Informațiile pentru Gradatul Special {user_to_manage.username} au fost actualizate.', 'success')
-                db.session.commit()
-            else:
-                flash(f'Utilizatorul {user_to_manage.username} nu este încă în lista de Gradați Speciali. Activați-l întâi.', 'warning')
-        
-        return redirect(url_for('admin_manage_special_graded'))
-
-    # GET request: Afișează lista
-    # Utilizatori eligibili: toți cei care nu sunt 'student' simplu. Sau toți utilizatorii.
-    # Vom lua toți utilizatorii și vom afișa statusul lor special.
-    users = User.query.order_by(User.username).all()
-    active_special_graded_count = SpecialGradedUser.query.filter_by(is_active=True).count()
-    
-    # Join pentru a obține informațiile SpecialGradedUser pentru fiecare User
-    users_with_sgs_status = []
-    for u in users:
-        sgs = u.special_graded_status # Folosind backref
-        users_with_sgs_status.append({
-            'user': u,
-            'sgs_is_active': sgs.is_active if sgs else False,
-            'sgs_assigned_info': sgs.assigned_platoon_info if sgs else ""
-        })
-
-    return render_template('admin_manage_special_graded.html', 
-                           users_with_sgs_status=users_with_sgs_status,
-                           active_special_graded_count=active_special_graded_count,
-                           max_gradati_activi=MAX_GRADATI_ACTIVI)
-
-
-# Se elimină /admin/toggle_gradat_status/<int:student_id> deoarece managementul se face prin noua pagină.
-# Se actualizează list_students pentru a nu mai afișa butoane de toggle gradat.
+# Se elimină /admin/toggle_gradat_status/<int:student_id> deoarece managementul se face prin noua pagină. # Comentariu vechi, irelevant.
+# Se actualizează list_students pentru a nu mai afișa butoane de toggle gradat. # Comentariu vechi, irelevant.
 
 # --- Management Studenți ---
 @app.route('/gradat/students') 
@@ -614,7 +510,8 @@ def list_students():
     if current_user.role == 'admin':
         page = request.args.get('page', 1, type=int)
         per_page = 25 
-        query = Student.query.join(User, Student.created_by_user_id == User.id).options(db.joinedload(Student.creator).joinedload(User.special_graded_status))
+        # query = Student.query.join(User, Student.created_by_user_id == User.id).options(db.joinedload(Student.creator).joinedload(User.special_graded_status)) # Vechiul query
+        query = Student.query.join(User, Student.created_by_user_id == User.id).options(db.joinedload(Student.creator)) # Query simplificat
         search_term = request.args.get('search', '')
         filter_batalion = request.args.get('batalion', '')
         filter_companie = request.args.get('companie', '')
@@ -667,9 +564,12 @@ def edit_student(student_id):
     if request.method == 'POST':
         form = request.form
         s_edit.nume, s_edit.prenume, s_edit.grad_militar, s_edit.pluton, s_edit.companie, s_edit.batalion = form.get('nume'), form.get('prenume'), form.get('grad_militar'), form.get('pluton'), form.get('companie'), form.get('batalion')
-        s_edit.gender = form.get('gender') 
+        s_edit.gender = form.get('gender')
         new_id_unic = form.get('id_unic_student')
-        # Câmpul pluton_gradat_la nu se mai editează aici, ci în pagina de management SpecialGradedUser
+        # Setare pentru is_platoon_graded_duty - doar adminii pot modifica acest câmp
+        if current_user.role == 'admin':
+            s_edit.is_platoon_graded_duty = 'is_platoon_graded_duty' in form # Checkbox value
+        
         if not all([s_edit.nume, s_edit.prenume, s_edit.grad_militar, s_edit.pluton, s_edit.companie, s_edit.batalion, s_edit.gender]): flash('Toate câmpurile marcate cu * sunt obligatorii (inclusiv genul).', 'warning')
         elif s_edit.gender not in GENDERS: flash('Valoare invalidă pentru gen.', 'warning')
         else:
@@ -814,37 +714,51 @@ def presence_report():
         # Pentru raportul gradatului, ne interesează doar studenții lui
         students = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.nume, Student.prenume).all()
         ec = len(students)
-        in_formation_count = 0; in_formation_list_details = []; on_duty_list_details = []; absent_list_details = []
-        special_graded_list_details = [] # Pentru gradații speciali din plutonul gradatului
+        in_formation_count = 0
+        on_duty_count = 0
+        platoon_graded_duty_count = 0
+        absent_count = 0
+        
+        in_formation_list_details = []
+        on_duty_list_details = []
+        platoon_graded_duty_list_details = []
+        absent_list_details = []
 
         for stud in students:
-            s_info = get_student_status(stud, dt_check) # get_student_status ia student ca argument
+            s_info = get_student_status(stud, dt_check)
+            student_display_info = f"{stud.grad_militar} {stud.nume} {stud.prenume}"
+
             if s_info['status_code'] == 'present':
                 in_formation_count += 1
-                in_formation_list_details.append(f"{stud.grad_militar} {stud.nume} {stud.prenume} - Prezent în formație")
+                in_formation_list_details.append(f"{student_display_info} - Prezent în formație")
             elif s_info['status_code'] == 'on_duty':
-                on_duty_list_details.append(f"{stud.grad_militar} {stud.nume} {stud.prenume} - {s_info['reason']}")
-            elif s_info['status_code'] == 'special_graded_duty':
-                 # Chiar dacă e gradat special, în raportul plutonului de bază (al gradatului) e considerat prezent
-                 # dar cu mențiunea că e gradat special.
-                 special_graded_list_details.append(f"{stud.grad_militar} {stud.nume} {stud.prenume} - {s_info['reason']}")
-            else: 
-                detail = f"{stud.grad_militar} {stud.nume} {stud.prenume} - {s_info['reason']}"
+                on_duty_count += 1
+                on_duty_list_details.append(f"{student_display_info} - {s_info['reason']}")
+            elif s_info['status_code'] == 'platoon_graded_duty':
+                platoon_graded_duty_count +=1
+                platoon_graded_duty_list_details.append(f"{student_display_info} - {s_info['reason']}")
+            else: # Absențe
+                absent_count +=1
+                detail = f"{student_display_info} - {s_info['reason']}"
                 if s_info['until']: detail += f" (până la {s_info['until'].strftime('%d.%m %H:%M')})"
                 absent_list_details.append(detail)
         
-        efectiv_prezent_total = in_formation_count + len(on_duty_list_details) + len(special_graded_list_details)
-        efectiv_absent_count = ec - efectiv_prezent_total
-        
-        # Combinăm on_duty cu special_graded pentru afișare simplificată în raportul gradatului
-        combined_on_duty_special_list = sorted(on_duty_list_details + special_graded_list_details)
+        efectiv_prezent_total = in_formation_count + on_duty_count + platoon_graded_duty_count
+        # efectiv_absent_count = ec - efectiv_prezent_total # Sau absent_count, ar trebui să fie la fel
 
         report_data = {
-            "title": report_title, "datetime_checked": report_time_str, "efectiv_control": ec, 
-            "efectiv_prezent_total": efectiv_prezent_total, "in_formation_count": in_formation_count,
+            "title": report_title, 
+            "datetime_checked": report_time_str, 
+            "efectiv_control": ec, 
+            "efectiv_prezent_total": efectiv_prezent_total, 
+            "in_formation_count": in_formation_count,
             "in_formation_list": sorted(in_formation_list_details), 
-            "on_duty_list": combined_on_duty_special_list, 
-            "efectiv_absent_count": efectiv_absent_count, "efectiv_absent_list": sorted(absent_list_details)
+            "on_duty_count": on_duty_count,
+            "on_duty_list": sorted(on_duty_list_details),
+            "platoon_graded_duty_count": platoon_graded_duty_count,
+            "platoon_graded_duty_list": sorted(platoon_graded_duty_list_details),
+            "efectiv_absent_count": absent_count, # Folosim direct absent_count
+            "efectiv_absent_list": sorted(absent_list_details)
         }
     return render_template('presence_report.html', report_data=report_data, current_datetime_str=datetime.now().strftime("%Y-%m-%dT%H:%M"))
 
@@ -857,7 +771,7 @@ def get_aggregated_presence_data(target_students_query, datetime_check, unit_typ
     efectiv_control = len(students_list)
     
     in_formation_count = 0
-    on_duty_count = 0
+    on_duty_count = 0 
     
     in_formation_students_details = []
     on_duty_students_details = []
@@ -871,7 +785,7 @@ def get_aggregated_presence_data(target_students_query, datetime_check, unit_typ
         sgs_context = status_info.get('sgs_info_for_student_context')
         
         student_display_info = f"{student_obj.grad_militar} {student_obj.nume} {student_obj.prenume} (Pl.Bază: {student_obj.pluton})"
-
+        
         # Opțional: Adaugă informații despre creatorul SGS în detalii, dacă există
         # Exemplu: if sgs_context: student_display_info += f" [CmdSef: {sgs_context['creator_username']}(SGS)]"
 
@@ -891,8 +805,8 @@ def get_aggregated_presence_data(target_students_query, datetime_check, unit_typ
             absent_students_details.append(absent_detail)
 
     efectiv_absent_total = len(absent_students_details)
-    efectiv_prezent_total = in_formation_count + on_duty_count
-
+    efectiv_prezent_total = in_formation_count + on_duty_count 
+    
     # Verificare de consistență opțională:
     # if efectiv_control != (efectiv_prezent_total + efectiv_absent_total):
     #     flash(f"Inconsistență calcul efective pentru {unit_type} {unit_id_str}: EC={efectiv_control}, EP={efectiv_prezent_total}, EA={efectiv_absent_total}", "warning")

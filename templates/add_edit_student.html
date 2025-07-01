@@ -84,17 +84,18 @@
                             </div>
                         </div>
                         
-                        {% if current_user.role == 'admin' and student and student.este_gradat_activ %}
-                        <h5 class="mt-4 mb-3">Detalii Gradat Activ</h5>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="pluton_gradat_la" class="form-label">Plutonul la care este Gradat:</label>
-                                <input type="text" class="form-control" id="pluton_gradat_la" name="pluton_gradat_la" value="{{ student.pluton_gradat_la if student.pluton_gradat_la else '' }}" placeholder="Ex: 1 (din aceeași companie)">
-                                <small class="form-text text-muted">Lăsați gol dacă își exercită funcția în plutonul de bază ({{ student.pluton }}).</small>
-                            </div>
+                        {% if current_user.role == 'admin' %}
+                        <hr>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="is_platoon_graded_duty" name="is_platoon_graded_duty" {% if student and student.is_platoon_graded_duty %}checked{% elif form_data and form_data.get('is_platoon_graded_duty') %}checked{% endif %}>
+                            <label class="form-check-label" for="is_platoon_graded_duty">
+                                <strong>Desemnat Gradat Pluton</strong>
+                            </label>
+                            <small class="form-text text-muted d-block">
+                                Marchează acest student ca având funcții de gradat în cadrul plutonului său.
+                                Va fi raportat separat și va avea reguli specifice de prezență și permisii (conform definirii).
+                            </small>
                         </div>
-                        {% elif current_user.role == 'admin' and student and not student.este_gradat_activ %}
-                        <p class="mt-3 text-muted"><small>Studentul nu este marcat ca "Gradat Activ". Puteți activa statusul din <a href="{{url_for('list_students')}}">lista de studenți</a>.</small></p>
                         {% endif %}
 
                         <hr>
