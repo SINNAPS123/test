@@ -194,7 +194,7 @@ class ServiceAssignment(db.Model):
     def is_past(self): now = datetime.now(); return self.end_datetime < now
 
 @login_manager.user_loader
-def load_user(user_id): return User.query.get(int(user_id))
+def load_user(user_id): return db.session.get(User, int(user_id)) # Actualizat SQLAlchemy 2.0
 
 def init_db():
     with app.app_context():
@@ -372,11 +372,23 @@ def set_personal_code():
 
     return render_template('set_personal_code.html')
 
+@app.route('/admin/dashboard') # Ruta specifică pentru admin dashboard
+@login_required
+def admin_dashboard_route():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat la panoul de administrare.', 'danger')
+        return redirect(url_for('dashboard'))
+    # Aici poți adăuga logica specifică pentru admin dashboard, ex: număr total de utilizatori, studenți etc.
+    total_users = User.query.count()
+    total_students = Student.query.count()
+    # Presupunând că există un template admin_dashboard.html
+    return render_template('admin_dashboard.html', total_users=total_users, total_students=total_students)
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
     if current_user.role == 'admin':
-        return redirect(url_for('admin_dashboard'))
+        return redirect(url_for('admin_dashboard_route')) # Corectat pentru a apela noua funcție
     elif current_user.role == 'gradat':
         # Calcul statistici pentru dashboard gradat
         student_count = Student.query.filter_by(created_by_user_id=current_user.id).count()
