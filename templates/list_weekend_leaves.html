@@ -79,9 +79,13 @@
                                 <span class="text-muted fst-italic small">Expirată</span>
                             {% elif leave.status == 'Anulată' %}
                                 <span class="text-muted fst-italic small">Anulată</span>
-                            {% else %}
-                                <span class="text-muted">-</span>
                             {% endif %}
+                            {# Buton de ștergere permanentă #}
+                            <form method="POST" action="{{ url_for('delete_weekend_leave', leave_id=leave.id) }}" class="d-inline" onsubmit="return confirm('Ești sigur că vrei să ȘTERGI PERMANENT această învoire de weekend? Această acțiune nu poate fi anulată.');">
+                                <button type="submit" class="btn btn-sm btn-danger py-0 px-1 ms-1" title="Șterge Învoirea de Weekend Permanent">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </form>
                         </td>
                     </tr>
                     {% endfor %}
