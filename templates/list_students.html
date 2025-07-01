@@ -150,27 +150,7 @@
                                 <i class="fas fa-trash-alt"></i>
                             </button>
                         </form>
-
-                        {% if is_admin_view %}
-                            <form action="{{ url_for('admin_toggle_gradat_status', student_id=student.id) }}" method="POST" class="d-inline ms-1">
-                                {% if student.este_gradat_activ %}
-                                    <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1" title="Dezactivează ca Gradat">
-                                        <i class="fas fa-user-slash"></i>
-                                    </button>
-                                {% else %}
-                                    {# Verificăm dacă putem adăuga un nou gradat activ #}
-                                    {% if active_gradati_count < max_gradati_activi %}
-                                    <button type="submit" class="btn btn-outline-success btn-sm py-0 px-1" title="Activează ca Gradat">
-                                        <i class="fas fa-user-check"></i>
-                                    </button>
-                                    {% else %}
-                                    <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" title="Număr maxim de gradați activi atins" disabled>
-                                        <i class="fas fa-user-plus"></i>
-                                    </button>
-                                    {% endif %}
-                                {% endif %}
-                            </form>
-                        {% endif %} {# end is_admin_view for toggle gradat button #}
+                        {# Funcționalitatea de toggle 'gradat de companie' a fost eliminată #}
                     </td>
                 </tr>
                 {% endfor %}
