@@ -623,11 +623,10 @@ def _get_commander_unit_id(username, role_prefix):
     # Assumes username like "CmdC1", "CmdB12"
     # role_prefix should be "CmdC" or "CmdB"
     if username.startswith(role_prefix):
-        try:
-            return username[len(role_prefix):]
-        except ValueError:
-            return None
-    return None
+        unit_id_part = username[len(role_prefix):]
+        if unit_id_part:  # Checks if the string is not empty
+            return unit_id_part
+    return None # Return None if prefix doesn't match or if ID part is empty
 
 # --- Helper function to determine standard roll call time ---
 def get_standard_roll_call_datetime(for_date=None):

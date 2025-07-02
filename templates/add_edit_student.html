@@ -89,7 +89,7 @@
                         {% if current_user.role == 'gradat' or current_user.role == 'admin' %}
                         <hr>
                         <div class="mb-3 form-check">
-                            <input type="checkbox" class="form-check-input" id="is_platoon_graded_duty" name="is_platoon_graded_duty" {% if student and student.is_platoon_graded_duty %}checked{% elif form_data and form_data.get('is_platoon_graded_duty') %}checked{% endif %}>
+                            <input type="checkbox" class="form-check-input" id="is_platoon_graded_duty" name="is_platoon_graded_duty" {% if student and student.is_platoon_graded_duty %}checked{% elif form_data and form_data.is_platoon_graded_duty %}checked{% endif %}>
                             <label class="form-check-label" for="is_platoon_graded_duty">
                                 <strong>Desemnat Gradat Pluton</strong>
                             </label>
