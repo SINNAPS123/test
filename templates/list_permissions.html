@@ -38,7 +38,9 @@
                         <th>Grad</th>
                         <th>De la</th>
                         <th>Până la</th>
-                        <th>Motiv</th>
+                        <th>Destinație</th>
+                        <th>Transport</th>
+                        <th>Motiv/Obs.</th>
                         <th>Status</th>
                         <th>Acțiuni</th>
                     </tr>
@@ -50,6 +52,8 @@
                         <td>{{ p.student.grad_militar }}</td>
                         <td>{{ p.start_datetime.strftime('%d-%m-%Y %H:%M') }}</td>
                         <td>{{ p.end_datetime.strftime('%d-%m-%Y %H:%M') }}</td>
+                        <td>{{ p.destination if p.destination else '-' }}</td>
+                        <td>{{ p.transport_mode if p.transport_mode else '-' }}</td>
                         <td>{{ p.reason if p.reason else '-' }}</td>
                         <td>
                             {% if p.status == 'Aprobată' %}

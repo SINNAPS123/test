@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>{{ title }} <span class="badge bg-secondary fs-6 align-middle">Total: {{ services_pagination.total }}</span></h2>
+        <a href="{{ url_for('admin_dashboard_route') }}" class="btn btn-outline-secondary btn-sm">&laquo; Admin Dashboard</a>
+    </div>
+
+    <form method="GET" action="{{ url_for('admin_list_services') }}" class="mb-4 p-3 border rounded bg-light">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label for="search_student_name" class="form-label">Nume Student</label>
+                <input type="text" name="search_student_name" id="search_student_name" class="form-control form-control-sm" value="{{ search_student_name or '' }}" placeholder="Nume/prenume student...">
+            </div>
+            <div class="col-md-3">
+                <label for="filter_service_type" class="form-label">Tip Serviciu</label>
+                <select name="filter_service_type" id="filter_service_type" class="form-select form-select-sm">
+                    <option value="">Toate Tipurile</option>
+                    {% for stype in service_types_for_filter %}
+                    <option value="{{ stype }}" {% if stype == filter_service_type %}selected{% endif %}>{{ stype }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="filter_service_date" class="form-label">Data Serviciu</label>
+                <input type="date" name="filter_service_date" id="filter_service_date" class="form-control form-control-sm" value="{{ filter_service_date or '' }}">
+            </div>
+            <div class="col-md-auto">
+                <button type="submit" class="btn btn-primary btn-sm">Filtrează</button>
+                <a href="{{ url_for('admin_list_services') }}" class="btn btn-outline-secondary btn-sm ms-2">Resetează</a>
+            </div>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-striped table-hover table-sm caption-top">
+            <caption>Lista tuturor serviciilor din sistem.</caption>
+            <thead>
+                <tr>
+                    <th scope="col">ID</th>
+                    <th scope="col">Student</th>
+                    <th scope="col">Unitate (B/C/P)</th>
+                    <th scope="col">Tip Serviciu</th>
+                    <th scope="col">Data Serviciu</th>
+                    <th scope="col">Interval Orar</th>
+                    <th scope="col">Participă Apel</th>
+                    <th scope="col">Note</th>
+                    <th scope="col">Creat de</th>
+                    <th scope="col">Acțiuni</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sa in services_pagination.items %}
+                <tr class="{{ 'table-success' if sa.is_active else ('table-warning' if sa.is_upcoming else 'table-secondary') }}">
+                    <td>{{ sa.id }}</td>
+                    <td>{{ sa.student.nume }} {{ sa.student.prenume }} <small class="text-muted">(ID: {{sa.student.id}})</small></td>
+                    <td>{{ sa.student.batalion }}/{{ sa.student.companie }}/{{ sa.student.pluton }}</td>
+                    <td><span class="badge bg-primary">{{ sa.service_type }}</span></td>
+                    <td>{{ sa.service_date.strftime('%d-%m-%Y') }}</td>
+                    <td>{{ sa.start_datetime.strftime('%H:%M') }} - {{ sa.end_datetime.strftime('%H:%M') }}
+                        {% if sa.end_datetime.date() > sa.start_datetime.date() %}<span class="badge bg-info text-dark" title="Trece în ziua următoare">(+1 zi)</span>{% endif %}
+                    </td>
+                    <td>{% if sa.participates_in_roll_call %}Da{% else %}Nu{% endif %}</td>
+                    <td>
+                        {% if sa.notes %}
+                            <span title="{{ sa.notes }}">{{ sa.notes | truncate(30, True) }}</span>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if sa.creator %}
+                            <span title="User ID: {{sa.creator.id}}">{{ sa.creator.username }}</span>
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                    <td>
+                        {# Admin Edit - TODO: Create/adapt admin_edit_service route #}
+                        {# <a href="{{ url_for('admin_edit_service', assignment_id=sa.id) }}" class="btn btn-sm btn-info py-0 px-1 me-1" title="Editare Serviciu (Admin)"><i class="fas fa-edit"></i></a> #}
+
+                        {# Admin Delete - TODO: Create/adapt admin_delete_service route if gradat's delete is not sufficient #}
+                        {# For now, gradat's delete_service_assignment exists. Admin needs own or role check in existing. #}
+                        <small class="text-muted">N/A pt. Admin momentan</small>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="10" class="text-center">Niciun serviciu găsit.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if services_pagination.pages > 1 %}
+    <nav aria-label="Page navigation">
+        <ul class="pagination justify-content-center">
+            {% if services_pagination.has_prev %}
+                <li class="page-item"><a class="page-link" href="{{ url_for('admin_list_services', page=services_pagination.prev_num, **request.args) }}">&laquo; Precedenta</a></li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">&laquo; Precedenta</span></li>
+            {% endif %}
+            {% for page_num in services_pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                {% if page_num %}
+                    {% if services_pagination.page == page_num %}
+                        <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                    {% else %}
+                        <li class="page-item"><a class="page-link" href="{{ url_for('admin_list_services', page=page_num, **request.args) }}">{{ page_num }}</a></li>
+                    {% endif %}
+                {% else %}
+                     {% if loop.previtem is number and loop.nextitem is number %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+            {% if services_pagination.has_next %}
+                <li class="page-item"><a class="page-link" href="{{ url_for('admin_list_services', page=services_pagination.next_num, **request.args) }}">Următoarea &raquo;</a></li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">Următoarea &raquo;</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+
+</div>
+{% endblock %}
