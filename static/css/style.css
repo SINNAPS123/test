@@ -2,8 +2,25 @@
 
 /* Preload style for dark mode to prevent FOUC */
 html.dark-mode-preload {
-    background-color: #1a1a1a; /* Fallback, should match --bg-main in dark mode */
+    --bg-main: #1a1a1a;
+    --bg-surface: #2c2c2c;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --border-color: #444444;
+    /* Add any other critical variables that define initial layout colors, like input backgrounds if they are prominent */
+    --input-bg: #333333;
+    --input-border: #555555;
+
+    background-color: var(--bg-main); /* Apply immediately */
+    color: var(--text-primary);      /* Apply immediately */
 }
+
+html.dark-mode-preload body {
+    background-color: var(--bg-main); /* Ensure body also gets the main background quickly */
+    color: var(--text-primary);
+    /* Surface elements like cards will pick up var(--bg-surface) from the html preload block */
+}
+
 
 /* Variabile de Culoare */
 :root {
@@ -59,8 +76,8 @@ body.dark-mode {
     --input-focus-border: #007bff;          /* Keep accent for focus, or use a lighter variant */
     --input-focus-shadow: rgba(0, 123, 255, 0.35); /* Adjusted alpha for dark bg */
 
-    --link-color: #4dabf7; /* Lighter blue for links in dark mode */
-    --link-hover-color: #74c0fc;
+    --link-color: #5cb8ff; /* Adjusted for better contrast on #2c2c2c (AA passed) */
+    --link-hover-color: #89cff0; /* Corresponding lighter hover */
 
     /* Shadows might need to be less pronounced or use a lighter color if the background is very dark */
     /* For simplicity, we'll keep them for now, but they might be less effective */
