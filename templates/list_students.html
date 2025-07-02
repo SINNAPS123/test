@@ -162,17 +162,17 @@
                     {% endif %} {# end is_admin_view for extra columns #}
                     <td>
                         {% if is_admin_view %}
-                        <a href="{{ url_for('admin_edit_student', student_id=student.id) }}" class="btn btn-info btn-sm py-0 px-1 me-1" title="Editare Student (Admin)">
+                        <a href="{{ url_for('admin_edit_student', student_id=student.id) }}" class="btn btn-info btn-sm py-0 px-1 me-1" title="Editează detaliile acestui student (mod Admin)">
                             <i class="fas fa-user-shield"></i> Edit
                         </a>
                         {% else %}
-                        <a href="{{ url_for('edit_student', student_id=student.id) }}" class="btn btn-warning btn-sm py-0 px-1 me-1" title="Editare Student">
+                        <a href="{{ url_for('edit_student', student_id=student.id) }}" class="btn btn-warning btn-sm py-0 px-1 me-1" title="Editează detaliile acestui student">
                             <i class="fas fa-edit"></i>
                         </a>
                         {% endif %}
                         {# Butonul de ștergere student rămâne la fel, dar poate fi condiționat de rol dacă e necesar (deja este, ruta delete_student verifică rolul) #}
                         <form action="{{ url_for('delete_student', student_id=student.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Sigur doriți să ștergeți studentul {{ student.nume }} {{ student.prenume }} și toate datele asociate?');">
-                            <button type="submit" class="btn btn-danger btn-sm py-0 px-1" title="Ștergere Student">
+                            <button type="submit" class="btn btn-danger btn-sm py-0 px-1" title="Șterge acest student și toate datele asociate (acțiune ireversibilă!)">
                                 <i class="fas fa-trash-alt"></i>
                             </button>
                         </form>

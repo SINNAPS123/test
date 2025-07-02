@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Editare Utilizator{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h4>Editare Utilizator: {{ user_to_edit.username }} (Rol: {{user_to_edit.role}})</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin_edit_user', user_id=user_to_edit.id) }}">
+                        <div class="mb-3">
+                            <label for="new_username" class="form-label">Nume Nou de Utilizator:</label>
+                            <input type="text" class="form-control" id="new_username" name="new_username" value="{{ user_to_edit.username }}" required>
+                            {% if user_to_edit.role == 'comandant_companie' or user_to_edit.role == 'comandant_batalion' %}
+                            <small class="form-text text-warning">
+                                <strong>Atenție:</strong> Modificarea numelui de utilizator pentru comandanți poate afecta asocierea automată cu unitatea dacă noul nume nu respectă formatul așteptat (ex: PrefixID, ca în CmdC1 sau Nume_CmdC1). Asigurați-vă că noul nume conține ID-ul unității corect, dacă este cazul.
+                            </small>
+                            {% endif %}
+                        </div>
+
+                        {# Future fields for editing could go here, e.g., role change, if needed. #}
+                        {# For now, only username is editable by this form as per current task. #}
+
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{{ url_for('admin_dashboard_route') }}" class="btn btn-secondary">Anulare</a>
+                            <button type="submit" class="btn btn-primary">Salvează Modificările</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

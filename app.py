@@ -20,9 +20,13 @@ from sqlalchemy import inspect
 
 # Inițializare aplicație Flask
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.urandom(32)
+# IMPORTANT: Change this to a strong, unique, and static secret key in a real environment!
+# Using a static key is crucial for session persistence across app restarts.
+# For production, load from an environment variable.
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'dev_fallback_super_secret_key_123!@#')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) # Sesiune permanentă de 30 de zile
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -486,7 +490,7 @@ def user_login():
 
         if user_by_unique_code:
             if user_by_unique_code.is_first_login:
-                login_user(user_by_unique_code)
+                login_user(user_by_unique_code, remember=True)
                 log_action("USER_FIRST_LOGIN_SUCCESS", target_model_name="User", target_id=user_by_unique_code.id,
                            description=f"User {user_by_unique_code.username} first login with unique code. IP: {request.remote_addr}",
                            user_override=user_by_unique_code)
@@ -511,7 +515,7 @@ def user_login():
                 flash('Eroare de configurare cont. Contactează administratorul.', 'danger')
                 return redirect(url_for('user_login'))
 
-            login_user(user_by_personal_code)
+            login_user(user_by_personal_code, remember=True)
             log_action("USER_LOGIN_SUCCESS", target_model_name="User", target_id=user_by_personal_code.id,
                        description=f"User {user_by_personal_code.username} login with personal code. IP: {request.remote_addr}",
                        user_override=user_by_personal_code)
@@ -534,7 +538,7 @@ def admin_login():
         password = request.form.get('password')
         user = User.query.filter_by(username=username, role='admin').first()
         if user and user.check_password(password):
-            login_user(user)
+            login_user(user, remember=True)
             log_action("ADMIN_LOGIN_SUCCESS", target_model_name="User", target_id=user.id,
                        description=f"Admin user {user.username} logged in. IP: {request.remote_addr}",
                        user_override=user)
@@ -643,14 +647,59 @@ def admin_dashboard_route():
 def dashboard():
     if current_user.role == 'admin': return redirect(url_for('admin_dashboard_route'))
     elif current_user.role == 'gradat':
-        student_count = Student.query.filter_by(created_by_user_id=current_user.id).count()
+        student_ids_managed = [s.id for s in Student.query.filter_by(created_by_user_id=current_user.id).with_entities(Student.id).all()]
+        student_count = len(student_ids_managed)
+
+        today_start = datetime.combine(date.today(), time.min)
+        today_end = datetime.combine(date.today(), time.max)
         now = datetime.now()
-        active_permissions_count = Permission.query.join(Student).filter(Student.created_by_user_id == current_user.id, Permission.status == 'Aprobată', Permission.start_datetime <= now, Permission.end_datetime >= now).count()
-        active_dl_count = sum(1 for dl in DailyLeave.query.join(Student).filter(Student.created_by_user_id == current_user.id, DailyLeave.status == 'Aprobată').all() if dl.is_active)
-        active_wl_count = sum(1 for wl in WeekendLeave.query.join(Student).filter(Student.created_by_user_id == current_user.id, WeekendLeave.status == 'Aprobată').all() if wl.is_any_interval_active_now)
-        active_services_count = ServiceAssignment.query.join(Student).filter(Student.created_by_user_id == current_user.id, ServiceAssignment.start_datetime <= now, ServiceAssignment.end_datetime >= now).count()
+
+        # Permisii active AZI (se suprapun cu ziua de azi)
+        permissions_today_count = Permission.query.filter(
+            Permission.student_id.in_(student_ids_managed),
+            Permission.status == 'Aprobată',
+            Permission.start_datetime <= today_end,
+            Permission.end_datetime >= today_start
+        ).count()
+
+        # Învoiri zilnice active AZI
+        daily_leaves_today_count = DailyLeave.query.filter(
+            DailyLeave.student_id.in_(student_ids_managed),
+            DailyLeave.status == 'Aprobată',
+            DailyLeave.leave_date == date.today() # Direct filter by date
+        ).count()
+
+        # Învoiri weekend active AZI (cel puțin un interval se suprapune cu ziua de azi)
+        # Acest calcul poate fi mai complex; o simplificare este să numărăm cele care au is_any_interval_active_now și al căror weekend_start_date este recent.
+        # Pentru o acuratețe mai mare, ar trebui iterat prin get_intervals și verificată fiecare dată.
+        # Deocamdată, folosim o aproximare bazată pe weekend-uri care includ ziua de azi.
+        weekend_leaves_active_today = 0
+        all_wl_gradat = WeekendLeave.query.filter(WeekendLeave.student_id.in_(student_ids_managed), WeekendLeave.status == 'Aprobată').all()
+        for wl in all_wl_gradat:
+            for interval in wl.get_intervals():
+                # Verificăm dacă intervalul (care poate trece în ziua următoare) se suprapune cu ziua de azi
+                if interval['start'].date() == date.today() or \
+                   interval['end'].date() == date.today() or \
+                   (interval['start'].date() < date.today() and interval['end'].date() > date.today()):
+                    weekend_leaves_active_today += 1
+                    break # Trecem la următoarea învoire de weekend
+
+        # Servicii active AZI
+        services_today_count = ServiceAssignment.query.filter(
+            ServiceAssignment.student_id.in_(student_ids_managed),
+            ServiceAssignment.start_datetime <= today_end,
+            ServiceAssignment.end_datetime >= today_start
+        ).count()
+
         total_volunteer_activities = VolunteerActivity.query.filter_by(created_by_user_id=current_user.id).count()
-        return render_template('gradat_dashboard.html', student_count=student_count, active_permissions_count=active_permissions_count, active_daily_leaves_count=active_dl_count, active_weekend_leaves_count=active_wl_count, active_services_count=active_services_count, total_volunteer_activities=total_volunteer_activities)
+
+        return render_template('gradat_dashboard.html',
+                               student_count=student_count,
+                               permissions_today_count=permissions_today_count,
+                               daily_leaves_today_count=daily_leaves_today_count,
+                               weekend_leaves_today_count=weekend_leaves_active_today,
+                               services_today_count=services_today_count,
+                               total_volunteer_activities=total_volunteer_activities)
     elif current_user.role == 'comandant_companie': return redirect(url_for('company_commander_dashboard'))
     elif current_user.role == 'comandant_batalion': return redirect(url_for('battalion_commander_dashboard'))
     return render_template('dashboard.html', name=current_user.username)
@@ -820,6 +869,78 @@ def admin_delete_user(user_id):
             app.logger.error(f"CRITICAL: Failed to commit failure log for ADMIN_DELETE_USER_FAIL: {str(log_e)}")
 
     return redirect(url_for('admin_dashboard_route'))
+
+@app.route('/admin/user/edit/<int:user_id>', methods=['GET', 'POST'], endpoint='admin_edit_user')
+@login_required
+def admin_edit_user(user_id):
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('home'))
+
+    user_to_edit = db.session.get(User, user_id)
+    if not user_to_edit:
+        flash('Utilizatorul nu a fost găsit.', 'danger')
+        return redirect(url_for('admin_dashboard_route'))
+
+    if user_to_edit.role == 'admin': # Prevent admin from editing their own or other admin usernames via this form
+        flash('Numele de utilizator pentru conturile de admin nu poate fi modificat prin această interfață.', 'warning')
+        return redirect(url_for('admin_dashboard_route'))
+
+    original_username = user_to_edit.username # For logging and comparison
+    details_before_edit = model_to_dict(user_to_edit)
+
+    if request.method == 'POST':
+        new_username = request.form.get('new_username', '').strip()
+
+        if not new_username:
+            flash('Noul nume de utilizator nu poate fi gol.', 'warning')
+            return render_template('admin_edit_user.html', user_to_edit=user_to_edit) # Re-render with error
+
+        if new_username != original_username:
+            existing_user = User.query.filter(User.username == new_username).first()
+            if existing_user:
+                flash(f"Numele de utilizator '{new_username}' există deja. Te rugăm alege altul.", 'warning')
+                return render_template('admin_edit_user.html', user_to_edit=user_to_edit)
+
+            user_to_edit.username = new_username
+
+            try:
+                details_after_edit = model_to_dict(user_to_edit)
+                log_action("ADMIN_UPDATE_USERNAME_SUCCESS", target_model_name="User", target_id=user_to_edit.id,
+                           details_before_dict=details_before_edit, details_after_dict=details_after_edit,
+                           description=f"Admin {current_user.username} changed username for user ID {user_to_edit.id} from '{original_username}' to '{new_username}'.")
+                db.session.commit()
+                flash(f"Numele de utilizator pentru '{original_username}' a fost schimbat în '{new_username}'.", 'success')
+
+                if user_to_edit.role in ['comandant_companie', 'comandant_batalion']:
+                    # Check if new username still allows unit ID derivation
+                    derived_id_after_change = _get_commander_unit_id(new_username, "CmdC" if user_to_edit.role == 'comandant_companie' else "CmdB")
+                    if not derived_id_after_change:
+                         flash(f"Atenție: Noul nume de utilizator '{new_username}' pentru comandantul {new_username} nu mai corespunde modelului pentru extragerea automată a ID-ului unității. Funcționalitatea specifică rolului său ar putea fi afectată.", 'warning')
+                    else:
+                         # Optionally, confirm the new derived ID if it's part of the username structure
+                         flash(f"Verificare ID unitate pentru '{new_username}': ID derivat este '{derived_id_after_change}'. Asigurați-vă că este corect.", "info")
+
+
+                return redirect(url_for('admin_dashboard_route'))
+            except Exception as e:
+                db.session.rollback()
+                user_to_edit.username = original_username # Revert optimistic change
+                flash(f"Eroare la salvarea noului nume de utilizator: {str(e)}", 'danger')
+                try:
+                    log_action("ADMIN_UPDATE_USERNAME_FAIL", target_model_name="User", target_id=user_to_edit.id,
+                               details_before_dict=details_before_edit,
+                               description=f"Admin {current_user.username} failed to change username for user ID {user_to_edit.id} from '{original_username}' to '{new_username}'. Error: {str(e)}")
+                    db.session.commit()
+                except Exception as log_e:
+                    app.logger.error(f"CRITICAL: Failed to commit failure log for ADMIN_UPDATE_USERNAME_FAIL: {str(log_e)}")
+        else:
+            flash('Numele de utilizator nu a fost schimbat.', 'info') # No change made
+            return redirect(url_for('admin_dashboard_route'))
+
+    # For GET request
+    return render_template('admin_edit_user.html', user_to_edit=user_to_edit)
+
 
 @app.route('/admin/student/edit/<int:student_id>', methods=['GET', 'POST'])
 @login_required
@@ -1277,24 +1398,62 @@ def company_commander_dashboard():
     roll_call_time_str = roll_call_datetime.strftime('%d %B %Y, %H:%M')
 
     # Fetch all students in this specific company
-    students_in_company = Student.query.filter_by(companie=company_id_str).all()
+    students_in_company_all = Student.query.filter_by(companie=company_id_str).all()
+    student_ids_in_company = [s.id for s in students_in_company_all]
 
-    total_company_presence = _calculate_presence_data(students_in_company, roll_call_datetime)
+    total_company_presence_roll_call = _calculate_presence_data(students_in_company_all, roll_call_datetime) # For existing roll call report
 
-    platoons_data = {}
-    # Group students by platoon
-    platoons_in_company = sorted(list(set(s.pluton for s in students_in_company if s.pluton)))
+    # New stats for "today"
+    today_start = datetime.combine(date.today(), time.min)
+    today_end = datetime.combine(date.today(), time.max)
 
+    permissions_today_company = Permission.query.filter(
+        Permission.student_id.in_(student_ids_in_company),
+        Permission.status == 'Aprobată',
+        Permission.start_datetime <= today_end,
+        Permission.end_datetime >= today_start
+    ).count()
+
+    daily_leaves_today_company = DailyLeave.query.filter(
+        DailyLeave.student_id.in_(student_ids_in_company),
+        DailyLeave.status == 'Aprobată',
+        DailyLeave.leave_date == date.today()
+    ).count()
+
+    weekend_leaves_today_company = 0
+    all_wl_company = WeekendLeave.query.filter(WeekendLeave.student_id.in_(student_ids_in_company), WeekendLeave.status == 'Aprobată').all()
+    for wl in all_wl_company:
+        for interval in wl.get_intervals():
+            if interval['start'].date() == date.today() or \
+               interval['end'].date() == date.today() or \
+               (interval['start'].date() < date.today() and interval['end'].date() > date.today()):
+                weekend_leaves_today_company += 1
+                break
+
+    total_leaves_today_company = daily_leaves_today_company + weekend_leaves_today_company
+
+    services_today_company = ServiceAssignment.query.filter(
+        ServiceAssignment.student_id.in_(student_ids_in_company),
+        ServiceAssignment.start_datetime <= today_end,
+        ServiceAssignment.end_datetime >= today_start
+    ).count()
+
+    platoons_data_roll_call = {}
+    platoons_in_company = sorted(list(set(s.pluton for s in students_in_company_all if s.pluton)))
     for pluton_id_str in platoons_in_company:
-        students_in_pluton = [s for s in students_in_company if s.pluton == pluton_id_str]
-        platoon_name = f"Plutonul {pluton_id_str}" # or just pluton_id_str if preferred
-        platoons_data[platoon_name] = _calculate_presence_data(students_in_pluton, roll_call_datetime)
+        students_in_pluton = [s for s in students_in_company_all if s.pluton == pluton_id_str]
+        platoon_name = f"Plutonul {pluton_id_str}"
+        platoons_data_roll_call[platoon_name] = _calculate_presence_data(students_in_pluton, roll_call_datetime)
 
     return render_template('company_commander_dashboard.html',
                            company_id=company_id_str,
                            roll_call_time_str=roll_call_time_str,
-                           total_company_presence=total_company_presence,
-                           platoons_data=platoons_data)
+                           total_company_presence=total_company_presence_roll_call, # Renamed for clarity in template if needed
+                           platoons_data=platoons_data_roll_call, # Renamed for clarity
+                           permissions_today_count=permissions_today_company,
+                           total_leaves_today_count=total_leaves_today_company,
+                           services_today_count=services_today_company,
+                           total_students_company=len(student_ids_in_company))
 
 @app.route('/dashboard/battalion')
 @login_required
@@ -1311,23 +1470,62 @@ def battalion_commander_dashboard():
     roll_call_datetime = get_standard_roll_call_datetime()
     roll_call_time_str = roll_call_datetime.strftime('%d %B %Y, %H:%M')
 
-    students_in_battalion = Student.query.filter_by(batalion=battalion_id_str).all()
+    students_in_battalion_all = Student.query.filter_by(batalion=battalion_id_str).all()
+    student_ids_in_battalion = [s.id for s in students_in_battalion_all]
 
-    total_battalion_presence = _calculate_presence_data(students_in_battalion, roll_call_datetime)
+    total_battalion_presence_roll_call = _calculate_presence_data(students_in_battalion_all, roll_call_datetime) # For existing roll call report
 
-    companies_data = {}
-    companies_in_battalion = sorted(list(set(s.companie for s in students_in_battalion if s.companie)))
+    # New stats for "today"
+    today_start = datetime.combine(date.today(), time.min)
+    today_end = datetime.combine(date.today(), time.max)
 
-    for company_id_str_loop in companies_in_battalion: # Renamed to avoid conflict with outer scope if any
-        students_in_company_loop = [s for s in students_in_battalion if s.companie == company_id_str_loop]
+    permissions_today_battalion = Permission.query.filter(
+        Permission.student_id.in_(student_ids_in_battalion),
+        Permission.status == 'Aprobată',
+        Permission.start_datetime <= today_end,
+        Permission.end_datetime >= today_start
+    ).count()
+
+    daily_leaves_today_battalion = DailyLeave.query.filter(
+        DailyLeave.student_id.in_(student_ids_in_battalion),
+        DailyLeave.status == 'Aprobată',
+        DailyLeave.leave_date == date.today()
+    ).count()
+
+    weekend_leaves_today_battalion = 0
+    all_wl_battalion = WeekendLeave.query.filter(WeekendLeave.student_id.in_(student_ids_in_battalion), WeekendLeave.status == 'Aprobată').all()
+    for wl in all_wl_battalion:
+        for interval in wl.get_intervals():
+            if interval['start'].date() == date.today() or \
+               interval['end'].date() == date.today() or \
+               (interval['start'].date() < date.today() and interval['end'].date() > date.today()):
+                weekend_leaves_today_battalion += 1
+                break
+
+    total_leaves_today_battalion = daily_leaves_today_battalion + weekend_leaves_today_battalion
+
+    services_today_battalion = ServiceAssignment.query.filter(
+        ServiceAssignment.student_id.in_(student_ids_in_battalion),
+        ServiceAssignment.start_datetime <= today_end,
+        ServiceAssignment.end_datetime >= today_start
+    ).count()
+
+    companies_data_roll_call = {}
+    companies_in_battalion = sorted(list(set(s.companie for s in students_in_battalion_all if s.companie)))
+    for company_id_str_loop in companies_in_battalion:
+        students_in_company_loop = [s for s in students_in_battalion_all if s.companie == company_id_str_loop]
         company_name = f"Compania {company_id_str_loop}"
-        companies_data[company_name] = _calculate_presence_data(students_in_company_loop, roll_call_datetime)
+        companies_data_roll_call[company_name] = _calculate_presence_data(students_in_company_loop, roll_call_datetime)
 
     return render_template('battalion_commander_dashboard.html',
                            battalion_id=battalion_id_str,
                            roll_call_time_str=roll_call_time_str,
-                           total_battalion_presence=total_battalion_presence,
-                           companies_data=companies_data)
+                           total_battalion_presence=total_battalion_presence_roll_call,
+                           companies_data=companies_data_roll_call,
+                           permissions_today_count=permissions_today_battalion,
+                           total_leaves_today_count=total_leaves_today_battalion,
+                           services_today_count=services_today_battalion,
+                           total_students_battalion=len(student_ids_in_battalion))
 
 # --- Presence Report Route ---
 @app.route('/reports/presence', methods=['GET', 'POST'])
@@ -1651,11 +1849,17 @@ def list_students():
 
     if is_admin_view:
         if search_term:
-            search_pattern = f"%{unidecode(search_term.lower())}%"
+            # Apply unidecode to the search term, not the database column directly in the Python-side unidecode function
+            processed_search_term = unidecode(search_term.lower())
+            search_pattern = f"%{processed_search_term}%"
+            # Use func.lower and unidecode directly in the query for database-side processing if possible,
+            # or rely on ilike for case-insensitivity and handle accents on the search term side.
+            # For broader compatibility, using func.lower() on SQLAlchemy columns and comparing with
+            # a processed search term is safer than assuming database-side unidecode.
             students_query = students_query.filter(or_(
-                func.lower(unidecode(Student.nume)).like(search_pattern),
-                func.lower(unidecode(Student.prenume)).like(search_pattern),
-                func.lower(unidecode(Student.id_unic_student)).like(search_pattern)
+                func.lower(Student.nume).ilike(search_pattern), # Using ilike for case-insensitivity
+                func.lower(Student.prenume).ilike(search_pattern),
+                func.lower(Student.id_unic_student).ilike(search_pattern) # Assuming id_unic_student is typically ascii
             ))
         if filter_batalion: students_query = students_query.filter(Student.batalion == filter_batalion)
         if filter_companie: students_query = students_query.filter(Student.companie == filter_companie)
@@ -1667,11 +1871,12 @@ def list_students():
             return redirect(url_for('dashboard'))
         students_query = students_query.filter_by(created_by_user_id=current_user.id)
         if search_term:
-            search_pattern = f"%{unidecode(search_term.lower())}%"
+            processed_search_term = unidecode(search_term.lower())
+            search_pattern = f"%{processed_search_term}%"
             students_query = students_query.filter(or_(
-                func.lower(unidecode(Student.nume)).like(search_pattern),
-                func.lower(unidecode(Student.prenume)).like(search_pattern),
-                func.lower(unidecode(Student.id_unic_student)).like(search_pattern)
+                func.lower(Student.nume).ilike(search_pattern),
+                func.lower(Student.prenume).ilike(search_pattern),
+                func.lower(Student.id_unic_student).ilike(search_pattern)
             ))
         students_query = students_query.order_by(Student.nume, Student.prenume)
 
@@ -2278,83 +2483,109 @@ def bulk_import_permissions():
     i = 0
     while i < len(lines):
         name_line = lines[i].strip()
-        if not name_line: # Skip empty lines that might be between entries
+        if not name_line: # Skip empty lines used as separators
             i += 1
             continue
 
-        if i + 2 >= len(lines): # Need at least 2 more lines for datetime and destination
-            error_details.append(f"Intrare incompletă la finalul listei, începând cu '{name_line}'. Date insuficiente.")
-            error_count += 1
-            break
+        # We need at least 3 lines for a valid entry (Name, Date, Destination)
+        # but we will try to be more flexible.
 
-        datetime_line = lines[i+1].strip()
-        destination_line = lines[i+2].strip()
+        # Line 1: Student Name (mandatory)
+        # Line 2: Datetime interval (mandatory)
+        # Line 3: Destination (mandatory)
+        # Line 4: Transport Mode (optional)
+        # Line 5: Reason/Car Plate (optional)
 
-        car_plate_line = ""
-        # Check if there's a 4th line and it's not empty (potentially a car plate)
-        # Also, ensure it doesn't look like the start of a new student name line
-        if i + 3 < len(lines) and lines[i+3].strip():
-            potential_next_name_line = lines[i+3].strip()
-            # Heuristic: if the next line contains typical rank abbreviations or multiple words, it's likely a new student
-            # This is imperfect. A truly blank line separator would be better.
-            is_likely_new_student = any(rank_pattern.match(potential_next_name_line) for rank_pattern in KNOWN_RANK_PATTERNS) or len(potential_next_name_line.split()) > 3
+        lines_for_this_entry = []
 
-            if not is_likely_new_student:
-                 car_plate_line = potential_next_name_line
-                 current_entry_lines = 4
-            else: # Looks like next student, so current entry has 3 lines
-                 current_entry_lines = 3
-        else: # End of data or an empty line follows, so 3 lines for current or 4 if last line before empty is car
-            if i + 3 < len(lines) and not lines[i+3].strip(): # Explicit empty line after destination means no car
-                current_entry_lines = 3 # Student, DateTime, Destination
-                # We will advance i by 4 later to jump over this empty line too.
-            elif i + 3 < len(lines): # A non-empty line that we assume is a car plate
-                car_plate_line = lines[i+3].strip()
-                current_entry_lines = 4
-            else: # Reached end of lines after destination, so 3 lines
-                current_entry_lines = 3
+        # Consume lines until an empty line or end of input
+        temp_i = i
+        while temp_i < len(lines) and lines[temp_i].strip():
+            lines_for_this_entry.append(lines[temp_i].strip())
+            temp_i += 1
+
+        num_actual_lines_for_entry = len(lines_for_this_entry)
+
+        if num_actual_lines_for_entry < 3:
+            if num_actual_lines_for_entry > 0: # If there was at least one line before running out
+                 error_details.append(f"Intrare incompletă începând cu '{lines_for_this_entry[0]}'. Necesită cel puțin Nume, Interval, Destinație.")
+                 error_count += 1
+            # If num_actual_lines_for_entry is 0, it means we hit multiple empty lines, which is fine.
+            i = temp_i # Advance past the consumed (or non-existent) lines
+            if num_actual_lines_for_entry > 0 : i+=1 # also advance past the empty line that terminated the block
+            continue
+
+
+        name_line = lines_for_this_entry[0]
+        datetime_line = lines_for_this_entry[1]
+        destination_line = lines_for_this_entry[2]
+
+        transport_mode_line = lines_for_this_entry[3] if num_actual_lines_for_entry > 3 else ""
+        reason_car_plate_line = lines_for_this_entry[4] if num_actual_lines_for_entry > 4 else ""
+
+        # Advance main loop counter by the number of non-empty lines processed for this entry + 1 for the empty separator line (if any)
+        i = temp_i
+        if temp_i < len(lines) and not lines[temp_i].strip(): # If terminated by an empty line
+            i += 1
 
 
         student_obj, student_error = find_student_for_bulk_import(name_line, current_user.id)
         if student_error:
             error_details.append(f"Linia '{name_line}': {student_error}")
             error_count += 1
-            i += current_entry_lines # Move to next potential entry
-            if current_entry_lines == 3 and i < len(lines) and not lines[i-1].strip(): # If it was 3 lines and previous was destination, and there was an empty line after it.
-                i+=1 # Consume the empty line
+            # i already advanced by num_actual_lines_for_entry + possible empty line
             continue
 
         # Parse datetime
         try:
-            dt_parts = datetime_line.split(' - ')
-            if len(dt_parts) != 2:
-                raise ValueError("Format interval datetime invalid, lipsește ' - '")
+            # Regex to find DD.MM.YYYY HH:MM - DD.MM.YYYY HH:MM or DD.MM.YYYY HH:MM - HH:MM
+            # This regex is more robust for variations in date specification for end time.
+            dt_match = re.search(
+                r"(\d{1,2}\.\d{1,2}\.\d{4})\s+(\d{1,2}:\d{2})\s*-\s*(?:(\d{1,2}\.\d{1,2}\.\d{4})\s+)?(\d{1,2}:\d{2})",
+                datetime_line
+            )
+            if not dt_match:
+                raise ValueError("Format interval datetime invalid. Așteptat: 'DD.MM.YYYY HH:MM - [DD.MM.YYYY] HH:MM'.")
 
-            start_dt_str, end_dt_str = dt_parts[0].strip(), dt_parts[1].strip()
-            # Datetime format: DD.MM.YYYY HH:MM
-            start_dt = datetime.strptime(start_dt_str, '%d.%m.%Y %H:%M')
-            end_dt = datetime.strptime(end_dt_str, '%d.%m.%Y %H:%M')
+            start_date_str, start_time_str, end_date_str_opt, end_time_str = dt_match.groups()
+
+            start_dt = datetime.strptime(f"{start_date_str} {start_time_str}", '%d.%m.%Y %H:%M')
+
+            if end_date_str_opt: # If end date is explicitly provided
+                end_dt = datetime.strptime(f"{end_date_str_opt} {end_time_str}", '%d.%m.%Y %H:%M')
+            else: # End date not provided, assume same day as start_dt or next day if end_time < start_time
+                end_time_obj_parsed = datetime.strptime(end_time_str, '%H:%M').time()
+                end_date_assumed = start_dt.date()
+                if end_time_obj_parsed < start_dt.time():
+                    end_date_assumed += timedelta(days=1)
+                end_dt = datetime.combine(end_date_assumed, end_time_obj_parsed)
 
             if end_dt <= start_dt:
-                raise ValueError("Data de sfârșit trebuie să fie după data de început.")
+                raise ValueError("Data/ora de sfârșit trebuie să fie după data/ora de început.")
 
         except ValueError as ve:
             error_details.append(f"Student '{name_line}': Eroare datetime '{datetime_line}' - {str(ve)}")
             error_count += 1
-            i += current_entry_lines
-            if current_entry_lines == 3 and i < len(lines) and not lines[i-1].strip(): i+=1
+            # i already advanced
             continue
 
-        parsed_destination = destination_line
-        parsed_reason = car_plate_line if car_plate_line else None # Car plate goes into reason, or None
+        parsed_destination = destination_line.strip()
+        parsed_transport_mode = transport_mode_line.strip() if transport_mode_line else None
+        parsed_reason = reason_car_plate_line.strip() if reason_car_plate_line else None
+
 
         # Conflict Checking
+        # Ensure student_obj is not None before accessing student_obj.id
+        if not student_obj: # Should have been caught by student_error, but as a safe guard
+            error_details.append(f"Eroare internă: student_obj este None pentru linia '{name_line}' după ce student_error a fost None.")
+            error_count += 1
+            continue
+
         conflict = check_leave_conflict(student_obj.id, start_dt, end_dt, leave_type='permission')
         if conflict:
             error_details.append(f"Student '{name_line}': Conflict - {conflict}.")
             error_count += 1
-            i += current_entry_lines
-            if current_entry_lines == 3 and i < len(lines) and not lines[i-1].strip(): i+=1 # Consume empty line if it was one
+            i += lines_this_entry
             continue
 
         # Create and add permission
@@ -2363,7 +2594,7 @@ def bulk_import_permissions():
             start_datetime=start_dt,
             end_datetime=end_dt,
             destination=parsed_destination,
-            transport_mode=None, # Not supported by this bulk import format currently
+            transport_mode=parsed_transport_mode, # Now supported
             reason=parsed_reason,
             status='Aprobată',
             created_by_user_id=current_user.id
@@ -2371,24 +2602,19 @@ def bulk_import_permissions():
 
         try:
             db.session.add(new_permission)
-            db.session.flush() # To get ID for logging, if needed, though bulk might be too verbose for individual logs
-            # Consider a single log entry for the bulk operation success/partial success.
+            # Defer flush and commit until the end of the loop for bulk operations
             added_count += 1
-        except Exception as e_add:
-            db.session.rollback() # Rollback this specific add if flush/add fails.
+        except Exception as e_add: # Should ideally not happen if just adding to session
+            # If db.session.add() itself can fail, then a rollback might be needed here,
+            # but typically it's the commit that fails.
+            # For safety, if an unexpected error occurs here:
+            db.session.rollback() # Rollback the current transaction if add fails.
             error_details.append(f"Student '{name_line}': Eroare la adăugare în sesiune DB - {str(e_add)}")
             error_count += 1
-            i += current_entry_lines
-            if current_entry_lines == 3 and i < len(lines) and not lines[i-1].strip(): i+=1
+            # i is already advanced by the logic at the start of the loop iteration
             continue
 
-
-        i += current_entry_lines
-        if current_entry_lines == 3 and i < len(lines) and not lines[i-1].strip() and (i-1) == (lines.index(destination_line)+1) : # If it was 3 lines ending with destination, and there was an empty line after it.
-            # This logic for consuming empty line is getting complicated.
-            # Simpler: if the line after destination_line is empty, consume it.
-            if (lines.index(destination_line) + 1) < len(lines) and not lines[lines.index(destination_line) + 1].strip():
-                i +=1
+        # i is advanced at the beginning of the loop iteration.
 
 
     if added_count > 0:
@@ -3648,6 +3874,142 @@ def assign_service(assignment_id=None):
                            today_str=date.today().isoformat(),
                            form_data=data_to_populate_form_with)
 
+@app.route('/gradat/services/assign_multiple', methods=['GET', 'POST'])
+@login_required
+def assign_multiple_services():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    students = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.nume).all()
+    if not students:
+        flash('Nu aveți studenți în evidență pentru a le asigna servicii.', 'warning')
+        return redirect(url_for('list_services')) # Or gradat_dashboard
+
+    # Default times for JS, same as single assign
+    default_times_for_js = {
+        "GSS": ("07:00", "07:00"), "SVM": ("05:50", "20:00"),
+        "Intervenție": ("20:00", "00:00"),
+        "Planton 1": ("22:00", "00:00"), "Planton 2": ("00:00", "02:00"),
+        "Planton 3": ("02:00", "04:00"), "Altul": ("", "")
+    }
+
+    if request.method == 'POST':
+        student_id = request.form.get('student_id')
+        if not student_id:
+            flash('Trebuie să selectați un student.', 'warning')
+            return redirect(url_for('assign_multiple_services'))
+
+        stud = Student.query.filter_by(id=student_id, created_by_user_id=current_user.id).first()
+        if not stud:
+            flash('Student invalid sau nu vă aparține.', 'danger')
+            return redirect(url_for('assign_multiple_services'))
+
+        services_data = []
+        service_indices = sorted(list(set(key.split('_')[1] for key in request.form if key.startswith('service_type_'))))
+
+        added_count = 0
+        error_count = 0
+        error_messages = []
+
+        for index in service_indices:
+            service_type = request.form.get(f'service_type_{index}')
+            service_date_str = request.form.get(f'service_date_{index}')
+            start_time_str = request.form.get(f'start_time_{index}')
+            end_time_str = request.form.get(f'end_time_{index}')
+            participates_str = request.form.get(f'participates_{index}') # Value will be 'on' or None
+            notes = request.form.get(f'notes_{index}', '').strip()
+
+            # Skip if essential fields are missing for this specific service entry
+            if not all([service_type, service_date_str, start_time_str, end_time_str]):
+                # If any field is present, it's a partial entry, consider it an error or just skip.
+                # For now, we'll skip if any of these critical ones are missing.
+                # But if user intended to fill it, they might want an error.
+                # Let's assume if type is chosen, the rest were intended.
+                if service_type: # If a type was chosen, assume user intended to fill this row
+                    error_messages.append(f"Serviciul #{int(index)+1}: Date incomplete (tip, dată, ore).")
+                    error_count += 1
+                continue
+
+            try:
+                service_date_obj = datetime.strptime(service_date_str, '%Y-%m-%d').date()
+                start_time_obj = datetime.strptime(start_time_str, '%H:%M').time()
+                end_time_obj = datetime.strptime(end_time_str, '%H:%M').time()
+            except ValueError:
+                error_messages.append(f"Serviciul #{int(index)+1} ({service_type}): Format dată/oră invalid.")
+                error_count += 1
+                continue
+
+            start_dt_obj = datetime.combine(service_date_obj, start_time_obj)
+            effective_end_date = service_date_obj
+            if end_time_obj < start_time_obj:
+                effective_end_date += timedelta(days=1)
+            end_dt_obj = datetime.combine(effective_end_date, end_time_obj)
+
+            if end_dt_obj <= start_dt_obj:
+                error_messages.append(f"Serviciul #{int(index)+1} ({service_type}): Interval orar invalid.")
+                error_count += 1
+                continue
+
+            participates_bool = (participates_str == 'on')
+
+            conflict_msg = check_service_conflict_for_student(stud.id, start_dt_obj, end_dt_obj, service_type, None) # None for assignment_id as it's new
+            if conflict_msg:
+                error_messages.append(f"Serviciul #{int(index)+1} ({service_type} pe {service_date_str}): Conflict - studentul are deja {conflict_msg}.")
+                error_count += 1
+                continue
+
+            # If all checks pass, prepare to add
+            new_assignment = ServiceAssignment(
+                student_id=stud.id, service_type=service_type, service_date=service_date_obj,
+                start_datetime=start_dt_obj, end_datetime=end_dt_obj,
+                participates_in_roll_call=participates_bool, notes=notes,
+                created_by_user_id=current_user.id
+            )
+            db.session.add(new_assignment)
+            added_count +=1
+
+        if error_count > 0:
+            for msg in error_messages:
+                flash(msg, 'danger')
+            if added_count > 0: # If some were added despite errors with others
+                 try:
+                    db.session.commit()
+                    flash(f'{added_count} servicii au fost adăugate cu succes pentru {stud.nume} {stud.prenume}.', 'success')
+                 except Exception as e:
+                    db.session.rollback()
+                    flash(f'Eroare la salvarea unor servicii: {str(e)}', 'danger')
+                    # Log this commit failure
+            else: # No services added, only errors
+                db.session.rollback() # Ensure no partial transaction
+            # Redirect back to the form, ideally repopulating student_id
+            return redirect(url_for('assign_multiple_services', student_id_selected=stud.id))
+
+
+        if added_count > 0:
+            try:
+                db.session.commit()
+                flash(f'{added_count} servicii au fost adăugate cu succes pentru {stud.nume} {stud.prenume}!', 'success')
+                return redirect(url_for('list_services'))
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Eroare la salvarea serviciilor: {str(e)}', 'danger')
+                # Redirect back to form, repopulating student_id
+                return redirect(url_for('assign_multiple_services', student_id_selected=stud.id))
+        else: # No services added, no errors reported above (e.g., no service rows filled)
+            flash('Niciun serviciu valid nu a fost introdus pentru a fi adăugat.', 'info')
+            return redirect(url_for('assign_multiple_services', student_id_selected=stud.id if stud else None))
+
+    # GET request
+    student_id_selected_on_get = request.args.get('student_id_selected', type=int)
+    return render_template('assign_multiple_services.html',
+                           students=students,
+                           service_types=SERVICE_TYPES,
+                           default_times_json=json.dumps(default_times_for_js), # Pass as JSON for JS
+                           today_str=date.today().isoformat(),
+                           student_id_selected=student_id_selected_on_get)
+
+
 @app.route('/gradat/services/delete/<int:assignment_id>', methods=['POST'])
 @login_required
 def delete_service_assignment(assignment_id):
@@ -3674,6 +4036,308 @@ def delete_service_assignment(assignment_id):
         flash(f'Eroare la ștergerea serviciului: {str(e)}', 'danger')
 
     return redirect(url_for('list_services'))
+
+@app.route('/reports/export/permissions_scoped', endpoint='export_permissions_scoped_word')
+@login_required
+def export_permissions_scoped_word():
+    now = datetime.now()
+    student_ids_in_scope = []
+    report_title_detail = ""
+    # Sanitize username for filename, removing non-alphanumeric characters
+    current_username_for_file = re.sub(r'\W+', '', current_user.username)
+
+    if current_user.role == 'admin':
+        # For admin, get all student IDs. Could also query Student directly if needed for other info.
+        all_students_query = Student.query.with_entities(Student.id).all()
+        student_ids_in_scope = [s[0] for s in all_students_query]
+        report_title_detail = "General Admin"
+        if not student_ids_in_scope:
+            flash('Nu există studenți în sistem pentru a genera raportul de permisii.', 'info')
+            return redirect(url_for('admin_dashboard_route'))
+
+    elif current_user.role == 'comandant_companie':
+        company_id = _get_commander_unit_id(current_user.username, "CmdC")
+        if not company_id:
+            flash('ID-ul companiei nu a putut fi determinat pentru generarea raportului.', 'danger')
+            return redirect(url_for('company_commander_dashboard'))
+        students_in_unit = Student.query.filter_by(companie=company_id).with_entities(Student.id).all()
+        student_ids_in_scope = [s[0] for s in students_in_unit]
+        report_title_detail = f"Compania {company_id}"
+        if not student_ids_in_scope:
+            flash(f'Nu există studenți în compania {company_id} pentru a genera raportul.', 'info')
+            return redirect(url_for('company_commander_dashboard'))
+
+    elif current_user.role == 'comandant_batalion':
+        battalion_id = _get_commander_unit_id(current_user.username, "CmdB")
+        if not battalion_id:
+            flash('ID-ul batalionului nu a putut fi determinat pentru generarea raportului.', 'danger')
+            return redirect(url_for('battalion_commander_dashboard'))
+        students_in_unit = Student.query.filter_by(batalion=battalion_id).with_entities(Student.id).all()
+        student_ids_in_scope = [s[0] for s in students_in_unit]
+        report_title_detail = f"Batalionul {battalion_id}"
+        if not student_ids_in_scope:
+            flash(f'Nu există studenți în batalionul {battalion_id} pentru a genera raportul.', 'info')
+            return redirect(url_for('battalion_commander_dashboard'))
+    else:
+        flash('Rol neautorizat pentru această funcționalitate de export.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Base query for permissions
+    permissions_query = Permission.query.join(Permission.student).options(
+        joinedload(Permission.student) # No need for .joinedload(Student.creator) here unless creator is in report
+    ).filter(
+        Permission.student_id.in_(student_ids_in_scope),
+        Permission.status == 'Aprobată',
+        Permission.end_datetime >= now  # Active or upcoming
+    ).order_by(
+        Student.batalion, Student.companie, Student.pluton, Student.nume, Permission.start_datetime
+    )
+
+    permissions_to_export = permissions_query.all()
+
+    if not permissions_to_export:
+        flash(f'Nicio permisie activă sau viitoare de exportat pentru {report_title_detail}.', 'info')
+        if current_user.role == 'admin': return redirect(url_for('admin_dashboard_route'))
+        if current_user.role == 'comandant_companie': return redirect(url_for('company_commander_dashboard'))
+        if current_user.role == 'comandant_batalion': return redirect(url_for('battalion_commander_dashboard'))
+        return redirect(url_for('dashboard')) # Fallback
+
+    document = Document()
+    # Set document margins (optional, but can help fit more)
+    sections = document.sections
+    for section in sections:
+        section.left_margin = Inches(0.75)
+        section.right_margin = Inches(0.75)
+        section.top_margin = Inches(0.75)
+        section.bottom_margin = Inches(0.75)
+
+    document.add_heading(f'Raport Permisii Studenți - {report_title_detail}', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    user_info_text = f"Raport generat de: {current_user.username} ({current_user.role})\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    p_user = document.add_paragraph()
+    p_user.add_run(user_info_text).italic = True
+    p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    document.add_paragraph()
+
+    table = document.add_table(rows=1, cols=9)
+    table.style = 'Table Grid'
+    table.autofit = False # Important for custom widths to take effect reliably
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    hdr_cells = table.rows[0].cells
+    column_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Pluton', 'Data Început', 'Data Sfârșit', 'Destinația', 'Mijloc Transport', 'Observații/Nr. Auto']
+    for i, title in enumerate(column_titles):
+        cell = hdr_cells[i]
+        cell.text = title
+        # Apply bold and center alignment to header cells
+        p = cell.paragraphs[0]
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for run in p.runs:
+            run.font.bold = True
+            run.font.size = Pt(9) # Smaller font for header
+
+    for idx, perm in enumerate(permissions_to_export):
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(idx + 1)
+        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[1].text = perm.student.grad_militar
+        row_cells[2].text = f"{perm.student.nume} {perm.student.prenume}"
+        row_cells[3].text = perm.student.pluton
+        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[4].text = perm.start_datetime.strftime('%d.%m.%y %H:%M') # Shorter year
+        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[5].text = perm.end_datetime.strftime('%d.%m.%y %H:%M') # Shorter year
+        row_cells[5].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[6].text = perm.destination if perm.destination else "-"
+        row_cells[7].text = perm.transport_mode if perm.transport_mode else "-"
+        row_cells[8].text = perm.reason if perm.reason else "-"
+
+        # Set font size for data cells
+        for cell in row_cells:
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    run.font.size = Pt(9)
+
+
+    widths_config = { # Inches
+        0: 0.3, 1: 0.6, 2: 1.5, 3: 0.5,
+        4: 0.9, 5: 0.9, 6: 1.5, 7: 1.0, 8: 1.3
+    } # Approx total 8.5 inches for A4 Portrait with 0.75" margins
+      # A4 width is 8.27 inches. Max table width should be ~6.77 inches (8.27 - 0.75*2).
+
+    # Recalculate widths for a max of ~6.7 inches
+    widths_config = {
+        0: Inches(0.3), 1: Inches(0.5), 2: Inches(1.2), 3: Inches(0.5),
+        4: Inches(0.8), 5: Inches(0.8), 6: Inches(1.1), 7: Inches(0.8), 8: Inches(0.7)
+    } # Sum = 6.7
+
+    for col_idx, width_val in widths_config.items():
+        for row in table.rows: # Apply to all rows including header
+            if col_idx < len(row.cells):
+                 row.cells[col_idx].width = width_val
+            else: # Should not happen if table has 9 columns
+                 app.logger.warning(f"Attempted to set width for non-existent column {col_idx} in permissions export.")
+
+    # Set overall document font (optional, but good for consistency)
+    style = document.styles['Normal']
+    font = style.font
+    font.name = 'Calibri' # Or Times New Roman
+    font.size = Pt(9) # Set default data font size for the document
+
+    f_io = io.BytesIO()
+    document.save(f_io)
+    f_io.seek(0)
+
+    clean_report_title = re.sub(r'\W+', '_', report_title_detail)
+    filename = f"Raport_Permisii_{clean_report_title}_{current_username_for_file}_{date.today().strftime('%Y%m%d')}.docx"
+
+    return send_file(f_io,
+                     download_name=filename,
+                     as_attachment=True,
+                     mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+@app.route('/reports/export/weekend_leaves_scoped', endpoint='export_weekend_leaves_scoped_word')
+@login_required
+def export_weekend_leaves_scoped_word():
+    now = datetime.now()
+    student_ids_in_scope = []
+    report_title_detail = ""
+    current_username_for_file = re.sub(r'\W+', '', current_user.username)
+
+    if current_user.role == 'admin':
+        all_students_query = Student.query.with_entities(Student.id).all()
+        student_ids_in_scope = [s[0] for s in all_students_query]
+        report_title_detail = "General Admin"
+        if not student_ids_in_scope:
+            flash('Nu există studenți în sistem pentru a genera raportul de învoiri weekend.', 'info')
+            return redirect(url_for('admin_dashboard_route'))
+
+    elif current_user.role == 'comandant_companie':
+        company_id = _get_commander_unit_id(current_user.username, "CmdC")
+        if not company_id:
+            flash('ID-ul companiei nu a putut fi determinat.', 'danger')
+            return redirect(url_for('company_commander_dashboard'))
+        students_in_unit = Student.query.filter_by(companie=company_id).with_entities(Student.id).all()
+        student_ids_in_scope = [s[0] for s in students_in_unit]
+        report_title_detail = f"Compania {company_id}"
+        if not student_ids_in_scope:
+            flash(f'Nu există studenți în compania {company_id} pentru a genera raportul.', 'info')
+            return redirect(url_for('company_commander_dashboard'))
+
+    elif current_user.role == 'comandant_batalion':
+        battalion_id = _get_commander_unit_id(current_user.username, "CmdB")
+        if not battalion_id:
+            flash('ID-ul batalionului nu a putut fi determinat.', 'danger')
+            return redirect(url_for('battalion_commander_dashboard'))
+        students_in_unit = Student.query.filter_by(batalion=battalion_id).with_entities(Student.id).all()
+        student_ids_in_scope = [s[0] for s in students_in_unit]
+        report_title_detail = f"Batalionul {battalion_id}"
+        if not student_ids_in_scope:
+            flash(f'Nu există studenți în batalionul {battalion_id} pentru a genera raportul.', 'info')
+            return redirect(url_for('battalion_commander_dashboard'))
+    else:
+        flash('Rol neautorizat pentru această funcționalitate de export.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Query for weekend leaves, similar to permissions
+    weekend_leaves_query = WeekendLeave.query.join(WeekendLeave.student).options(
+        joinedload(WeekendLeave.student)
+    ).filter(
+        WeekendLeave.student_id.in_(student_ids_in_scope),
+        WeekendLeave.status == 'Aprobată'
+        # We need to filter by is_overall_active_or_upcoming, which is a property.
+        # This requires fetching all and then filtering in Python, or replicating logic in SQL.
+        # For simplicity, fetch all approved and filter in Python.
+    ).order_by(
+        Student.batalion, Student.companie, Student.pluton, Student.nume, WeekendLeave.weekend_start_date
+    )
+
+    all_approved_leaves = weekend_leaves_query.all()
+    # Filter for active or upcoming ones
+    leaves_to_export = [leave for leave in all_approved_leaves if leave.is_overall_active_or_upcoming]
+
+
+    if not leaves_to_export:
+        flash(f'Nicio învoire de weekend activă sau viitoare de exportat pentru {report_title_detail}.', 'info')
+        if current_user.role == 'admin': return redirect(url_for('admin_dashboard_route'))
+        if current_user.role == 'comandant_companie': return redirect(url_for('company_commander_dashboard'))
+        if current_user.role == 'comandant_batalion': return redirect(url_for('battalion_commander_dashboard'))
+        return redirect(url_for('dashboard'))
+
+    document = Document()
+    sections = document.sections
+    for section in sections:
+        section.left_margin = Inches(0.75); section.right_margin = Inches(0.75)
+        section.top_margin = Inches(0.75); section.bottom_margin = Inches(0.75)
+
+    document.add_heading(f'Raport Învoiri Weekend - {report_title_detail}', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    user_info_text = f"Raport generat de: {current_user.username} ({current_user.role})\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True
+    p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    document.add_paragraph()
+
+    table = document.add_table(rows=1, cols=7) # NrCrt, Grad, Nume, Pluton, Weekend(Vineri), Intervale, Obs/Biserica
+    table.style = 'Table Grid'
+    table.autofit = False
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    hdr_cells = table.rows[0].cells
+    column_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Pluton', 'Weekend (Vineri)', 'Intervale Selectate', 'Observații (Biserică)']
+    for i, title in enumerate(column_titles):
+        cell = hdr_cells[i]; cell.text = title
+        p = cell.paragraphs[0]; p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for run in p.runs: run.font.bold = True; run.font.size = Pt(9)
+
+    for idx, leave in enumerate(leaves_to_export):
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(idx + 1)
+        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[1].text = leave.student.grad_militar
+        row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}"
+        row_cells[3].text = leave.student.pluton
+        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[4].text = leave.weekend_start_date.strftime('%d.%m.%y') # Shorter year
+        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        intervals_str = []
+        for interval in leave.get_intervals():
+            intervals_str.append(f"{interval['day_name']} ({interval['start'].strftime('%d.%m')}) {interval['start'].strftime('%H:%M')}-{interval['end'].strftime('%H:%M')}")
+        row_cells[5].text = "; ".join(intervals_str) if intervals_str else "N/A"
+
+        reason_text = leave.reason or ""
+        if leave.duminica_biserica and any(day['day_name'] == 'Duminica' for day in leave.get_intervals()):
+            reason_text = (reason_text + " (Biserică Duminică)").strip()
+        if not reason_text: reason_text = "-"
+        row_cells[6].text = reason_text
+
+        for cell in row_cells:
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs: run.font.size = Pt(9)
+
+    # Widths: NrCrt(0.3), Grad(0.5), Nume(1.2), Pluton(0.5), Vineri(0.7), Intervale(2.5), Obs(1.0) -> Total 6.7
+    widths_config = {
+        0: Inches(0.3), 1: Inches(0.5), 2: Inches(1.2), 3: Inches(0.5),
+        4: Inches(0.7), 5: Inches(2.5), 6: Inches(1.0)
+    }
+    for col_idx, width_val in widths_config.items():
+        for row in table.rows:
+            if col_idx < len(row.cells): row.cells[col_idx].width = width_val
+
+    style = document.styles['Normal']
+    font = style.font; font.name = 'Calibri'; font.size = Pt(9)
+
+    f_io = io.BytesIO()
+    document.save(f_io)
+    f_io.seek(0)
+
+    clean_report_title = re.sub(r'\W+', '_', report_title_detail)
+    filename = f"Raport_Invoiri_Weekend_{clean_report_title}_{current_username_for_file}_{date.today().strftime('%Y%m%d')}.docx"
+
+    return send_file(f_io,
+                     download_name=filename,
+                     as_attachment=True,
+                     mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
 
 # --- Rapoarte ---
 @app.route('/company_commander/report/text', methods=['GET'])

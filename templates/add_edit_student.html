@@ -46,7 +46,7 @@
 
                         <div class="mb-3">
                             <label for="id_unic_student" class="form-label">ID Unic Student (Opțional)</label>
-                            <input type="text" class="form-control" id="id_unic_student" name="id_unic_student" value="{{ student.id_unic_student if student and student.id_unic_student else (form_data.id_unic_student if form_data else '') }}" placeholder="ex: Număr matricol, CNP">
+                            <input type="text" class="form-control" id="id_unic_student" name="id_unic_student" value="{{ student.id_unic_student if student and student.id_unic_student else (form_data.id_unic_student if form_data else '') }}" placeholder="ex: Număr matricol, CNP" title="Introduceți un ID unic pentru student, de exemplu, numărul matricol sau CNP. Acest câmp este opțional, dar dacă este completat, valoarea trebuie să fie unică în sistem.">
                             <small class="form-text text-muted">Acest ID trebuie să fie unic în tot sistemul dacă este completat.</small>
                         </div>
 
@@ -69,17 +69,17 @@
                         <div class="row">
                             <div class="col-md-4 mb-3">
                                 <label for="pluton" class="form-label">Pluton <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="pluton" name="pluton" value="{{ student.pluton if student else (form_data.pluton if form_data else (current_user.username.split('_')[0] if '_' in current_user.username and current_user.role == 'gradat' else '')) }}" required placeholder="ex: 1, 2, 3">
+                                <input type="text" class="form-control" id="pluton" name="pluton" value="{{ student.pluton if student else (form_data.pluton if form_data else (current_user.username.split('_')[0] if '_' in current_user.username and current_user.role == 'gradat' else '')) }}" required placeholder="ex: 1, 2, 3" title="Introduceți numărul plutonului (ex: 1, 21, 112).">
                                 <small class="form-text text-muted">Plutonul.</small>
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label for="companie" class="form-label">Companie <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="companie" name="companie" value="{{ student.companie if student else (form_data.companie if form_data else '') }}" required placeholder="ex: 1, 2, 3">
+                                <input type="text" class="form-control" id="companie" name="companie" value="{{ student.companie if student else (form_data.companie if form_data else '') }}" required placeholder="ex: 1, 2, 3" title="Introduceți numărul companiei (ex: 1, 11, 23).">
                                  <small class="form-text text-muted">Compania.</small>
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label for="batalion" class="form-label">Batalion <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="batalion" name="batalion" value="{{ student.batalion if student else (form_data.batalion if form_data else '') }}" required placeholder="ex: 1, 2, 3">
+                                <input type="text" class="form-control" id="batalion" name="batalion" value="{{ student.batalion if student else (form_data.batalion if form_data else '') }}" required placeholder="ex: 1, 2, 3" title="Introduceți numărul batalionului (ex: 1, 2).">
                                 <small class="form-text text-muted">Batalionul.</small>
                             </div>
                         </div>

@@ -27,28 +27,30 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
         .unap-logo-text {
-            font-weight: bold;
-            font-size: 1.75rem; /* Mărit pentru a fi vizibil */
-            background: linear-gradient(45deg, #0033A0, #00BFFF); /* Exemplu de gradient UNAP (albastru) */
+            font-weight: 600; /* Ajustat font-weight */
+            font-size: 1.25rem; /* Redus font-size pentru compactare */
+            background: linear-gradient(45deg, #0033A0, #00BFFF);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
             text-fill-color: transparent;
-            padding: 2px 0; /* Mic padding pentru a nu tăia gradientul */
+            padding: 1px 0; /* Redus padding */
         }
         .navbar-brand.unap-brand {
-            padding-top: 0.5rem; /* Ajustare padding pentru a alinia mai bine */
-            padding-bottom: 0.5rem;
+            padding-top: 0.2rem; /* Redus padding-top pentru compactare */
+            padding-bottom: 0.2rem; /* Redus padding-bottom pentru compactare */
         }
+        .navbar { margin-bottom: 0.5rem !important; } /* Redus margin-bottom pentru navbar */
+        .footer { margin-top: 0.5rem !important; } /* Redus margin-top pentru footer */
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
+    <nav class="navbar navbar-expand-lg navbar-light bg-light"> <!-- Eliminat mb-4 -->
         <div class="container-fluid">
             <a class="navbar-brand unap-brand" href="{{ url_for('home') }}" style="display: flex; align-items: center;">
                 {# Aici ar veni <img src="{{ url_for('static', filename='images/unap_logo.png') }}" alt="UNAP"> dacă am avea un logo #}
                 <span class="unap-logo-text">UNAP</span>
-                <span class="badge ms-2" style="padding: 0.3em 0.5em; font-size: 0.6em; color: white; background-image: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);">BETA</span>
+                <span class="badge ms-2" style="padding: 0.2em 0.4em; font-size: 0.55em; color: white; background-image: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);">BETA</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
@@ -102,7 +104,7 @@
                         </li>
                     {% endif %}
                     <li class="nav-item d-flex align-items-center me-2 ms-lg-2">
-                        <button class="btn btn-outline-secondary btn-sm" id="darkModeToggle" type="button" title="Comută tema vizuală">
+                        <button class="btn btn-outline-secondary btn-sm" id="darkModeToggle" type="button" title="Comută între tema luminoasă și întunecată">
                             <i class="fas fa-moon"></i> <!-- Icon will be updated by JS -->
                         </button>
                     </li>

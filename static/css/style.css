@@ -62,22 +62,22 @@ body.dark-mode {
     --bg-surface: #2c2c2c;                  /* Dark grey for cards, surfaces */
     --bg-surface-hover: #383838;           /* Slightly lighter grey for hover */
 
-    --text-primary: #e0e0e0;                /* Light grey for primary text */
-    --text-secondary: #a0a0a0;              /* Medium-light grey for secondary text */
+    --text-primary: #f0f0f0;                /* Slightly brighter for primary text */
+    --text-secondary: #cccccc;              /* Brighter secondary text for better readability */
     /* --text-on-accent remains #ffffff or could be adjusted if accent changes drastically */
 
     /* Accents can often remain the same, or be slightly desaturated/adjusted if needed */
     /* --accent-primary: #007bff; (keep or adjust) */
     /* --accent-primary-darker: #0056b3; (keep or adjust) */
 
-    --border-color: #444444;                /* Darker border color */
-    --input-bg: #333333;
-    --input-border: #555555;
+    --border-color: #525252;                /* Slightly lighter border for less harshness */
+    --input-bg: #282828;                    /* Darker input bg for better form field separation */
+    --input-border: #606060;                /* Slightly lighter input border */
     --input-focus-border: #007bff;          /* Keep accent for focus, or use a lighter variant */
     --input-focus-shadow: rgba(0, 123, 255, 0.35); /* Adjusted alpha for dark bg */
 
-    --link-color: #5cb8ff; /* Adjusted for better contrast on #2c2c2c (AA passed) */
-    --link-hover-color: #89cff0; /* Corresponding lighter hover */
+    --link-color: #66bfff;                  /* Adjusted link color for even better contrast */
+    --link-hover-color: #99d6ff;            /* Corresponding lighter hover */
 
     /* Shadows might need to be less pronounced or use a lighter color if the background is very dark */
     /* For simplicity, we'll keep them for now, but they might be less effective */
@@ -163,13 +163,13 @@ body {
     padding: 0;
     background-color: var(--bg-main);
     color: var(--text-primary);
-    line-height: 1.5; /* Redus line-height global */
-    font-size: 1rem; /* Asigură o bază bună pentru responsive */
+    line-height: 1.4; /* Redus și mai mult line-height global */
+    font-size: 0.95rem; /* Micșorat fontul de bază global */
 }
 
 .container, .container-fluid {
-    padding-top: 1rem; /* Redus padding container */
-    padding-bottom: 1rem; /* Redus padding container */
+    padding-top: 0.5rem; /* Redus și mai mult padding container */
+    padding-bottom: 0.5rem; /* Redus și mai mult padding container */
 }
 
 a {
@@ -189,27 +189,29 @@ a:hover {
     box-shadow: var(--shadow-sm);
 }
 .navbar {
-    padding-top: 0.05rem; /* Micșorat padding-ul navbar-ului */
-    padding-bottom: 0.05rem; /* Micșorat padding-ul navbar-ului */
+    padding-top: 0.02rem; /* Și mai mic padding navbar */
+    padding-bottom: 0.02rem; /* Și mai mic padding navbar */
 }
 .navbar .navbar-brand {
-    font-weight: 600;
-    font-size: 1.0rem; /* Micșorat font-size pentru brand */
+    font-weight: 500; /* Redus font-weight brand */
+    font-size: 0.85rem; /* Și mai mic font-size brand */
     display: flex;
     align-items: center;
-    padding-top: 0.05rem; /* Micșorat padding-ul brand-ului */
-    padding-bottom: 0.05rem; /* Micșorat padding-ul brand-ului */
+    padding-top: 0.02rem; /* Și mai mic padding brand */
+    padding-bottom: 0.02rem; /* Și mai mic padding brand */
+    line-height: 1.1; /* Și mai strâns line-height brand */
 }
-.navbar .navbar-brand img {
-    max-height: 22px; /* Micșorat înălțimea logo-ului */
-    margin-right: 0.25rem; /* Micșorat marginea logo-ului */
+.navbar .navbar-brand img { /* Dacă se adaugă un logo imagine */
+    max-height: 18px; /* Și mai mic logo height */
+    margin-right: 0.15rem;
 }
 .navbar .nav-link {
     color: var(--text-secondary) !important;
-    font-weight: 500;
-    padding-top: 0.1rem; /* Micșorat padding-ul link-urilor */
-    padding-bottom: 0.1rem; /* Micșorat padding-ul link-urilor */
-    font-size: 0.85rem; /* Ajustat font-size pentru link-uri */
+    font-weight: 400; /* Redus font-weight linkuri */
+    padding-top: 0.02rem; /* Și mai mic padding linkuri */
+    padding-bottom: 0.02rem; /* Și mai mic padding linkuri */
+    font-size: 0.75rem; /* Și mai mic font-size linkuri */
+    line-height: 1.1; /* Și mai strâns line-height linkuri */
 }
 .navbar .nav-link:hover, .navbar .nav-link.active {
     color: var(--accent-primary) !important;
@@ -270,19 +272,34 @@ a:hover {
     padding: 0.5rem; /* Redus padding table cell */
     vertical-align: top;
     border-top: 1px solid var(--border-color);
+    color: var(--text-primary); /* Asigură explicit culoarea textului în celule */
 }
 .table thead th {
     vertical-align: bottom;
     border-bottom: 2px solid var(--border-color);
     font-weight: 600;
-    background-color: var(--bg-main); /* Header tabel puțin diferit */
+    background-color: var(--bg-surface-hover); /* Fundal puțin mai distinct pentru header tabel în dark mode */
+    color: var(--text-primary); /* Asigură culoarea textului în header */
 }
 .table-striped > tbody > tr:nth-of-type(odd) > * {
     background-color: rgba(0, 0, 0, 0.03); /* Dungile foarte subtile */
+    /* Dark mode specific striping is handled by body.dark-mode .table-striped */
 }
 .table-hover > tbody > tr:hover > * {
     background-color: rgba(0, 0, 0, 0.06);
+    /* Dark mode specific hover is handled by body.dark-mode .table-hover */
 }
+
+/* Specific dark mode table cell text color, just in case of overrides */
+body.dark-mode .table th,
+body.dark-mode .table td {
+    color: var(--text-primary);
+}
+
+body.dark-mode .table thead th {
+    background-color: var(--bg-surface-hover); /* Consistent with other dark mode headers */
+}
+
 
 /* Formulare */
 .form-control, .form-select {
@@ -462,12 +479,13 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
 
 /* Footer specific styles */
 .footer {
-    padding: 0.25rem 0; /* Micșorat și mai mult padding-ul footer-ului */
+    padding: 0.1rem 0; /* Și mai mic padding footer */
     background-color: var(--bg-surface);
     border-top: 1px solid var(--border-color);
     color: var(--text-secondary);
     text-align: center;
-    font-size: 0.75em; /* Micșorat și mai mult font-size pentru footer */
+    font-size: 0.65em; /* Și mai mic font-size footer */
+    line-height: 1.1; /* Și mai strâns line-height footer */
 }
 
 .heartbeat {
@@ -509,6 +527,25 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
     .form-control, .form-select {
         padding: 0.4rem 0.6rem;
         font-size: 0.9rem;
+    }
+    .table th, .table td {
+        padding: 0.4rem; /* Padding și mai mic pentru celule tabel pe ecrane foarte mici */
+        font-size: 0.85rem; /* Font și mai mic în tabele pe ecrane foarte mici */
+    }
+    /* Asigură că butoanele de acțiune din tabele au suficient spațiu sau trec pe rând nou */
+    .table td .btn {
+        margin-bottom: 0.25rem; /* Adaugă un mic spațiu sub butoane dacă se împachetează */
+    }
+    .table td form.d-inline { /* Asigură că formularele inline nu cauzează probleme de layout */
+        display: block; /* Poate fi necesar ca butoanele de ștergere să ocupe lățime completă */
+        margin-bottom: 0.25rem;
+    }
+    .table td form.d-inline .btn {
+        width: 100%; /* Butoanele de ștergere să ocupe lățimea disponibilă */
+    }
+     .table td a.btn, .table td button.btn:not([type='submit']) { /* Butoane de editare/anulare etc. */
+        width: auto; /* Lățime automată pentru acestea */
+        margin-right: 0.25rem; /* Spațiu între ele dacă sunt pe același rând */
     }
 }
 

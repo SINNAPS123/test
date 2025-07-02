@@ -26,12 +26,64 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center">
         <h2 class="mb-3">Panou Comandant Compania {{ company_id }}</h2>
-        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
-            &laquo; Înapoi la Panoul Principal
-        </a>
+        <div>
+            <a href="{{ url_for('export_permissions_scoped_word') }}" class="btn btn-sm btn-outline-primary me-2" title="Exportă raportul de permisii active/viitoare pentru companie">
+                <i class="fas fa-file-word"></i> Export Permisii
+            </a>
+            <a href="{{ url_for('export_weekend_leaves_scoped_word') }}" class="btn btn-sm btn-outline-primary me-2" title="Exportă raportul de învoiri de weekend active/viitoare pentru companie">
+                <i class="fas fa-file-word"></i> Export Învoiri Wk.
+            </a>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                &laquo; Înapoi la Panoul Principal
+            </a>
+        </div>
     </div>
-    <p class="text-muted">Situația efectivelor pentru Apelul de Seară din {{ roll_call_time_str }}</p>
+
     <hr>
+
+    <h4 class="mb-3">Situația Companiei Astăzi ({{ "now"|format_datetime('short') }})</h4>
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Total Studenți</h5>
+                    <p class="card-text fs-4 fw-bold">{{ total_students_company }}</p>
+                    <a href="{{ url_for('list_students') }}" class="btn btn-sm btn-outline-secondary">Vezi Lista</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Permisii Astăzi</h5>
+                    <p class="card-text fs-4 fw-bold">{{ permissions_today_count }}</p>
+                    <a href="{{ url_for('admin_list_permissions') }}" class="btn btn-sm btn-outline-secondary">Detalii Permisii</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Învoiri Astăzi</h5>
+                    <p class="card-text fs-4 fw-bold">{{ total_leaves_today_count }}</p>
+                    <small>(Zilnice: {{ daily_leaves_today_company }}, Weekend: {{ weekend_leaves_today_company }})</small><br>
+                    <a href="{{ url_for('admin_list_daily_leaves') }}" class="btn btn-sm btn-outline-secondary mt-1">Detalii Învoiri</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">În Serviciu Astăzi</h5>
+                    <p class="card-text fs-4 fw-bold">{{ services_today_count }}</p>
+                    <a href="{{ url_for('admin_list_services') }}" class="btn btn-sm btn-outline-secondary">Detalii Servicii</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr class="my-4">
+    <h4 class="mb-3">Situația la Apelul de Seară (<span class="text-muted">{{ roll_call_time_str }}</span>)</h4>
 
     {% macro display_presence_details(data, id_prefix) %}
         {% if data.in_formation_students_details %}
