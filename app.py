@@ -140,11 +140,21 @@ class Permission(db.Model):
     created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     creator = db.relationship('User', backref=db.backref('permissions_created', lazy=True))
     @property
-    def is_active(self): now = get_localized_now(); return self.start_datetime <= now <= self.end_datetime and self.status == 'Aprobată'
+    def is_active(self):
+        now = get_localized_now()
+        start_dt_aware = EUROPE_BUCHAREST.localize(self.start_datetime) if self.start_datetime.tzinfo is None else self.start_datetime.astimezone(EUROPE_BUCHAREST)
+        end_dt_aware = EUROPE_BUCHAREST.localize(self.end_datetime) if self.end_datetime.tzinfo is None else self.end_datetime.astimezone(EUROPE_BUCHAREST)
+        return start_dt_aware <= now <= end_dt_aware and self.status == 'Aprobată'
     @property
-    def is_upcoming(self): now = get_localized_now(); return self.start_datetime > now and self.status == 'Aprobată'
+    def is_upcoming(self):
+        now = get_localized_now()
+        start_dt_aware = EUROPE_BUCHAREST.localize(self.start_datetime) if self.start_datetime.tzinfo is None else self.start_datetime.astimezone(EUROPE_BUCHAREST)
+        return start_dt_aware > now and self.status == 'Aprobată'
     @property
-    def is_past(self): now = get_localized_now(); return self.end_datetime < now or self.status == 'Anulată'
+    def is_past(self):
+        now = get_localized_now()
+        end_dt_aware = EUROPE_BUCHAREST.localize(self.end_datetime) if self.end_datetime.tzinfo is None else self.end_datetime.astimezone(EUROPE_BUCHAREST)
+        return end_dt_aware < now or self.status == 'Anulată'
 
 class DailyLeave(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -163,13 +173,24 @@ class DailyLeave(db.Model):
     def end_datetime(self):
         effective_end_date = self.leave_date
         if self.end_time < self.start_time: effective_end_date += timedelta(days=1)
-        return datetime.combine(effective_end_date, self.end_time)
+        return datetime.combine(effective_end_date, self.end_time) # Returns naive datetime
     @property
-    def is_active(self): now = get_localized_now(); return self.start_datetime <= now <= self.end_datetime and self.status == 'Aprobată'
+    def is_active(self):
+        now = get_localized_now()
+        # self.start_datetime and self.end_datetime are properties returning naive datetimes
+        start_dt_aware = EUROPE_BUCHAREST.localize(self.start_datetime)
+        end_dt_aware = EUROPE_BUCHAREST.localize(self.end_datetime)
+        return start_dt_aware <= now <= end_dt_aware and self.status == 'Aprobată'
     @property
-    def is_upcoming(self): now = get_localized_now(); return self.start_datetime > now and self.status == 'Aprobată'
+    def is_upcoming(self):
+        now = get_localized_now()
+        start_dt_aware = EUROPE_BUCHAREST.localize(self.start_datetime)
+        return start_dt_aware > now and self.status == 'Aprobată'
     @property
-    def is_past(self): now = get_localized_now(); return self.end_datetime < now or self.status == 'Anulată'
+    def is_past(self):
+        now = get_localized_now()
+        end_dt_aware = EUROPE_BUCHAREST.localize(self.end_datetime)
+        return end_dt_aware < now or self.status == 'Anulată'
     @property
     def leave_type_display(self):
         in_program_start, in_program_end = time(7,0), time(14,20)
@@ -212,9 +233,19 @@ class WeekendLeave(db.Model):
         ]
         for d_date, s_time, e_time, d_name in days_info:
             if d_date and s_time and e_time:
-                s_dt, e_dt = datetime.combine(d_date, s_time), datetime.combine(d_date, e_time)
-                if e_dt < s_dt: e_dt += timedelta(days=1)
-                intervals.append({"day_name": d_name, "start": s_dt, "end": e_dt})
+                # Create naive datetime objects first
+                s_dt_naive = datetime.combine(d_date, s_time)
+                e_dt_naive = datetime.combine(d_date, e_time)
+
+                # Handle overnight case for naive end datetime
+                if e_dt_naive < s_dt_naive: # e.g. start 22:00, end 02:00
+                    e_dt_naive += timedelta(days=1)
+
+                # Localize to make them aware
+                s_dt_aware = EUROPE_BUCHAREST.localize(s_dt_naive)
+                e_dt_aware = EUROPE_BUCHAREST.localize(e_dt_naive)
+
+                intervals.append({"day_name": d_name, "start": s_dt_aware, "end": e_dt_aware})
         return sorted(intervals, key=lambda x: x['start'])
     @property
     def is_overall_active_or_upcoming(self):
@@ -262,11 +293,21 @@ class ServiceAssignment(db.Model):
     created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     creator = db.relationship('User', backref=db.backref('service_assignments_created', lazy=True))
     @property
-    def is_active(self): now = get_localized_now(); return self.start_datetime <= now <= self.end_datetime
+    def is_active(self):
+        now = get_localized_now()
+        start_dt_aware = EUROPE_BUCHAREST.localize(self.start_datetime) if self.start_datetime.tzinfo is None else self.start_datetime.astimezone(EUROPE_BUCHAREST)
+        end_dt_aware = EUROPE_BUCHAREST.localize(self.end_datetime) if self.end_datetime.tzinfo is None else self.end_datetime.astimezone(EUROPE_BUCHAREST)
+        return start_dt_aware <= now <= end_dt_aware
     @property
-    def is_upcoming(self): now = get_localized_now(); return self.start_datetime > now
+    def is_upcoming(self):
+        now = get_localized_now()
+        start_dt_aware = EUROPE_BUCHAREST.localize(self.start_datetime) if self.start_datetime.tzinfo is None else self.start_datetime.astimezone(EUROPE_BUCHAREST)
+        return start_dt_aware > now
     @property
-    def is_past(self): now = get_localized_now(); return self.end_datetime < now
+    def is_past(self):
+        now = get_localized_now()
+        end_dt_aware = EUROPE_BUCHAREST.localize(self.end_datetime) if self.end_datetime.tzinfo is None else self.end_datetime.astimezone(EUROPE_BUCHAREST)
+        return end_dt_aware < now
 
 class ActionLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -1791,36 +1832,28 @@ def presence_report():
             datetime_to_check = get_localized_now() # Acesta este deja timezone-aware
             report_title_detail = "Prezență Curentă"
         elif report_type == 'evening_roll_call':
-            # get_standard_roll_call_datetime() returnează un datetime naive în ora locală
-            datetime_to_check = get_standard_roll_call_datetime()
+            naive_dt = get_standard_roll_call_datetime() # returnează un datetime naive în ora locală
+            datetime_to_check = EUROPE_BUCHAREST.localize(naive_dt)
             report_title_detail = f"Apel de Seară ({datetime_to_check.strftime('%H:%M')})"
         elif report_type == 'company_report':
-            # Construim un datetime naive în ora locală
-            datetime_to_check = datetime.combine(get_localized_now().date(), time(14, 20))
+            naive_dt = datetime.combine(get_localized_now().date(), time(14, 20)) # Construim un datetime naive
+            datetime_to_check = EUROPE_BUCHAREST.localize(naive_dt)
             report_title_detail = "Raport Companie (14:20)"
         elif report_type == 'morning_check':
             target_d = get_localized_now().date() # Default to today (localized)
             if custom_datetime_str:
                 try:
+                    # Parse the date from the custom_datetime_str if provided for morning_check
                     target_d = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M').date()
                 except (ValueError, TypeError):
                     flash('Data custom specificată era invalidă, s-a folosit data curentă pentru raportul de dimineață.', 'warning')
-            datetime_to_check = datetime.combine(target_d, time(7, 0)) # Naive, ora locală
+            naive_dt = datetime.combine(target_d, time(7, 0)) # Naive, ora locală
+            datetime_to_check = EUROPE_BUCHAREST.localize(naive_dt)
             report_title_detail = f"Prezență Dimineață ({target_d.strftime('%d.%m.%Y')} 07:00)"
         elif report_type == 'custom':
             try:
-                # custom_datetime_str este deja în ora locală din formular
-                datetime_to_check = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M') # Naive, ora locală
-                # Pentru a fi consecvenți, dacă _calculate_presence_data se așteaptă la timezone-aware, localizăm:
-                # datetime_to_check = EUROPE_BUCHAREST.localize(datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M'), is_dst=None)
-                # Dar _calculate_presence_data primește 'check_datetime' și îl folosește direct.
-                # Important e ca 'now' în interiorul _calculate_presence_data să fie comparabil.
-                # Dacă 'check_datetime' e naive local, și 'now' în _calculate_presence_data e naive local, e ok.
-                # Dacă 'check_datetime' e timezone-aware local, și 'now' e timezone-aware local, e ok.
-                # Momentan, _calculate_presence_data folosește get_localized_now() care e timezone-aware.
-                # Deci, și datetime_to_check ar trebui să fie timezone-aware.
-                datetime_to_check = EUROPE_BUCHAREST.localize(datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M'))
-
+                naive_dt = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M') # Naive, ora locală
+                datetime_to_check = EUROPE_BUCHAREST.localize(naive_dt)
                 report_title_detail = f"Dată Specifică ({datetime_to_check.strftime('%d.%m.%Y %H:%M')})"
             except (ValueError, TypeError):
                 flash('Format dată și oră custom invalid. Folosiți formatul corect.', 'danger')
@@ -3483,7 +3516,7 @@ def process_daily_leaves_text():
             ServiceAssignment.end_datetime > start_dt_bulk
         ).first()
         if active_intervention_service:
-            flash(f'Studentul {found_student.nume} {found_student.prenume} este în "Intervenție". Învoire ignorată pentru '{line_raw}'.', 'warning')
+            flash(f'Studentul {found_student.nume} {found_student.prenume} este în "Intervenție". Învoire ignorată pentru {line_raw}.', 'warning')
             error_count += 1
             continue
 
@@ -4152,9 +4185,11 @@ def assign_service(assignment_id=None):
         effective_end_date = service_date_obj
         if end_time_obj < start_time_obj:
             effective_end_date += timedelta(days=1)
+        elif service_type == "GSS" and end_time_obj == start_time_obj: # GSS special case for 24h
+            effective_end_date += timedelta(days=1)
         end_dt_obj = datetime.combine(effective_end_date, end_time_obj)
 
-        if end_dt_obj <= start_dt_obj:
+        if end_dt_obj <= start_dt_obj: # This check should now be generally correct
             flash('Intervalul orar al serviciului este invalid (sfârșitul trebuie să fie după început).', 'danger')
             return render_template('assign_service.html', form_title=form_title, service_assignment=service_assignment, students=students, service_types=SERVICE_TYPES, default_times=default_times_for_js, today_str=today_iso_str, form_data=current_form_data)
 
@@ -4280,6 +4315,8 @@ def assign_multiple_services():
             start_dt_obj = datetime.combine(service_date_obj, start_time_obj)
             effective_end_date = service_date_obj
             if end_time_obj < start_time_obj:
+                effective_end_date += timedelta(days=1)
+            elif service_type == "GSS" and end_time_obj == start_time_obj: # GSS special case for 24h
                 effective_end_date += timedelta(days=1)
             end_dt_obj = datetime.combine(effective_end_date, end_time_obj)
 
