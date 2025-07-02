@@ -15,6 +15,8 @@ from datetime import datetime, date, time, timedelta
 from sqlalchemy import func, or_
 import re 
 from unidecode import unidecode
+import json
+from sqlalchemy import inspect
 
 # Inițializare aplicație Flask
 app = Flask(__name__)
@@ -82,6 +84,8 @@ class Permission(db.Model):
     end_datetime = db.Column(db.DateTime, nullable=False)
     reason = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(50), default='Aprobată', nullable=False)
+    destination = db.Column(db.String(255), nullable=True)
+    transport_mode = db.Column(db.String(100), nullable=True)
     student = db.relationship('Student', backref=db.backref('permissions', lazy=True, cascade="all, delete-orphan"))
     created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     creator = db.relationship('User', backref=db.backref('permissions_created', lazy=True))
@@ -169,7 +173,10 @@ class WeekendLeave(db.Model):
         return any(interval["end"] >= now for interval in self.get_intervals())
     @property
     def is_any_interval_active_now(self):
-        if self.status != 'Aprobată': return False; now = datetime.now() 
+        if self.status != 'Aprobată':
+            return False
+        # This code is only reached if status is 'Aprobată'
+        now = datetime.now()
         return any(interval["start"] <= now <= interval["end"] for interval in self.get_intervals())
     @property
     def is_overall_past(self): now = datetime.now(); return True if self.status == 'Anulată' else not self.is_overall_active_or_upcoming
@@ -210,6 +217,25 @@ class ServiceAssignment(db.Model):
     def is_upcoming(self): now = datetime.now(); return self.start_datetime > now
     @property
     def is_past(self): now = datetime.now(); return self.end_datetime < now
+
+class ActionLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # Nullable if action can be system-initiated or by non-logged-in user
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    action_type = db.Column(db.String(50), nullable=False) # e.g., CREATE, UPDATE, DELETE, LOGIN, LOGOUT, RESET_CODE
+    target_model = db.Column(db.String(100), nullable=True) # e.g., "Student", "Permission", "User"
+    target_id = db.Column(db.Integer, nullable=True) # ID of the affected record
+    details_before = db.Column(db.Text, nullable=True) # JSON string of relevant fields before change
+    details_after = db.Column(db.Text, nullable=True)  # JSON string of relevant fields after change
+    description = db.Column(db.Text, nullable=True) # General description (e.g., IP address for login, or summary)
+
+    user = db.relationship('User', backref=db.backref('action_logs', lazy='dynamic')) # Changed to lazy='dynamic'
+
+    def __repr__(self):
+        user_desc = f"User {self.user_id}" if self.user_id else "System/UnknownUser"
+        target_desc = f" on {self.target_model}({self.target_id})" if self.target_model and self.target_id else ""
+        description_desc = f" - {self.description[:50]}..." if self.description else ""
+        return f'<ActionLog {self.timestamp.strftime("%Y-%m-%d %H:%M:%S")} - {user_desc} - {self.action_type}{target_desc}{description_desc}>'
 
 @login_manager.user_loader
 def load_user(user_id): return db.session.get(User, int(user_id))
@@ -405,6 +431,66 @@ def check_service_conflict_for_student(student_id, service_start_dt, service_end
     if conflicting_other_service: return f"alt serviciu ({conflicting_other_service.service_type} pe {conflicting_other_service.service_date.strftime('%d.%m')})"
     return None
 
+# --- Action Logging Utilities ---
+def model_to_dict(instance, exclude_fields=None):
+    """Converts a SQLAlchemy model instance to a dictionary, excluding specified fields."""
+    if not instance:
+        return {}
+
+    default_exclude = ['_sa_instance_state', 'password_hash', 'personal_code_hash', 'unique_code'] # Standard + sensitive user fields
+    fields_to_exclude = set(default_exclude)
+    if exclude_fields:
+        fields_to_exclude.update(exclude_fields)
+
+    data = {}
+    for c in inspect(instance).mapper.column_attrs:
+        if c.key not in fields_to_exclude:
+            val = getattr(instance, c.key)
+            # Convert datetime/date/time objects to ISO format string
+            if isinstance(val, (datetime, date, time)):
+                data[c.key] = val.isoformat()
+            else:
+                data[c.key] = val
+    return data
+
+def log_action(action_type, target_model_name=None, target_id=None, details_before_dict=None, details_after_dict=None, description=None, user_override=None):
+    """
+    Logs an action to the ActionLog table.
+    - action_type: Verb describing the action (e.g., "USER_LOGIN", "CREATE_STUDENT").
+    - target_model_name: String name of the model class being affected (e.g., "Student").
+    - target_id: Integer ID of the specific record affected.
+    - details_before_dict: Dictionary representing the state of the object before changes.
+    - details_after_dict: Dictionary representing the state of the object after changes.
+    - description: A textual description of the event (e.g., IP address, summary of bulk operation).
+    - user_override: Optionally provide a User object if current_user is not appropriate (e.g. system actions).
+    """
+    try:
+        log = ActionLog(action_type=action_type)
+
+        acting_user = user_override
+        if not acting_user and hasattr(current_user, 'is_authenticated') and current_user.is_authenticated:
+            acting_user = current_user
+
+        if acting_user:
+            log.user_id = acting_user.id
+
+        log.target_model = target_model_name
+        log.target_id = int(target_id) if target_id is not None else None # Ensure int or None
+
+        if details_before_dict:
+            log.details_before = json.dumps(details_before_dict, ensure_ascii=False, default=str)
+        if details_after_dict:
+            log.details_after = json.dumps(details_after_dict, ensure_ascii=False, default=str)
+
+        log.description = description
+
+        db.session.add(log)
+        # Committing is handled by the calling route after the main operation succeeds.
+    except Exception as e:
+        app.logger.error(f"AUDIT LOGGING FAILED for action '{action_type}': {str(e)}")
+        # Avoid rollback here, as it might interfere with the main operation's transaction.
+        # The main operation should handle its own rollback on failure.
+
 # --- Rute Comune ---
 @app.route('/')
 def home():
@@ -418,49 +504,145 @@ def home():
 
 @app.route('/user_login', methods=['GET', 'POST'])
 def user_login():
-    if current_user.is_authenticated: return redirect(url_for('dashboard'))
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
     if request.method == 'POST':
         login_code = request.form.get('login_code')
-        user = User.query.filter_by(unique_code=login_code).first()
-        if user:
-            if user.is_first_login:
-                login_user(user); flash('Autentificare reușită! Setează-ți codul personal.', 'info'); return redirect(url_for('set_personal_code'))
-            else: flash('Acest cod unic a fost deja folosit pentru prima autentificare. Te rugăm folosește codul personal setat.', 'warning'); return redirect(url_for('user_login'))
-        users = User.query.filter(User.role != 'admin').all()
-        found_user_by_personal_code = next((u for u in users if u.personal_code_hash and u.check_personal_code(login_code)), None)
-        if found_user_by_personal_code:
-            if found_user_by_personal_code.is_first_login: flash('Eroare de configurare cont. Contactează administratorul.', 'danger'); return redirect(url_for('user_login'))
-            login_user(found_user_by_personal_code); flash('Autentificare reușită!', 'success'); return redirect(url_for('dashboard'))
-        flash('Cod de autentificare invalid sau expirat.', 'danger'); return redirect(url_for('user_login'))
+        user_by_unique_code = User.query.filter_by(unique_code=login_code).first()
+
+        if user_by_unique_code:
+            if user_by_unique_code.is_first_login:
+                login_user(user_by_unique_code)
+                log_action("USER_FIRST_LOGIN_SUCCESS", target_model_name="User", target_id=user_by_unique_code.id,
+                           description=f"User {user_by_unique_code.username} first login with unique code. IP: {request.remote_addr}",
+                           user_override=user_by_unique_code)
+                db.session.commit()
+                flash('Autentificare reușită! Setează-ți codul personal.', 'info')
+                return redirect(url_for('set_personal_code'))
+            else:
+                log_action("USER_LOGIN_FAIL_UNIQUE_CODE_USED", target_model_name="User", target_id=user_by_unique_code.id,
+                           description=f"Attempt to use already used unique code for user {user_by_unique_code.username}. IP: {request.remote_addr}")
+                db.session.commit()
+                flash('Acest cod unic a fost deja folosit pentru prima autentificare. Te rugăm folosește codul personal setat.', 'warning')
+                return redirect(url_for('user_login'))
+
+        users_non_admin = User.query.filter(User.role != 'admin').all()
+        user_by_personal_code = next((u for u in users_non_admin if u.personal_code_hash and u.check_personal_code(login_code)), None)
+
+        if user_by_personal_code:
+            if user_by_personal_code.is_first_login: # Should not happen if logic is correct
+                log_action("USER_LOGIN_FAIL_CONFIG_ERROR", target_model_name="User", target_id=user_by_personal_code.id,
+                           description=f"User {user_by_personal_code.username} attempted login with personal code but is_first_login is true. IP: {request.remote_addr}")
+                db.session.commit()
+                flash('Eroare de configurare cont. Contactează administratorul.', 'danger')
+                return redirect(url_for('user_login'))
+
+            login_user(user_by_personal_code)
+            log_action("USER_LOGIN_SUCCESS", target_model_name="User", target_id=user_by_personal_code.id,
+                       description=f"User {user_by_personal_code.username} login with personal code. IP: {request.remote_addr}",
+                       user_override=user_by_personal_code)
+            db.session.commit()
+            flash('Autentificare reușită!', 'success')
+            return redirect(url_for('dashboard'))
+
+        log_action("USER_LOGIN_FAIL_INVALID_CODE", description=f"Invalid/Expired login code provided: '{login_code[:20]}...'. IP: {request.remote_addr}")
+        db.session.commit()
+        flash('Cod de autentificare invalid sau expirat.', 'danger')
+        return redirect(url_for('user_login'))
     return render_template('user_login.html')
 
 @app.route('/admin_login', methods=['GET', 'POST'])
 def admin_login():
-    if current_user.is_authenticated: return redirect(url_for('dashboard'))
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
     if request.method == 'POST':
-        username, password = request.form.get('username'), request.form.get('password')
+        username = request.form.get('username')
+        password = request.form.get('password')
         user = User.query.filter_by(username=username, role='admin').first()
-        if user and user.check_password(password): login_user(user); flash('Autentificare admin reușită!', 'success'); return redirect(url_for('dashboard'))
-        else: flash('Nume de utilizator sau parolă admin incorecte.', 'danger'); return redirect(url_for('admin_login'))
+        if user and user.check_password(password):
+            login_user(user)
+            log_action("ADMIN_LOGIN_SUCCESS", target_model_name="User", target_id=user.id,
+                       description=f"Admin user {user.username} logged in. IP: {request.remote_addr}",
+                       user_override=user)
+            db.session.commit()
+            flash('Autentificare admin reușită!', 'success')
+            return redirect(url_for('dashboard'))
+        else:
+            log_action("ADMIN_LOGIN_FAIL", description=f"Failed admin login attempt for username '{username}'. IP: {request.remote_addr}")
+            db.session.commit()
+            flash('Nume de utilizator sau parolă admin incorecte.', 'danger')
+            return redirect(url_for('admin_login'))
     return render_template('admin_login.html')
 
 @app.route('/logout')
 @login_required
-def logout(): logout_user(); flash('Ai fost deconectat.', 'success'); return redirect(url_for('home'))
+def logout():
+    user_id_logged_out = current_user.id
+    username_logged_out = current_user.username
+    logout_user()
+    log_action("USER_LOGOUT", target_model_name="User", target_id=user_id_logged_out,
+               description=f"User {username_logged_out} logged out. IP: {request.remote_addr}")
+    db.session.commit()
+    flash('Ai fost deconectat.', 'success')
+    return redirect(url_for('home'))
 
 @app.route('/set_personal_code', methods=['GET', 'POST'])
 @login_required
 def set_personal_code():
-    if not current_user.is_first_login: flash('Codul personal a fost deja setat.', 'info'); return redirect(url_for('dashboard'))
+    if not current_user.is_first_login:
+        flash('Codul personal a fost deja setat.', 'info')
+        return redirect(url_for('dashboard'))
+
     if request.method == 'POST':
-        personal_code, confirm_personal_code = request.form.get('personal_code'), request.form.get('confirm_personal_code')
-        if not personal_code or len(personal_code) < 4: flash('Codul personal trebuie să aibă minim 4 caractere.', 'warning'); return redirect(url_for('set_personal_code'))
-        if personal_code != confirm_personal_code: flash('Codurile personale nu se potrivesc.', 'warning'); return redirect(url_for('set_personal_code'))
+        personal_code = request.form.get('personal_code')
+        confirm_personal_code = request.form.get('confirm_personal_code')
+
+        if not personal_code or len(personal_code) < 4:
+            flash('Codul personal trebuie să aibă minim 4 caractere.', 'warning')
+            return redirect(url_for('set_personal_code'))
+        if personal_code != confirm_personal_code:
+            flash('Codurile personale nu se potrivesc.', 'warning')
+            return redirect(url_for('set_personal_code'))
+
         try:
-            current_user.set_personal_code(personal_code); db.session.commit()
+            details_before = {"is_first_login": current_user.is_first_login, "personal_code_hash_exists": current_user.personal_code_hash is not None}
+
+            current_user.set_personal_code(personal_code) # This also sets is_first_login = False
+
+            details_after = model_to_dict(current_user, exclude_fields=['password_hash', 'unique_code']) # Get updated state
+            details_after["personal_code_hash_exists"] = True # Explicitly state it now exists
+
+            log_action("USER_SET_PERSONAL_CODE_SUCCESS", target_model_name="User", target_id=current_user.id,
+                       details_before_dict=details_before, details_after_dict=details_after,
+                       description=f"User {current_user.username} set personal code. IP: {request.remote_addr}")
+
+            db.session.commit() # Commit user changes and log entry
+
             flash_message = 'Codul personal a fost setat cu succes. Te rugăm să te autentifici din nou folosind noul cod.'
-            logout_user(); flash(flash_message, 'success'); return redirect(url_for('user_login'))
-        except Exception as e: db.session.rollback(); flash(f'A apărut o eroare la setarea codului personal: {str(e)}', 'danger'); return redirect(url_for('set_personal_code'))
+
+            # Log automatic logout after setting personal code
+            user_id_logged_out = current_user.id # Capture before logout_user() invalidates current_user
+            username_logged_out = current_user.username
+            logout_user()
+            log_action("USER_LOGOUT_POST_SET_CODE", target_model_name="User", target_id=user_id_logged_out,
+                       description=f"User {username_logged_out} automatically logged out after setting personal code. IP: {request.remote_addr}")
+            db.session.commit() # Commit logout log
+
+            flash(flash_message, 'success')
+            return redirect(url_for('user_login'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash_msg = f'A apărut o eroare la setarea codului personal: {str(e)}'
+            flash(flash_msg, 'danger')
+            try:
+                log_action("USER_SET_PERSONAL_CODE_FAIL", target_model_name="User", target_id=current_user.id,
+                           description=f"Failed to set personal code for user {current_user.username}. Error: {str(e)}. IP: {request.remote_addr}")
+                db.session.commit()
+            except Exception as log_e:
+                app.logger.error(f"CRITICAL: Failed to commit failure log for USER_SET_PERSONAL_CODE_FAIL: {str(log_e)}")
+            return redirect(url_for('set_personal_code'))
+
     return render_template('set_personal_code.html')
 
 @app.route('/admin/dashboard')
@@ -535,15 +717,26 @@ def admin_create_user():
         )
         db.session.add(new_user)
         try:
+            db.session.add(new_user) # Add to session first
+            db.session.flush() # Assign an ID to new_user so we can log it
+
+            log_action("ADMIN_CREATE_USER_SUCCESS", target_model_name="User", target_id=new_user.id,
+                       details_after_dict=model_to_dict(new_user),
+                       description=f"Admin {current_user.username} created user {new_user.username} ({new_user.role}). Unique code: {unique_code}. IP: {request.remote_addr}")
             db.session.commit()
             flash(f'Utilizatorul "{username}" ({role}) a fost creat cu succes! Cod unic de autentificare: {unique_code}', 'success')
         except Exception as e:
             db.session.rollback()
-            flash(f'Eroare la crearea utilizatorului: {str(e)}', 'danger')
+            flash_msg = f'Eroare la crearea utilizatorului: {str(e)}'
+            flash(flash_msg, 'danger')
+            try:
+                log_action("ADMIN_CREATE_USER_FAIL",
+                           description=f"Admin {current_user.username} failed to create user {username} ({role}). Error: {str(e)}. IP: {request.remote_addr}")
+                db.session.commit()
+            except Exception as log_e:
+                app.logger.error(f"CRITICAL: Failed to commit failure log for ADMIN_CREATE_USER_FAIL: {str(log_e)}")
         return redirect(url_for('admin_dashboard_route'))
 
-    # GET request to this URL might redirect or show a specific form if desired later.
-    # For now, as the form is on admin_dashboard, a GET here is not expected for form display.
     return redirect(url_for('admin_dashboard_route'))
 
 @app.route('/admin/users/reset_code/<int:user_id>', methods=['POST'])
@@ -562,21 +755,36 @@ def admin_reset_user_code(user_id):
         flash('Codul utilizatorului admin nu poate fi resetat prin această metodă.', 'warning')
         return redirect(url_for('admin_dashboard_route'))
 
+    details_before = model_to_dict(user_to_reset)
+    old_unique_code = user_to_reset.unique_code # For logging
+
     new_unique_code = secrets.token_hex(8)
     while User.query.filter_by(unique_code=new_unique_code).first():
         new_unique_code = secrets.token_hex(8)
 
     user_to_reset.unique_code = new_unique_code
     user_to_reset.is_first_login = True
-    user_to_reset.password_hash = None  # Clear old password if any
-    user_to_reset.personal_code_hash = None # Clear personal code
+    user_to_reset.password_hash = None
+    user_to_reset.personal_code_hash = None
 
     try:
+        details_after = model_to_dict(user_to_reset)
+        log_action("ADMIN_RESET_USER_CODE_SUCCESS", target_model_name="User", target_id=user_to_reset.id,
+                   details_before_dict=details_before, details_after_dict=details_after,
+                   description=f"Admin {current_user.username} reset code for user {user_to_reset.username}. Old unique code: {old_unique_code}, New unique code: {new_unique_code}. IP: {request.remote_addr}")
         db.session.commit()
         flash(f'Codul pentru utilizatorul "{user_to_reset.username}" a fost resetat. Noul cod unic de autentificare: {new_unique_code}', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Eroare la resetarea codului: {str(e)}', 'danger')
+        flash_msg = f'Eroare la resetarea codului: {str(e)}'
+        flash(flash_msg, 'danger')
+        try:
+            log_action("ADMIN_RESET_USER_CODE_FAIL", target_model_name="User", target_id=user_to_reset.id,
+                       details_before_dict=details_before, # Log what it was before the attempt
+                       description=f"Admin {current_user.username} failed to reset code for user {user_to_reset.username}. Error: {str(e)}. IP: {request.remote_addr}")
+            db.session.commit()
+        except Exception as log_e:
+            app.logger.error(f"CRITICAL: Failed to commit failure log for ADMIN_RESET_USER_CODE_FAIL: {str(log_e)}")
     return redirect(url_for('admin_dashboard_route'))
 
 @app.route('/admin/users/delete/<int:user_id>', methods=['POST'])
@@ -589,49 +797,362 @@ def admin_delete_user(user_id):
     user_to_delete = db.session.get(User, user_id)
     if not user_to_delete:
         flash('Utilizatorul nu a fost găsit.', 'danger')
+        # Log attempt to delete non-existent user?
+        log_action("ADMIN_DELETE_USER_FAIL_NOT_FOUND", target_id=user_id, description=f"Admin {current_user.username} attempt to delete non-existent user ID {user_id}. IP: {request.remote_addr}")
+        db.session.commit()
         return redirect(url_for('admin_dashboard_route'))
 
-    if user_to_delete.role == 'admin': # Prevent deleting admin accounts
+    if user_to_delete.role == 'admin':
         flash('Conturile de administrator nu pot fi șterse prin această interfață.', 'warning')
+        log_action("ADMIN_DELETE_USER_FAIL_IS_ADMIN", target_model_name="User", target_id=user_to_delete.id,
+                   description=f"Admin {current_user.username} attempt to delete admin user {user_to_delete.username}. IP: {request.remote_addr}")
+        db.session.commit()
         return redirect(url_for('admin_dashboard_route'))
 
-    username_deleted = user_to_delete.username # For flash message
+    username_deleted_log = user_to_delete.username
+    role_deleted_log = user_to_delete.role
+    details_before = model_to_dict(user_to_delete)
+    num_students_deleted = 0
 
     try:
         if user_to_delete.role == 'gradat':
-            # Cascading delete should handle associated student data due to `ondelete='CASCADE'` in models:
-            # Permission, DailyLeave, WeekendLeave, ServiceAssignment, ActivityParticipant
-            # So, deleting the student should delete their related items.
-            # And deleting the User (gradat) should ensure their created_students are handled.
-            # However, the relation User.students_created does not have cascade delete by default for the students themselves.
-            # We need to explicitly delete students created by this gradat.
-
             students_to_delete = Student.query.filter_by(created_by_user_id=user_to_delete.id).all()
+            num_students_deleted = len(students_to_delete)
             for student in students_to_delete:
-                # Related items like Permissions, DailyLeaves etc., are deleted due to cascade on Student model
+                # Log student deletion implicitly by user deletion or explicitly if needed
+                # For now, covered by the user deletion log's description.
                 db.session.delete(student)
-            flash(f'Toți studenții ({len(students_to_delete)}) și datele asociate pentru gradatul {username_deleted} au fost șterse.', 'info')
+            if num_students_deleted > 0:
+                flash(f'Toți studenții ({num_students_deleted}) și datele asociate pentru gradatul {username_deleted_log} au fost șterse.', 'info')
 
-        # Now delete the user
         db.session.delete(user_to_delete)
+
+        log_action("ADMIN_DELETE_USER_SUCCESS", target_model_name="User", target_id=user_id, # user_id from param, as user_to_delete.id will be gone
+                   details_before_dict=details_before,
+                   description=f"Admin {current_user.username} deleted user {username_deleted_log} ({role_deleted_log}). {num_students_deleted} students also deleted if user was gradat. IP: {request.remote_addr}")
         db.session.commit()
-        flash(f'Utilizatorul "{username_deleted}" și toate datele asociate (dacă este cazul) au fost șterse cu succes.', 'success')
+        flash(f'Utilizatorul "{username_deleted_log}" și toate datele asociate (dacă este cazul) au fost șterse cu succes.', 'success')
 
     except Exception as e:
         db.session.rollback()
-        flash(f'Eroare la ștergerea utilizatorului {username_deleted}: {str(e)}', 'danger')
+        flash_msg = f'Eroare la ștergerea utilizatorului {username_deleted_log}: {str(e)}'
+        flash(flash_msg, 'danger')
+        try:
+            log_action("ADMIN_DELETE_USER_FAIL", target_model_name="User", target_id=user_id,
+                       details_before_dict=details_before, # Log what it was before the attempt
+                       description=f"Admin {current_user.username} failed to delete user {username_deleted_log}. Error: {str(e)}. IP: {request.remote_addr}")
+            db.session.commit()
+        except Exception as log_e:
+            app.logger.error(f"CRITICAL: Failed to commit failure log for ADMIN_DELETE_USER_FAIL: {str(log_e)}")
 
     return redirect(url_for('admin_dashboard_route'))
 
+@app.route('/admin/student/edit/<int:student_id>', methods=['GET', 'POST'])
+@login_required
+def admin_edit_student(student_id):
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard')) # Or home
+
+    student_to_edit = db.session.get(Student, student_id)
+    if not student_to_edit:
+        flash('Studentul nu a fost găsit.', 'danger')
+        return redirect(url_for('list_students', _anchor='admin_view_params_if_any')) # Assuming admin view of list_students
+
+    details_before_edit = model_to_dict(student_to_edit)
+    original_creator_username = student_to_edit.creator.username if student_to_edit.creator else "N/A"
+
+
+    if request.method == 'POST':
+        form = request.form
+        # Capture values from form
+        student_to_edit.nume = form.get('nume','').strip()
+        student_to_edit.prenume = form.get('prenume','').strip()
+        student_to_edit.grad_militar = form.get('grad_militar','').strip()
+        student_to_edit.pluton = form.get('pluton','').strip()
+        student_to_edit.companie = form.get('companie','').strip()
+        student_to_edit.batalion = form.get('batalion','').strip()
+        student_to_edit.gender = form.get('gender')
+        student_to_edit.is_platoon_graded_duty = 'is_platoon_graded_duty' in request.form
+        new_id_unic = form.get('id_unic_student','').strip() or None
+
+        # Potentially allow changing created_by_user_id by admin? For now, no.
+        # student_to_edit.created_by_user_id = form.get('created_by_user_id', student_to_edit.created_by_user_id)
+
+
+        if not all([student_to_edit.nume, student_to_edit.prenume, student_to_edit.grad_militar, student_to_edit.pluton, student_to_edit.companie, student_to_edit.batalion, student_to_edit.gender]):
+            flash('Toate câmpurile marcate cu * (nume, prenume, grad, unități, gen) sunt obligatorii.', 'warning')
+            # Pass original creator info for display even on error
+            return render_template('admin_edit_student.html', form_title=f"Editare Student (Admin): {details_before_edit.get('grad_militar','')} {details_before_edit.get('nume','')}", student=student_to_edit, genders=GENDERS, original_creator_username=original_creator_username, form_data=request.form)
+
+        if student_to_edit.gender not in GENDERS:
+            flash('Valoare invalidă pentru gen.', 'warning')
+            return render_template('admin_edit_student.html', form_title=f"Editare Student (Admin): {details_before_edit.get('grad_militar','')} {details_before_edit.get('nume','')}", student=student_to_edit, genders=GENDERS, original_creator_username=original_creator_username, form_data=request.form)
+
+        # Check for ID Unic conflict if changed
+        if new_id_unic and new_id_unic != details_before_edit.get('id_unic_student') : # Check against original value from details_before
+            existing_student_with_id = Student.query.filter(Student.id_unic_student == new_id_unic, Student.id != student_to_edit.id).first()
+            if existing_student_with_id:
+                flash(f"Alt student (ID: {existing_student_with_id.id}) cu ID unic '{new_id_unic}' există deja.", 'warning')
+                return render_template('admin_edit_student.html', form_title=f"Editare Student (Admin): {details_before_edit.get('grad_militar','')} {details_before_edit.get('nume','')}", student=student_to_edit, genders=GENDERS, original_creator_username=original_creator_username, form_data=request.form)
+        student_to_edit.id_unic_student = new_id_unic
+
+        try:
+            details_after_edit = model_to_dict(student_to_edit)
+            log_action("ADMIN_UPDATE_STUDENT_SUCCESS", target_model_name="Student", target_id=student_to_edit.id,
+                       details_before_dict=details_before_edit, details_after_dict=details_after_edit,
+                       description=f"Admin {current_user.username} updated student {student_to_edit.grad_militar} {student_to_edit.nume} (ID: {student_to_edit.id}).")
+            db.session.commit()
+            flash(f'Studentul {student_to_edit.grad_militar} {student_to_edit.nume} {student_to_edit.prenume} a fost actualizat de admin!', 'success')
+            return redirect(url_for('list_students')) # Redirects to admin view due to session/role context
+        except Exception as e:
+            db.session.rollback()
+            flash_msg = f'Eroare la actualizarea studentului de către admin: {str(e)}'
+            flash(flash_msg, 'danger')
+            try:
+                log_action("ADMIN_UPDATE_STUDENT_FAIL", target_model_name="Student", target_id=student_to_edit.id,
+                           details_before_dict=details_before_edit,
+                           description=f"Admin {current_user.username} failed to update student ID {student_to_edit.id}. Error: {str(e)}")
+                db.session.commit()
+            except Exception as log_e:
+                app.logger.error(f"CRITICAL: Failed to commit failure log for ADMIN_UPDATE_STUDENT_FAIL: {str(log_e)}")
+            return render_template('admin_edit_student.html', form_title=f"Editare Student (Admin): {details_before_edit.get('grad_militar','')} {details_before_edit.get('nume','')}", student=student_to_edit, genders=GENDERS, original_creator_username=original_creator_username, form_data=request.form)
+
+    # For GET request, populate form with student's current data
+    form_data_for_get = model_to_dict(student_to_edit)
+    # Ensure boolean is_platoon_graded_duty is correctly passed for checkbox
+    form_data_for_get['is_platoon_graded_duty'] = student_to_edit.is_platoon_graded_duty
+
+    return render_template('admin_edit_student.html',
+                           form_title=f"Editare Student (Admin): {student_to_edit.grad_militar} {student_to_edit.nume} {student_to_edit.prenume}",
+                           student=student_to_edit,
+                           genders=GENDERS,
+                           original_creator_username=original_creator_username,
+                           form_data=form_data_for_get)
+
+# --- Admin List View for Permissions ---
+@app.route('/admin/permissions')
+@login_required
+def admin_list_permissions():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+
+    query = Permission.query.options(
+        joinedload(Permission.student).joinedload(Student.creator), # Creator of student
+        joinedload(Permission.creator) # Creator of permission
+    ).order_by(Permission.start_datetime.desc())
+
+    # Basic Filtering (can be expanded)
+    search_student_name = request.args.get('search_student_name', '').strip()
+    filter_status = request.args.get('filter_status', '').strip()
+    # TODO: Add date range filters if needed
+
+    if search_student_name:
+        # Search in student's nume or prenume
+        search_pattern = f"%{unidecode(search_student_name.lower())}%"
+        query = query.join(Permission.student).filter(
+            or_(
+                func.lower(unidecode(Student.nume)).like(search_pattern),
+                func.lower(unidecode(Student.prenume)).like(search_pattern)
+            )
+        )
+
+    if filter_status:
+        query = query.filter(Permission.status == filter_status)
+
+    permissions_pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    # For status filter dropdown
+    statuses = sorted(list(set(item[0] for item in db.session.query(Permission.status).distinct().all() if item[0])))
+
+
+    return render_template('admin_list_permissions.html',
+                           permissions_pagination=permissions_pagination,
+                           search_student_name=search_student_name,
+                           filter_status=filter_status,
+                           statuses=statuses,
+                           title="Listă Generală Permisii (Admin)")
+
+# --- Admin List View for Daily Leaves ---
+@app.route('/admin/daily_leaves')
+@login_required
+def admin_list_daily_leaves():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+
+    query = DailyLeave.query.options(
+        joinedload(DailyLeave.student),
+        joinedload(DailyLeave.creator)
+    ).order_by(DailyLeave.leave_date.desc(), DailyLeave.start_time.desc())
+
+    # Filtering
+    search_student_name = request.args.get('search_student_name', '').strip()
+    filter_status = request.args.get('filter_status', '').strip()
+    filter_date = request.args.get('filter_date', '').strip()
+
+    if search_student_name:
+        search_pattern = f"%{unidecode(search_student_name.lower())}%"
+        query = query.join(DailyLeave.student).filter(
+            or_(
+                func.lower(unidecode(Student.nume)).like(search_pattern),
+                func.lower(unidecode(Student.prenume)).like(search_pattern)
+            )
+        )
+
+    if filter_status:
+        query = query.filter(DailyLeave.status == filter_status)
+
+    if filter_date:
+        try:
+            date_obj = datetime.strptime(filter_date, '%Y-%m-%d').date()
+            query = query.filter(DailyLeave.leave_date == date_obj)
+        except ValueError:
+            flash('Format dată invalid pentru filtrare. Folosiți YYYY-MM-DD.', 'warning')
+
+
+    daily_leaves_pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    statuses = sorted(list(set(item[0] for item in db.session.query(DailyLeave.status).distinct().all() if item[0])))
+
+    return render_template('admin_list_daily_leaves.html',
+                           daily_leaves_pagination=daily_leaves_pagination,
+                           search_student_name=search_student_name,
+                           filter_status=filter_status,
+                           filter_date=filter_date,
+                           statuses=statuses,
+                           title="Listă Generală Învoiri Zilnice (Admin)")
+
+# --- Admin List View for Weekend Leaves ---
+@app.route('/admin/weekend_leaves')
+@login_required
+def admin_list_weekend_leaves():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+
+    query = WeekendLeave.query.options(
+        joinedload(WeekendLeave.student),
+        joinedload(WeekendLeave.creator)
+    ).order_by(WeekendLeave.weekend_start_date.desc())
+
+    # Filtering
+    search_student_name = request.args.get('search_student_name', '').strip()
+    filter_status = request.args.get('filter_status', '').strip()
+    filter_weekend_start_date = request.args.get('filter_weekend_start_date', '').strip() # This is the Friday
+
+    if search_student_name:
+        search_pattern = f"%{unidecode(search_student_name.lower())}%"
+        query = query.join(WeekendLeave.student).filter(
+            or_(
+                func.lower(unidecode(Student.nume)).like(search_pattern),
+                func.lower(unidecode(Student.prenume)).like(search_pattern)
+            )
+        )
+
+    if filter_status:
+        query = query.filter(WeekendLeave.status == filter_status)
+
+    if filter_weekend_start_date:
+        try:
+            date_obj = datetime.strptime(filter_weekend_start_date, '%Y-%m-%d').date()
+            query = query.filter(WeekendLeave.weekend_start_date == date_obj)
+        except ValueError:
+            flash('Format dată invalid pentru filtrare (Vineri weekend). Folosiți YYYY-MM-DD.', 'warning')
+
+    weekend_leaves_pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    statuses = sorted(list(set(item[0] for item in db.session.query(WeekendLeave.status).distinct().all() if item[0])))
+
+    return render_template('admin_list_weekend_leaves.html',
+                           weekend_leaves_pagination=weekend_leaves_pagination,
+                           search_student_name=search_student_name,
+                           filter_status=filter_status,
+                           filter_weekend_start_date=filter_weekend_start_date,
+                           statuses=statuses,
+                           title="Listă Generală Învoiri Weekend (Admin)")
+
+# --- Admin List View for Service Assignments ---
+@app.route('/admin/services')
+@login_required
+def admin_list_services():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+
+    query = ServiceAssignment.query.options(
+        joinedload(ServiceAssignment.student),
+        joinedload(ServiceAssignment.creator)
+    ).order_by(ServiceAssignment.start_datetime.desc())
+
+    # Filtering
+    search_student_name = request.args.get('search_student_name', '').strip()
+    filter_service_type = request.args.get('filter_service_type', '').strip()
+    filter_service_date = request.args.get('filter_service_date', '').strip()
+
+    if search_student_name:
+        search_pattern = f"%{unidecode(search_student_name.lower())}%"
+        query = query.join(ServiceAssignment.student).filter(
+            or_(
+                func.lower(unidecode(Student.nume)).like(search_pattern),
+                func.lower(unidecode(Student.prenume)).like(search_pattern)
+            )
+        )
+
+    if filter_service_type:
+        query = query.filter(ServiceAssignment.service_type == filter_service_type)
+
+    if filter_service_date:
+        try:
+            date_obj = datetime.strptime(filter_service_date, '%Y-%m-%d').date()
+            # ServiceAssignment has start_datetime and end_datetime, and service_date
+            # Filter by service_date for simplicity, or choose start/end date part.
+            query = query.filter(ServiceAssignment.service_date == date_obj)
+        except ValueError:
+            flash('Format dată invalid pentru filtrare (Data serviciu). Folosiți YYYY-MM-DD.', 'warning')
+
+    services_pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    # For service type filter dropdown
+    service_types_for_filter = sorted(list(set(item[0] for item in db.session.query(ServiceAssignment.service_type).distinct().all() if item[0])))
+
+
+    return render_template('admin_list_services.html',
+                           services_pagination=services_pagination,
+                           search_student_name=search_student_name,
+                           filter_service_type=filter_service_type,
+                           filter_service_date=filter_service_date,
+                           service_types_for_filter=service_types_for_filter, # Pass this to template
+                           title="Listă Generală Servicii (Admin)")
+
+
 # --- Helper function to parse commander's unit ID ---
 def _get_commander_unit_id(username, role_prefix):
-    # Assumes username like "CmdC1", "CmdB12"
-    # role_prefix should be "CmdC" or "CmdB"
-    if username.startswith(role_prefix):
-        unit_id_part = username[len(role_prefix):]
-        if unit_id_part:  # Checks if the string is not empty
-            return unit_id_part
-    return None # Return None if prefix doesn't match or if ID part is empty
+    # role_prefix could be "CmdC" or "CmdB"
+    # We are looking for patterns like "CmdC1", "Vasile_CmdC1", "CmdB12", "Popescu_CmdB123"
+    # The ID is the numeric part immediately following the role_prefix in the username string.
+
+    # Escape role_prefix in case it contains special regex characters (though "CmdC" and "CmdB" don't)
+    # Then look for one or more digits (\d+) captured in a group.
+    match = re.search(f"{re.escape(role_prefix)}(\\d+)", username)
+    if match:
+        unit_id_part = match.group(1) # Get the captured digits (e.g., "1", "123")
+        # The \d+ ensures unit_id_part is not empty and contains only digits.
+        return unit_id_part
+    return None # Return None if prefix followed by digits is not found
 
 # --- Helper function to determine standard roll call time ---
 def get_standard_roll_call_datetime(for_date=None):
@@ -1179,12 +1700,32 @@ def add_student():
         )
         db.session.add(new_student)
         try:
+            db.session.flush() # Assign ID to new_student for logging
+            log_action("CREATE_STUDENT_SUCCESS", target_model_name="Student", target_id=new_student.id,
+                       details_after_dict=model_to_dict(new_student),
+                       description=f"User {current_user.username} added student {new_student.grad_militar} {new_student.nume} {new_student.prenume}.")
             db.session.commit()
             flash(f'Studentul {new_student.grad_militar} {new_student.nume} {new_student.prenume} a fost adăugat!', 'success')
             return redirect(url_for('list_students'))
         except Exception as e:
             db.session.rollback()
-            flash(f'Eroare la salvarea studentului: {str(e)}', 'danger')
+            flash_msg = f'Eroare la salvarea studentului: {str(e)}'
+            flash(flash_msg, 'danger')
+            try:
+                # Construct dict of attempted data for logging
+                attempted_data = {
+                    "nume": nume, "prenume": prenume, "grad_militar": grad_militar,
+                    "id_unic_student": id_unic_student_form, "gender": gender, "pluton": pluton,
+                    "companie": companie, "batalion": batalion,
+                    "is_platoon_graded_duty": is_platoon_graded_duty_val,
+                    "created_by_user_id": current_user.id
+                }
+                log_action("CREATE_STUDENT_FAIL", target_model_name="Student",
+                           description=f"User {current_user.username} failed to add student. Error: {str(e)}",
+                           details_after_dict=attempted_data) # Log attempted data in details_after
+                db.session.commit()
+            except Exception as log_e:
+                app.logger.error(f"CRITICAL: Failed to commit failure log for CREATE_STUDENT_FAIL: {str(log_e)}")
             return render_template('add_edit_student.html', form_title="Adăugare Student Nou", student=None, genders=GENDERS, form_data=request.form)
 
     return render_template('add_edit_student.html', form_title="Adăugare Student Nou", student=None, genders=GENDERS, form_data=None)
@@ -1197,6 +1738,7 @@ def edit_student(student_id):
         return redirect(url_for('home'))
 
     s_edit = Student.query.filter_by(id=student_id, created_by_user_id=current_user.id).first_or_404()
+    details_before_edit = model_to_dict(s_edit) # Capture state before any changes
 
     if request.method == 'POST':
         form = request.form
@@ -1212,26 +1754,38 @@ def edit_student(student_id):
 
         if not all([s_edit.nume, s_edit.prenume, s_edit.grad_militar, s_edit.pluton, s_edit.companie, s_edit.batalion, s_edit.gender]):
             flash('Toate câmpurile marcate cu * sunt obligatorii (inclusiv genul).', 'warning')
-            return render_template('add_edit_student.html', form_title=f"Editare Student: {s_edit.grad_militar} {s_edit.nume}", student=s_edit, genders=GENDERS, form_data=request.form)
+            return render_template('add_edit_student.html', form_title=f"Editare Student: {details_before_edit.get('grad_militar','')} {details_before_edit.get('nume','')}", student=s_edit, genders=GENDERS, form_data=request.form)
 
         if s_edit.gender not in GENDERS:
             flash('Valoare invalidă pentru gen.', 'warning')
-            return render_template('add_edit_student.html', form_title=f"Editare Student: {s_edit.grad_militar} {s_edit.nume}", student=s_edit, genders=GENDERS, form_data=request.form)
+            return render_template('add_edit_student.html', form_title=f"Editare Student: {details_before_edit.get('grad_militar','')} {details_before_edit.get('nume','')}", student=s_edit, genders=GENDERS, form_data=request.form)
 
         if new_id_unic and new_id_unic != s_edit.id_unic_student and Student.query.filter(Student.id_unic_student==new_id_unic, Student.id != s_edit.id).first():
             flash(f"Alt student cu ID unic '{new_id_unic}' există deja.", 'warning')
-            return render_template('add_edit_student.html', form_title=f"Editare Student: {s_edit.grad_militar} {s_edit.nume}", student=s_edit, genders=GENDERS, form_data=request.form)
+            return render_template('add_edit_student.html', form_title=f"Editare Student: {details_before_edit.get('grad_militar','')} {details_before_edit.get('nume','')}", student=s_edit, genders=GENDERS, form_data=request.form)
 
         s_edit.id_unic_student = new_id_unic
 
         try:
+            details_after_edit = model_to_dict(s_edit)
+            log_action("UPDATE_STUDENT_SUCCESS", target_model_name="Student", target_id=s_edit.id,
+                       details_before_dict=details_before_edit, details_after_dict=details_after_edit,
+                       description=f"User {current_user.username} updated student {s_edit.grad_militar} {s_edit.nume} {s_edit.prenume}.")
             db.session.commit()
             flash(f'Studentul {s_edit.grad_militar} {s_edit.nume} {s_edit.prenume} a fost actualizat!', 'success')
             return redirect(url_for('list_students'))
         except Exception as e:
             db.session.rollback()
-            flash(f'Eroare la actualizarea studentului: {str(e)}', 'danger')
-            return render_template('add_edit_student.html', form_title=f"Editare Student: {s_edit.grad_militar} {s_edit.nume} {s_edit.prenume}", student=s_edit, genders=GENDERS, form_data=request.form)
+            flash_msg = f'Eroare la actualizarea studentului: {str(e)}'
+            flash(flash_msg, 'danger')
+            try:
+                log_action("UPDATE_STUDENT_FAIL", target_model_name="Student", target_id=student_id,
+                           details_before_dict=details_before_edit, # Log original state
+                           description=f"User {current_user.username} failed to update student ID {student_id}. Error: {str(e)}")
+                db.session.commit()
+            except Exception as log_e:
+                app.logger.error(f"CRITICAL: Failed to commit failure log for UPDATE_STUDENT_FAIL: {str(log_e)}")
+            return render_template('add_edit_student.html', form_title=f"Editare Student: {details_before_edit.get('grad_militar','')} {details_before_edit.get('nume','')} {details_before_edit.get('prenume','')}", student=s_edit, genders=GENDERS, form_data=request.form)
 
     return render_template('add_edit_student.html', form_title=f"Editare Student: {s_edit.grad_militar} {s_edit.nume} {s_edit.prenume}", student=s_edit, genders=GENDERS, form_data=s_edit)
 
@@ -1386,13 +1940,35 @@ def bulk_import_students():
 def delete_student(student_id):
     if current_user.role not in ['admin', 'gradat']: flash('Acces neautorizat.', 'danger'); return redirect(url_for('home'))
     student_to_delete = Student.query.get_or_404(student_id)
-    if current_user.role == 'gradat' and student_to_delete.created_by_user_id != current_user.id: flash('Nu puteți șterge studenți care nu vă sunt arondați.', 'danger'); return redirect(url_for('list_students'))
-    if current_user.role == 'admin' and hasattr(student_to_delete, 'creator') and student_to_delete.creator and student_to_delete.creator.username != current_user.username : flash(f'Atenție: Ștergeți un student ({student_to_delete.nume} {student_to_delete.prenume}) care aparține gradatului {student_to_delete.creator.username}.', 'warning')
+    if current_user.role == 'gradat' and student_to_delete.created_by_user_id != current_user.id:
+        flash('Nu puteți șterge studenți care nu vă sunt arondați.', 'danger')
+        return redirect(url_for('list_students'))
+
+    if current_user.role == 'admin' and hasattr(student_to_delete, 'creator') and student_to_delete.creator and student_to_delete.creator.username != current_user.username :
+        flash(f'Atenție: Ștergeți un student ({student_to_delete.nume} {student_to_delete.prenume}) care aparține gradatului {student_to_delete.creator.username}.', 'warning')
+
+    details_before_delete = model_to_dict(student_to_delete)
+    student_name_for_flash = f"{student_to_delete.grad_militar} {student_to_delete.nume} {student_to_delete.prenume}"
+
     try:
-        student_name_for_flash = f"{student_to_delete.grad_militar} {student_to_delete.nume} {student_to_delete.prenume}"
-        db.session.delete(student_to_delete); db.session.commit()
+        db.session.delete(student_to_delete)
+        log_action("DELETE_STUDENT_SUCCESS", target_model_name="Student", target_id=student_id, # Use student_id from param as object is deleted
+                   details_before_dict=details_before_delete,
+                   description=f"User {current_user.username} deleted student {student_name_for_flash} (ID: {student_id}).")
+        db.session.commit()
         flash(f'Studentul {student_name_for_flash} și toate datele asociate au fost șterse.', 'success')
-    except Exception as e: db.session.rollback(); flash(f'Eroare la ștergerea studentului: {str(e)}', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        flash_msg = f'Eroare la ștergerea studentului: {str(e)}'
+        flash(flash_msg, 'danger')
+        try:
+            log_action("DELETE_STUDENT_FAIL", target_model_name="Student", target_id=student_id,
+                       details_before_dict=details_before_delete,
+                       description=f"User {current_user.username} failed to delete student {student_name_for_flash} (ID: {student_id}). Error: {str(e)}")
+            db.session.commit()
+        except Exception as log_e:
+            app.logger.error(f"CRITICAL: Failed to commit failure log for DELETE_STUDENT_FAIL: {str(log_e)}")
+
     return redirect(url_for('list_students'))
 
 # --- Rute pentru Permisii ---
@@ -1446,51 +2022,123 @@ def add_edit_permission(permission_id=None):
         form_title = f"Editare Permisie: {student_of_permission.grad_militar} {student_of_permission.nume} {student_of_permission.prenume}"
     students_managed = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.nume).all()
     if request.method == 'POST':
-        student_id = request.form.get('student_id'); start_datetime_str = request.form.get('start_datetime'); end_datetime_str = request.form.get('end_datetime')
+        student_id = request.form.get('student_id')
+        start_datetime_str = request.form.get('start_datetime')
+        end_datetime_str = request.form.get('end_datetime')
+        destination = request.form.get('destination', '').strip()
+        transport_mode = request.form.get('transport_mode', '').strip()
         reason = request.form.get('reason', '').strip()
-        current_form_data_post = request.form
-        if not student_id or not start_datetime_str or not end_datetime_str: flash('Studentul, data de început și data de sfârșit sunt obligatorii.', 'warning'); return render_template('add_edit_permission.html', form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post)
-        try: start_dt = datetime.strptime(start_datetime_str, '%Y-%m-%dT%H:%M'); end_dt = datetime.strptime(end_datetime_str, '%Y-%m-%dT%H:%M')
-        except ValueError: flash('Format dată/oră invalid.', 'danger'); return render_template('add_edit_permission.html', form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post)
-        if end_dt <= start_dt: flash('Data de sfârșit trebuie să fie după data de început.', 'warning'); return render_template('add_edit_permission.html', form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post)
-        student_to_check = Student.query.get(student_id)
-        if student_to_check:
-            conflicting_service = ServiceAssignment.query.filter(ServiceAssignment.student_id == student_id, ServiceAssignment.service_type == 'Intervenție', ServiceAssignment.start_datetime < end_dt, ServiceAssignment.end_datetime > start_dt).first()
-            if conflicting_service: flash(f'Studentul {student_to_check.nume} {student_to_check.prenume} este în serviciu de "Intervenție" și nu poate primi permisie.', 'danger'); return render_template('add_edit_permission.html', form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post)
+
+        current_form_data_post = request.form # For repopulating form on error
+
+        if not student_id or not start_datetime_str or not end_datetime_str:
+            flash('Studentul, data de început și data de sfârșit sunt obligatorii.', 'warning')
+            return render_template('add_edit_permission.html', form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post)
+        try:
+            start_dt = datetime.strptime(start_datetime_str, '%Y-%m-%dT%H:%M')
+            end_dt = datetime.strptime(end_datetime_str, '%Y-%m-%dT%H:%M')
+        except ValueError:
+            flash('Format dată/oră invalid.', 'danger')
+            return render_template('add_edit_permission.html', form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post)
+
+        if end_dt <= start_dt:
+            flash('Data de sfârșit trebuie să fie după data de început.', 'warning')
+            return render_template('add_edit_permission.html', form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post)
+
+        student_to_check = db.session.get(Student, int(student_id)) # Use db.session.get for clarity
+        if not student_to_check or student_to_check.created_by_user_id != current_user.id:
+            flash('Student invalid sau nu vă aparține.', 'danger')
+            return render_template('add_edit_permission.html', form_title=form_title, permission=None, students=students_managed, form_data=current_form_data_post)
+
+        # Conflict checking (remains largely the same)
+        conflicting_service = ServiceAssignment.query.filter(ServiceAssignment.student_id == student_id, ServiceAssignment.service_type == 'Intervenție', ServiceAssignment.start_datetime < end_dt, ServiceAssignment.end_datetime > start_dt).first()
+        if conflicting_service:
+            flash(f'Studentul {student_to_check.nume} {student_to_check.prenume} este în serviciu de "Intervenție" și nu poate primi permisie.', 'danger')
+            return render_template('add_edit_permission.html', form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post)
 
         general_conflict_msg = check_leave_conflict(student_id, start_dt, end_dt, 'permission', permission.id if permission else None)
         if general_conflict_msg:
             flash(f"Conflict detectat: Studentul are deja {general_conflict_msg}.", 'danger')
             return render_template('add_edit_permission.html', form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post)
 
-        if permission:
-            permission.student_id = int(student_id); permission.start_datetime = start_dt; permission.end_datetime = end_dt; permission.reason = reason
-            flash('Permisie actualizată cu succes!', 'success')
-        else:
-            new_permission = Permission(student_id=int(student_id), start_datetime=start_dt, end_datetime=end_dt, reason=reason, status='Aprobată', created_by_user_id=current_user.id)
-            db.session.add(new_permission); flash('Permisie adăugată cu succes!', 'success')
-        try: db.session.commit()
-        except Exception as e: db.session.rollback(); flash(f'Eroare la salvarea permisiei: {str(e)}', 'danger'); return render_template('add_edit_permission.html', form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post)
+        action_description_prefix = f"User {current_user.username}"
+        log_details_before = None
+        original_student_name_for_log = student_to_check.nume + " " + student_to_check.prenume
+
+
+        if permission: # Editing existing permission
+            log_details_before = model_to_dict(permission)
+            permission.student_id = int(student_id)
+            permission.start_datetime = start_dt
+            permission.end_datetime = end_dt
+            permission.destination = destination
+            permission.transport_mode = transport_mode
+            permission.reason = reason
+            action_type = "UPDATE_PERMISSION_SUCCESS"
+            flash_msg_text = 'Permisie actualizată cu succes!'
+            log_description = f"{action_description_prefix} updated permission for {original_student_name_for_log}."
+        else: # Adding new permission
+            permission = Permission(student_id=int(student_id), start_datetime=start_dt, end_datetime=end_dt,
+                                   destination=destination, transport_mode=transport_mode, reason=reason,
+                                   status='Aprobată', created_by_user_id=current_user.id)
+            db.session.add(permission)
+            action_type = "CREATE_PERMISSION_SUCCESS"
+            flash_msg_text = 'Permisie adăugată cu succes!'
+            # For create, details_before is None or {}
+            # Description will be set after flush to get ID
+            log_description = f"{action_description_prefix} created permission for {original_student_name_for_log}."
+
+
+        try:
+            db.session.flush() # Ensure permission object has ID if new, and updates are in session
+            log_details_after = model_to_dict(permission)
+            log_action(action_type, target_model_name="Permission", target_id=permission.id,
+                       details_before_dict=log_details_before, details_after_dict=log_details_after,
+                       description=log_description)
+            db.session.commit()
+            flash(flash_msg_text, 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash_msg_fail = f'Eroare la salvarea permisiei: {str(e)}'
+            flash(flash_msg_fail, 'danger')
+            try:
+                fail_action_type = "UPDATE_PERMISSION_FAIL" if permission_id else "CREATE_PERMISSION_FAIL"
+                # For create fail, permission object might not have an ID yet if flush failed.
+                # If it was an edit, permission.id is valid.
+                target_id_for_fail_log = permission.id if permission and permission.id else None
+                # Log attempted data for create fail
+                attempted_data_on_fail = model_to_dict(permission) if permission else current_form_data_post
+
+                log_action(fail_action_type, target_model_name="Permission", target_id=target_id_for_fail_log,
+                           details_before_dict=log_details_before if permission_id else None,
+                           details_after_dict=attempted_data_on_fail if not permission_id else model_to_dict(permission), # Log current state of 'permission' on edit fail
+                           description=f"{action_description_prefix} failed to {action_type.split('_')[0].lower()} permission for {original_student_name_for_log}. Error: {str(e)}")
+                db.session.commit()
+            except Exception as log_e:
+                app.logger.error(f"CRITICAL: Failed to commit failure log for {fail_action_type}: {str(log_e)}")
+            return render_template('add_edit_permission.html', form_title=form_title, permission=permission if permission_id else None, students=students_managed, form_data=current_form_data_post)
         return redirect(url_for('list_permissions'))
 
-    data_to_populate_form_with = {}
-    if request.method == 'POST':
-        data_to_populate_form_with = request.form
-    elif permission:
-        data_to_populate_form_with = {
+    # GET request handling
+    form_data_on_get = {} # Renamed from data_to_populate_form_with for clarity
+    if permission: # Editing existing permission
+        form_data_on_get = {
             'student_id': str(permission.student_id),
             'start_datetime': permission.start_datetime.strftime('%Y-%m-%dT%H:%M') if permission.start_datetime else '',
             'end_datetime': permission.end_datetime.strftime('%Y-%m-%dT%H:%M') if permission.end_datetime else '',
+            'destination': permission.destination or '',
+            'transport_mode': permission.transport_mode or '',
             'reason': permission.reason or ''
         }
-    else:
-        data_to_populate_form_with = {}
+    # If it's a POST request that failed validation and re-rendered, current_form_data_post (passed as form_data) will be used by template.
+    # If it's a fresh GET for 'add', form_data_on_get remains empty, template shows empty fields.
 
     return render_template('add_edit_permission.html',
                            form_title=form_title,
-                           permission=permission,
+                           permission=permission, # Pass the permission object itself for the template
                            students=students_managed,
-                           form_data=data_to_populate_form_with)
+                           form_data=form_data_on_get if request.method == 'GET' and permission else request.form if request.method == 'POST' else {})
+
 
 def find_student_for_bulk_import(name_line, gradat_id):
     """
@@ -1661,9 +2309,8 @@ def bulk_import_permissions():
             if current_entry_lines == 3 and i < len(lines) and not lines[i-1].strip(): i+=1
             continue
 
-        reason = destination_line
-        if car_plate_line: # Only add car plate to reason if it exists
-            reason += f" ({car_plate_line})"
+        parsed_destination = destination_line
+        parsed_reason = car_plate_line if car_plate_line else None # Car plate goes into reason, or None
 
         # Conflict Checking
         conflict = check_leave_conflict(student_obj.id, start_dt, end_dt, leave_type='permission')
@@ -1671,7 +2318,7 @@ def bulk_import_permissions():
             error_details.append(f"Student '{name_line}': Conflict - {conflict}.")
             error_count += 1
             i += current_entry_lines
-            if current_entry_lines == 3 and i < len(lines) and not lines[i-1].strip(): i+=1
+            if current_entry_lines == 3 and i < len(lines) and not lines[i-1].strip(): i+=1 # Consume empty line if it was one
             continue
 
         # Create and add permission
@@ -1679,12 +2326,26 @@ def bulk_import_permissions():
             student_id=student_obj.id,
             start_datetime=start_dt,
             end_datetime=end_dt,
-            reason=reason, # Destination and optional car plate
+            destination=parsed_destination,
+            transport_mode=None, # Not supported by this bulk import format currently
+            reason=parsed_reason,
             status='Aprobată',
             created_by_user_id=current_user.id
         )
-        db.session.add(new_permission)
-        added_count += 1
+
+        try:
+            db.session.add(new_permission)
+            db.session.flush() # To get ID for logging, if needed, though bulk might be too verbose for individual logs
+            # Consider a single log entry for the bulk operation success/partial success.
+            added_count += 1
+        except Exception as e_add:
+            db.session.rollback() # Rollback this specific add if flush/add fails.
+            error_details.append(f"Student '{name_line}': Eroare la adăugare în sesiune DB - {str(e_add)}")
+            error_count += 1
+            i += current_entry_lines
+            if current_entry_lines == 3 and i < len(lines) and not lines[i-1].strip(): i+=1
+            continue
+
 
         i += current_entry_lines
         if current_entry_lines == 3 and i < len(lines) and not lines[i-1].strip() and (i-1) == (lines.index(destination_line)+1) : # If it was 3 lines ending with destination, and there was an empty line after it.
@@ -1711,6 +2372,15 @@ def bulk_import_permissions():
             if len(flash_detail_msg) > 1000: # Limit flash message length further
                 flash_detail_msg = flash_detail_msg[:997] + "..."
             flash(flash_detail_msg, 'warning')
+
+    if added_count > 0 or error_count > 0: # If anything was processed or attempted
+        try:
+            log_action("BULK_IMPORT_PERMISSIONS_COMPLETED",
+                       description=f"User {current_user.username} ran bulk permission import. Added: {added_count}, Errors: {error_count}. First 3 errors: {error_details[:3]}",
+                       details_after_dict={"added_count": added_count, "error_count": error_count, "first_few_errors_details": error_details[:3]})
+            db.session.commit()
+        except Exception as log_e:
+            app.logger.error(f"CRITICAL: Failed to commit log for BULK_IMPORT_PERMISSIONS_COMPLETED: {str(log_e)}")
 
     return redirect(url_for('list_permissions'))
 
@@ -1750,22 +2420,16 @@ def export_permissions_word():
     p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph() # Spacer
 
-    table = document.add_table(rows=1, cols=7)
+    table = document.add_table(rows=1, cols=8) # Increased cols to 8
     table.style = 'Table Grid'
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
     hdr_cells = table.rows[0].cells
-    hdr_cells[0].text = 'Nr. Crt.'
-    hdr_cells[1].text = 'Grad'
-    hdr_cells[2].text = 'Nume și Prenume'
-    hdr_cells[3].text = 'Data Început'
-    hdr_cells[4].text = 'Data Sfârșit'
-    hdr_cells[5].text = 'Destinația'
-    hdr_cells[6].text = 'Observații (Nr. Auto)'
-
-    for cell in hdr_cells:
-        cell.paragraphs[0].runs[0].font.bold = True
-        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    column_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Data Început', 'Data Sfârșit', 'Destinația', 'Mijloc Transport', 'Observații/Nr. Auto']
+    for i, title in enumerate(column_titles):
+        hdr_cells[i].text = title
+        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
+        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     for idx, p in enumerate(permissions_to_export):
         row_cells = table.add_row().cells
@@ -1773,31 +2437,39 @@ def export_permissions_word():
         row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         row_cells[1].text = p.student.grad_militar
         row_cells[2].text = f"{p.student.nume} {p.student.prenume}"
+
         row_cells[3].text = p.start_datetime.strftime('%d.%m.%Y %H:%M')
         row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         row_cells[4].text = p.end_datetime.strftime('%d.%m.%Y %H:%M')
         row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        # Extract destination and car plate from reason
-        reason_text = p.reason or "-"
-        car_plate_match = re.search(r'\((.*?)\)$', reason_text) # Matches (content) at the end
-        destination = reason_text
-        car_plate = "-"
-        if car_plate_match:
-            car_plate = car_plate_match.group(1)
-            destination = reason_text[:car_plate_match.start()].strip() # Get text before car plate
-            if not destination: destination = "-" # if reason was only car plate
+        row_cells[5].text = p.destination if p.destination else "-"
+        row_cells[6].text = p.transport_mode if p.transport_mode else "-"
+        row_cells[7].text = p.reason if p.reason else "-" # p.reason might contain car plate or other notes
+        row_cells[7].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER # Center if it's just car plate
 
-        row_cells[5].text = destination
-        row_cells[6].text = car_plate
-        row_cells[6].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-
-    # Set column widths (optional, but good for layout)
-    widths = {0: 0.5, 1: 0.8, 2: 2.0, 3: 1.2, 4: 1.2, 5: 2.0, 6: 1.0} # Inches
+    # Set column widths (optional, but good for layout) - adjust for 8 columns
+    # Old: {0: 0.5, 1: 0.8, 2: 2.0, 3: 1.2, 4: 1.2, 5: 2.0, 6: 1.0} # Sum = 8.7
+    # New: NrCrt, Grad, Nume, Start, End, Dest, Transport, Obs/Auto
+    # Total width around 8.5-9 inches for A4 portrait with margins
+    widths = {
+        0: Inches(0.4), # Nr. Crt.
+        1: Inches(0.7), # Grad
+        2: Inches(1.8), # Nume și Prenume
+        3: Inches(1.1), # Data Început
+        4: Inches(1.1), # Data Sfârșit
+        5: Inches(1.5), # Destinația
+        6: Inches(1.2), # Mijloc Transport
+        7: Inches(1.2)  # Observații/Nr. Auto
+    }
+    # Apply widths
     for col_idx, width_val in widths.items():
         for row in table.rows:
-            row.cells[col_idx].width = Inches(width_val)
+            try:
+                row.cells[col_idx].width = width_val
+            except IndexError:
+                app.logger.warning(f"IndexError setting width for col {col_idx} in export_permissions_word. Row has {len(row.cells)} cells.")
+
 
     # Change font for the whole document (optional)
     style = document.styles['Normal']
@@ -1859,14 +2531,25 @@ def delete_permission(permission_id):
     student_name_for_flash = f"{student_owner.grad_militar} {student_owner.nume} {student_owner.prenume}" if student_owner else "N/A"
     permission_details_for_flash = f"din {permission_to_delete.start_datetime.strftime('%d.%m.%Y %H:%M')} până în {permission_to_delete.end_datetime.strftime('%d.%m.%Y %H:%M')}"
 
+    details_before_delete = model_to_dict(permission_to_delete)
     try:
         db.session.delete(permission_to_delete)
+        log_action("DELETE_PERMISSION_SUCCESS", target_model_name="Permission", target_id=permission_id,
+                   details_before_dict=details_before_delete,
+                   description=f"User {current_user.username} deleted permission for student {student_name_for_flash} (ID: {permission_id}) details: {permission_details_for_flash}.")
         db.session.commit()
         flash(f'Permisia pentru {student_name_for_flash} ({permission_details_for_flash}) a fost ștearsă.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Eroare la ștergerea permisiei: {str(e)}', 'danger')
-
+        flash_msg = f'Eroare la ștergerea permisiei: {str(e)}'
+        flash(flash_msg, 'danger')
+        try:
+            log_action("DELETE_PERMISSION_FAIL", target_model_name="Permission", target_id=permission_id,
+                       details_before_dict=details_before_delete,
+                       description=f"User {current_user.username} failed to delete permission for {student_name_for_flash} (ID: {permission_id}). Error: {str(e)}")
+            db.session.commit()
+        except Exception as log_e:
+            app.logger.error(f"CRITICAL: Failed to commit failure log for DELETE_PERMISSION_FAIL: {str(log_e)}")
     return redirect(redirect_url)
 
 # --- Rute pentru Învoiri Zilnice ---
@@ -2024,6 +2707,96 @@ def parse_leave_line(line_text): # Renamed from parse_leave_line_new for replace
         return None, grad, parsed_start_time_obj, parsed_end_time_obj # Might be only rank + time
 
     return normalized_name_search, grad, parsed_start_time_obj, parsed_end_time_obj
+
+def parse_weekend_leave_line(line_text_raw):
+    line_text = line_text_raw.strip()
+    is_biserica_requested = False
+
+    # 1. Check for "biserica" keyword and remove it
+    # Handles "biserica" at the end, possibly preceded by a comma.
+    biserica_keyword = "biserica"
+    if line_text.lower().endswith(f" {biserica_keyword}"):
+        is_biserica_requested = True
+        line_text = line_text[:-len(f" {biserica_keyword}")].strip()
+    elif line_text.lower().endswith(f",{biserica_keyword}"):
+        is_biserica_requested = True
+        line_text = line_text[:-len(f",{biserica_keyword}")].strip()
+    elif line_text.lower() == biserica_keyword: # Line is ONLY "biserica"
+        return "", [], True, "Linia conține doar 'biserica', fără student sau intervale."
+
+
+    # 2. Extract all date-time interval strings first using a regex pattern
+    # Pattern: DD.MM.YYYY HH:MM-HH:MM (flexible spacing around hyphen)
+    interval_pattern = re.compile(r"(\d{1,2}\.\d{1,2}\.\d{4})\s+(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})")
+
+    raw_interval_parts = [] # Store (date_str, start_str, end_str)
+
+    # Find all matches and store their string parts
+    for match in interval_pattern.finditer(line_text):
+        raw_interval_parts.append(match.groups()) # (date_str, start_str, end_str)
+
+    if not raw_interval_parts:
+        # If no intervals found, but "biserica" was, it's an error.
+        # If neither found, the student name part might be the whole line, but it's useless without intervals.
+        student_name_part_if_no_intervals = line_text.replace(",", "").strip() # Cleaned student name part
+        if not student_name_part_if_no_intervals and not is_biserica_requested: # Empty line
+             return None, [], False, None # Signal to skip empty line processing
+        return student_name_part_if_no_intervals, [], is_biserica_requested, "Niciun interval de timp valid (DD.MM.YYYY HH:MM-HH:MM) găsit."
+
+    # Attempt to parse these string parts into datetime objects
+    parsed_intervals = []
+    for date_str, start_str, end_str in raw_interval_parts:
+        try:
+            date_obj = datetime.strptime(date_str, "%d.%m.%Y").date()
+            start_time_obj = datetime.strptime(start_str, "%H:%M").time()
+            end_time_obj = datetime.strptime(end_str, "%H:%M").time()
+
+            if start_time_obj == end_time_obj:
+                return line_text, [], is_biserica_requested, f"Interval orar invalid (început=sfârșit) în '{date_str} {start_str}-{end_str}'."
+
+            parsed_intervals.append({
+                'date_obj': date_obj,
+                'start_time_obj': start_time_obj,
+                'end_time_obj': end_time_obj,
+                'raw_match': f"{date_str} {start_str}-{end_str}" # Store the raw match for removal later
+            })
+        except ValueError:
+            return line_text, [], is_biserica_requested, f"Format dată/oră invalid în intervalul '{date_str} {start_str}-{end_str}'."
+
+    # 3. Determine student name part by removing interval strings from the original line
+    student_name_part = line_text
+    # Iterate over a sorted list of raw matches by length (desc) to remove longer matches first (more specific)
+    # This helps if one raw match string could be a substring of another, though less likely with this pattern.
+    # For safety, or just iterate as found.
+    raw_matches_to_remove = [item['raw_match'] for item in parsed_intervals] # Get all parts that were successfully parsed
+
+    # Reconstruct the full matched strings as they appeared, to remove them accurately
+    # The regex match objects themselves would be better for this if we captured their span.
+    # For now, let's try replacing based on the reconstructed raw_match.
+    # This part is tricky if formatting varies wildly (e.g. "01.01.2025 10:00 - 12:00" vs "01.01.2025 10:00-12:00")
+    # The regex `\s*-\s*` handles spaces around hyphen.
+    # We need to reconstruct the string that the regex actually matched.
+    # Let's refine interval_pattern to capture the whole interval string for easier removal.
+
+    # Re-defining interval_pattern to capture the whole thing for easier removal:
+    full_interval_pattern = re.compile(r"(\d{1,2}\.\d{1,2}\.\d{4}\s+\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2})")
+    actual_matched_interval_strings = full_interval_pattern.findall(line_text)
+
+    for matched_str in actual_matched_interval_strings:
+        student_name_part = student_name_part.replace(matched_str, "")
+
+    student_name_part = student_name_part.replace(",", "").strip() # Remove commas and strip whitespace
+
+    if not student_name_part:
+         # This could happen if the line ONLY contained intervals (and maybe "biserica")
+        return "", parsed_intervals, is_biserica_requested, "Numele studentului lipsește (linia conține doar intervale/biserica)." if parsed_intervals else "Linie invalidă."
+
+
+    # Sort intervals by date and start time (already parsed)
+    parsed_intervals.sort(key=lambda x: (x['date_obj'], x['start_time_obj']))
+
+    return student_name_part, parsed_intervals, is_biserica_requested, None
+
 
 @app.route('/gradat/daily_leaves/process_text', methods=['POST'])
 @login_required
@@ -2358,6 +3131,191 @@ def cancel_weekend_leave(leave_id):
         try: db.session.commit(); flash(f'Învoirea de weekend pentru {student_of_leave.nume} {student_of_leave.prenume} (începând cu {leave.weekend_start_date.strftime("%d.%m")}) a fost anulată.', 'success')
         except Exception as e: db.session.rollback(); flash(f'Eroare la anularea învoirii de weekend: {str(e)}', 'danger')
     else: flash('Această învoire de weekend nu poate fi anulată (statusul curent nu este "Aprobată").', 'warning')
+    return redirect(url_for('list_weekend_leaves'))
+
+@app.route('/gradat/weekend_leaves/process_text', methods=['POST'])
+@login_required
+def process_weekend_leaves_text():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    leave_list_text = request.form.get('weekend_leave_list_text', '').strip() # Assuming this will be the form field name
+    if not leave_list_text:
+        flash('Lista de învoiri este goală.', 'warning')
+        return redirect(url_for('list_weekend_leaves'))
+
+    lines = leave_list_text.strip().splitlines()
+    processed_count = 0
+    error_count = 0
+    error_details_list = [] # More structured than just a list of strings
+
+    day_names_map_ro_to_en = {"vineri": "Friday", "sambata": "Saturday", "duminica": "Sunday"} # For model's dayX_selected
+    day_name_to_weekday = {"vineri": 4, "sambata": 5, "duminica": 6} # Monday is 0, Sunday is 6
+
+    for line_raw in lines:
+        line_content = line_raw.strip()
+        if not line_content:
+            continue
+
+        student_name_str, parsed_intervals, is_biserica_req, error_msg = parse_weekend_leave_line(line_content)
+
+        if error_msg and student_name_str is None and not parsed_intervals : # Skip empty line signal
+            continue
+        if error_msg:
+            error_details_list.append({"line": line_content, "error": error_msg})
+            error_count += 1
+            continue
+
+        if not parsed_intervals: # Should have been caught by error_msg, but as a safeguard
+            error_details_list.append({"line": line_content, "error": "Niciun interval valid de procesat."})
+            error_count +=1
+            continue
+
+        student_obj, student_error = find_student_for_bulk_import(student_name_str, current_user.id)
+        if student_error:
+            error_details_list.append({"line": line_content, "error": f"Student '{student_name_str}': {student_error}"})
+            error_count += 1
+            continue
+
+        # --- Logic to determine weekend_start_date and map intervals to day1/2/3 ---
+        if not parsed_intervals: # Should not happen if error_msg was None
+            error_details_list.append({"line": line_content, "student": student_obj.nume, "error": "Eroare internă: Intervale goale după parsare reușită."})
+            error_count += 1
+            continue
+
+        # Determine the primary weekend: find the Friday of the week of the first interval's date.
+        first_interval_date = parsed_intervals[0]['date_obj']
+        days_to_subtract_for_friday = (first_interval_date.weekday() - 4) % 7
+        # (weekday - 4) gives offset from Friday. If it's negative, add 7.
+        # E.g. Mon(0): (0-4)%7 = -4%7 = 3 -> Mon - 3 days is Fri of PREVIOUS week. This is not what we want.
+        # We want Friday of the week *containing* the first_interval_date.
+        # If first_interval_date is Mon, its Friday is +4 days. If Sun, its Friday is -2 days.
+        weekend_start_date_obj = first_interval_date - timedelta(days=first_interval_date.weekday()) + timedelta(days=4)
+
+
+        # Validate that all intervals fall within this determined weekend (Fri, Sat, Sun)
+        # and map them to day1_ (Friday), day2_ (Saturday), day3_ (Sunday)
+
+        current_weekend_leave_data = { # Temp storage for this student's leave
+            "day1_date": None, "day1_start_time": None, "day1_end_time": None, "day1_selected": None,
+            "day2_date": None, "day2_start_time": None, "day2_end_time": None, "day2_selected": None,
+            "day3_date": None, "day3_start_time": None, "day3_end_time": None, "day3_selected": None,
+            "intervals_for_conflict_check": []
+        }
+
+        distinct_days_processed = set()
+
+        for interval in parsed_intervals:
+            interval_date = interval['date_obj']
+
+            # Check if interval_date is Fri, Sat, or Sun of the determined weekend_start_date_obj
+            delta_days = (interval_date - weekend_start_date_obj).days
+            day_slot_key = None # Will be 'day1', 'day2', or 'day3'
+            day_name_ro = None
+
+            if delta_days == 0 and interval_date.weekday() == 4: # Friday
+                day_slot_key = "day1"
+                day_name_ro = "Vineri"
+            elif delta_days == 1 and interval_date.weekday() == 5: # Saturday
+                day_slot_key = "day2"
+                day_name_ro = "Sambata"
+            elif delta_days == 2 and interval_date.weekday() == 6: # Sunday
+                day_slot_key = "day3"
+                day_name_ro = "Duminica"
+            else:
+                error_details_list.append({"line": line_content, "student": student_obj.nume, "error": f"Data {interval_date.strftime('%d.%m.%Y')} nu corespunde weekendului definit de prima dată ({weekend_start_date_obj.strftime('%d.%m.%Y')})."})
+                error_count += 1; break # Break from this student's intervals
+
+            if day_slot_key in distinct_days_processed : # Already have an interval for this day slot
+                 error_details_list.append({"line": line_content, "student": student_obj.nume, "error": f"Intervale multiple specificate pentru aceeași zi ({day_name_ro}). Doar primul va fi considerat."})
+                 # error_count +=1 # Optionally count this as an error or just a warning
+                 continue # Skip this additional interval for the same day
+
+            distinct_days_processed.add(day_slot_key)
+
+            current_weekend_leave_data[f"{day_slot_key}_date"] = interval_date
+            current_weekend_leave_data[f"{day_slot_key}_start_time"] = interval['start_time_obj']
+            current_weekend_leave_data[f"{day_slot_key}_end_time"] = interval['end_time_obj']
+            current_weekend_leave_data[f"{day_slot_key}_selected"] = day_name_ro # Store "Vineri", "Sambata", "Duminica"
+
+            # For conflict checking:
+            start_dt = datetime.combine(interval_date, interval['start_time_obj'])
+            effective_end_date = interval_date
+            if interval['end_time_obj'] < interval['start_time_obj']: effective_end_date += timedelta(days=1)
+            end_dt = datetime.combine(effective_end_date, interval['end_time_obj'])
+            current_weekend_leave_data["intervals_for_conflict_check"].append({'start': start_dt, 'end': end_dt, 'day_name': day_name_ro})
+
+        if error_count > 0 and error_details_list[-1]["line"] == line_content: # If error occurred for this student, skip to next line
+            continue
+
+        if not distinct_days_processed:
+            error_details_list.append({"line": line_content, "student": student_obj.nume, "error": "Niciun interval valid mapat la zilele weekendului."})
+            error_count += 1; continue
+
+        # --- Conflict Checking ---
+        conflict_found_for_student = False
+        for interval_to_check in current_weekend_leave_data["intervals_for_conflict_check"]:
+            conflict = check_leave_conflict(student_obj.id, interval_to_check['start'], interval_to_check['end'], leave_type='weekend_leave')
+            if conflict:
+                error_details_list.append({"line": line_content, "student": student_obj.nume, "error": f"Conflict pentru {interval_to_check['day_name']}: {conflict}."})
+                error_count += 1; conflict_found_for_student = True; break
+        if conflict_found_for_student: continue
+
+        # --- Create WeekendLeave object ---
+        new_wl = WeekendLeave(
+            student_id=student_obj.id,
+            weekend_start_date=weekend_start_date_obj,
+            day1_selected=current_weekend_leave_data['day1_selected'], day1_date=current_weekend_leave_data['day1_date'],
+            day1_start_time=current_weekend_leave_data['day1_start_time'], day1_end_time=current_weekend_leave_data['day1_end_time'],
+            day2_selected=current_weekend_leave_data['day2_selected'], day2_date=current_weekend_leave_data['day2_date'],
+            day2_start_time=current_weekend_leave_data['day2_start_time'], day2_end_time=current_weekend_leave_data['day2_end_time'],
+            day3_selected=current_weekend_leave_data['day3_selected'], day3_date=current_weekend_leave_data['day3_date'],
+            day3_start_time=current_weekend_leave_data['day3_start_time'], day3_end_time=current_weekend_leave_data['day3_end_time'],
+            duminica_biserica=(is_biserica_req and current_weekend_leave_data['day3_selected'] == "Duminica"), # Only if Sunday is actually selected
+            status='Aprobată',
+            created_by_user_id=current_user.id,
+            reason=f"Procesare text: {line_content[:100]}" # Truncate reason if line is too long
+        )
+        db.session.add(new_wl)
+        processed_count += 1
+
+    # --- Commit and Flash Messages ---
+    try:
+        if processed_count > 0: # Only commit if there are successful items
+            db.session.commit()
+            flash(f'{processed_count} învoiri de weekend procesate și adăugate cu succes.', 'success')
+        elif error_count == 0 and processed_count == 0 : # No lines or only empty lines
+             flash('Nu au fost furnizate date de procesat.', 'info')
+
+
+        if error_count > 0:
+            flash(f'{error_count} linii nu au putut fi procesate sau au generat erori.', 'danger')
+            # Construct detailed error message for flash
+            error_flash_message = "Detalii erori:<br>"
+            for err_detail in error_details_list[:5]: # Show first 5 errors
+                error_flash_message += f"- Linia: '{err_detail['line'][:60]}...' Student: {err_detail.get('student','N/A')} Eroare: {err_detail['error']}<br>"
+            if len(error_details_list) > 5:
+                error_flash_message += f"... și încă {len(error_details_list) - 5} erori."
+            flash(error_flash_message, 'warning')
+
+        # Log the bulk operation attempt
+        log_action("BULK_IMPORT_WEEKEND_LEAVES_COMPLETED",
+                   description=f"User {current_user.username} ran bulk weekend leave import. Added: {processed_count}, Errors: {error_count}. Line count: {len(lines)}",
+                   details_after_dict={"added_count": processed_count, "error_count": error_count, "total_lines_input": len(lines), "first_few_error_details": error_details_list[:3]})
+        db.session.commit() # Commit the log
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare majoră la salvarea învoirilor de weekend din text: {str(e)}', 'danger')
+        try:
+            log_action("BULK_IMPORT_WEEKEND_LEAVES_FAIL_MAJOR",
+                       description=f"User {current_user.username} bulk weekend leave import failed critically. Error: {str(e)}",
+                       details_after_dict={"added_count": processed_count, "error_count": error_count, "exception": str(e)})
+            db.session.commit()
+        except Exception as log_e:
+            app.logger.error(f"CRITICAL: Failed to commit failure log for BULK_IMPORT_WEEKEND_LEAVES_FAIL_MAJOR: {str(log_e)}")
+
     return redirect(url_for('list_weekend_leaves'))
 
 @app.route('/gradat/weekend_leaves/export_word')
@@ -2811,6 +3769,45 @@ def text_report_display_battalion():
                            report_title=f"Raport Text Batalionul {battalion_id_str}",
                            report_content=final_report_content,
                            report_datetime_str=report_datetime_str)
+
+# --- Admin Action Log Viewer ---
+@app.route('/admin/action_logs')
+@login_required
+def admin_action_logs():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    page = request.args.get('page', 1, type=int)
+    per_page = 20 # Or a configurable value
+
+    # Basic query
+    logs_query = ActionLog.query.options(joinedload(ActionLog.user)).order_by(ActionLog.timestamp.desc())
+
+    # TODO: Add filtering based on request.args
+    # filter_user_id = request.args.get('user_id')
+    # filter_action_type = request.args.get('action_type')
+    # filter_target_model = request.args.get('target_model')
+    # filter_date_from = request.args.get('date_from')
+    # filter_date_to = request.args.get('date_to')
+
+    # if filter_user_id:
+    #     logs_query = logs_query.filter(ActionLog.user_id == filter_user_id)
+    # if filter_action_type:
+    #     logs_query = logs_query.filter(ActionLog.action_type.ilike(f"%{filter_action_type}%"))
+    # # ... etc. for other filters ...
+
+    logs_pagination = logs_query.paginate(page=page, per_page=per_page, error_out=False)
+
+    # For filter dropdowns (optional, can be added later)
+    # users_for_filter = User.query.order_by(User.username).all()
+    # action_types_for_filter = db.session.query(ActionLog.action_type).distinct().order_by(ActionLog.action_type).all()
+    # target_models_for_filter = db.session.query(ActionLog.target_model).distinct().order_by(ActionLog.target_model).all()
+
+    return render_template('admin_action_logs.html',
+                           logs_pagination=logs_pagination,
+                           title="Jurnal Acțiuni Sistem")
+
 
 if __name__ == '__main__':
     with app.app_context():

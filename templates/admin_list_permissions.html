@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>{{ title }} <span class="badge bg-secondary fs-6 align-middle">Total: {{ permissions_pagination.total }}</span></h2>
+        <a href="{{ url_for('admin_dashboard_route') }}" class="btn btn-outline-secondary btn-sm">&laquo; Admin Dashboard</a>
+    </div>
+
+    <form method="GET" action="{{ url_for('admin_list_permissions') }}" class="mb-4 p-3 border rounded bg-light">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label for="search_student_name" class="form-label">Nume Student</label>
+                <input type="text" name="search_student_name" id="search_student_name" class="form-control form-control-sm" value="{{ search_student_name or '' }}" placeholder="Caută după nume/prenume student...">
+            </div>
+            <div class="col-md-3">
+                <label for="filter_status" class="form-label">Status Permisie</label>
+                <select name="filter_status" id="filter_status" class="form-select form-select-sm">
+                    <option value="">Toate Statusurile</option>
+                    {% for status_val in statuses %} {# Changed from 'status' to 'status_val' to avoid conflict with p.status #}
+                    <option value="{{ status_val }}" {% if status_val == filter_status %}selected{% endif %}>{{ status_val }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {# TODO: Add date range filters #}
+            <div class="col-md-auto">
+                <button type="submit" class="btn btn-primary btn-sm">Filtrează</button>
+                <a href="{{ url_for('admin_list_permissions') }}" class="btn btn-outline-secondary btn-sm ms-2">Resetează</a>
+            </div>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-striped table-hover table-sm caption-top">
+            <caption>Lista tuturor permisiilor din sistem.</caption>
+            <thead>
+                <tr>
+                    <th scope="col">ID</th>
+                    <th scope="col">Student</th>
+                    <th scope="col">Grad</th>
+                    <th scope="col">Unitate (B/C/P)</th>
+                    <th scope="col">Dată Început</th>
+                    <th scope="col">Dată Sfârșit</th>
+                    <th scope="col">Destinație</th>
+                    <th scope="col">Transport</th>
+                    <th scope="col">Motiv/Obs.</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Creată de</th>
+                    <th scope="col">Acțiuni</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in permissions_pagination.items %}
+                <tr class="{{ 'table-success' if p.is_active else ('table-warning' if p.is_upcoming else 'table-secondary') if p.status == 'Aprobată' else ('table-danger' if p.status == 'Anulată' else '') }}">
+                    <td>{{ p.id }}</td>
+                    <td>{{ p.student.nume }} {{ p.student.prenume }} <small class="text-muted">(ID: {{p.student.id}})</small></td>
+                    <td>{{ p.student.grad_militar }}</td>
+                    <td>{{ p.student.batalion }}/{{ p.student.companie }}/{{ p.student.pluton }}</td>
+                    <td>{{ p.start_datetime.strftime('%d-%m-%Y %H:%M') }}</td>
+                    <td>{{ p.end_datetime.strftime('%d-%m-%Y %H:%M') }}</td>
+                    <td>{{ p.destination | truncate(25, True) if p.destination else '-' }}</td>
+                    <td>{{ p.transport_mode | truncate(20, True) if p.transport_mode else '-' }}</td>
+                    <td>
+                        {% if p.reason %}
+                            <span title="{{ p.reason }}">{{ p.reason | truncate(25, True) }}</span>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge
+                            {% if p.status == 'Aprobată' and p.is_active %}bg-success
+                            {% elif p.status == 'Aprobată' and p.is_upcoming %}bg-warning text-dark
+                            {% elif p.status == 'Aprobată' %}bg-secondary
+                            {% elif p.status == 'Anulată' %}bg-danger
+                            {% else %}bg-info text-dark
+                            {% endif %}">
+                            {{ p.status }}
+                            {% if p.status == 'Aprobată' %}
+                                {% if p.is_active %} (Activă)
+                                {% elif p.is_upcoming %} (Urmează)
+                                {% elif p.is_past %} (Expirată)
+                                {% endif %}
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        {% if p.creator %}
+                            <span title="User ID: {{p.creator.id}}">{{ p.creator.username }}</span>
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                    <td>
+                        {# Admin Edit - TODO: Create/adapt admin_edit_permission route #}
+                        {# <a href="{{ url_for('admin_edit_permission', permission_id=p.id) }}" class="btn btn-sm btn-info py-0 px-1 me-1" title="Editare Permisie (Admin)"><i class="fas fa-edit"></i></a> #}
+
+                        {# Admin can delete any permission using the existing role-aware route #}
+                        <form method="POST" action="{{ url_for('delete_permission', permission_id=p.id) }}" class="d-inline" onsubmit="return confirm('ADMIN: Ești sigur că vrei să ȘTERGI PERMANENT această permisie (ID: {{p.id}})? Această acțiune nu poate fi anulată.');">
+                            <button type="submit" class="btn btn-sm btn-danger py-0 px-1 ms-1" title="Șterge Permisia Permanent (Admin)">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="12" class="text-center">Nicio permisie găsită conform filtrelor aplicate sau nicio permisie în sistem.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if permissions_pagination.pages > 1 %}
+    <nav aria-label="Page navigation">
+        <ul class="pagination justify-content-center">
+            {% if permissions_pagination.has_prev %}
+                <li class="page-item"><a class="page-link" href="{{ url_for('admin_list_permissions', page=permissions_pagination.prev_num, **request.args) }}">&laquo; Precedenta</a></li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">&laquo; Precedenta</span></li>
+            {% endif %}
+            {% for page_num in permissions_pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                {% if page_num %}
+                    {% if permissions_pagination.page == page_num %}
+                        <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                    {% else %}
+                        <li class="page-item"><a class="page-link" href="{{ url_for('admin_list_permissions', page=page_num, **request.args) }}">{{ page_num }}</a></li>
+                    {% endif %}
+                {% else %}
+                    {% if loop.previtem is number and loop.nextitem is number %} {# Show ellipsis only if surrounded by numbers #}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+            {% if permissions_pagination.has_next %}
+                <li class="page-item"><a class="page-link" href="{{ url_for('admin_list_permissions', page=permissions_pagination.next_num, **request.args) }}">Următoarea &raquo;</a></li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">Următoarea &raquo;</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

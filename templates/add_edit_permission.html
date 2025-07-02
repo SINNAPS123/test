@@ -40,9 +40,23 @@
                         </div>
 
                         <div class="mb-3">
-                            <label for="reason" class="form-label">Motiv (Opțional)</label>
-                            <textarea class="form-control" id="reason" name="reason" rows="3">{{ permission.reason if permission and permission.reason else '' }}</textarea>
-                            <small class="form-text text-muted">Un scurt motiv pentru permisie, dacă este necesar.</small>
+                            <label for="destination" class="form-label">Destinație</label>
+                            <input type="text" class="form-control" id="destination" name="destination"
+                                   value="{{ form_data.destination if form_data and form_data.destination is defined else (permission.destination if permission and permission.destination is defined else '') }}">
+                            <small class="form-text text-muted">Localitatea de destinație.</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="transport_mode" class="form-label">Mijloc de transport</label>
+                            <input type="text" class="form-control" id="transport_mode" name="transport_mode"
+                                   value="{{ form_data.transport_mode if form_data and form_data.transport_mode is defined else (permission.transport_mode if permission and permission.transport_mode is defined else '') }}">
+                            <small class="form-text text-muted">Ex: Auto personal, Tren, Autobuz.</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="reason" class="form-label">Motiv / Observații (Opțional)</label>
+                            <textarea class="form-control" id="reason" name="reason" rows="3">{{ form_data.reason if form_data and form_data.reason is defined else (permission.reason if permission and permission.reason is defined else '') }}</textarea>
+                            <small class="form-text text-muted">Scurt motiv, nr. auto, sau alte observații.</small>
                         </div>
 
                         {# Pentru editare, am putea adăuga și statusul, dar la adăugare e implicit 'Aprobată' #}
