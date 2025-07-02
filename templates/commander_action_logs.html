@@ -6,43 +6,48 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>{{ title }}</h2>
-        <a href="{{ url_for('admin_dashboard_route') }}" class="btn btn-outline-secondary btn-sm">&laquo; Admin Dashboard</a>
+        {% if unit_type == "Compania" %}
+            <a href="{{ url_for('company_commander_dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Panou Comandant {{ unit_type }}</a>
+        {% elif unit_type == "Batalionul" %}
+             <a href="{{ url_for('battalion_commander_dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Panou Comandant {{ unit_type }}</a>
+        {% endif %}
     </div>
 
-    <!-- TODO: Add Full Filter Form here later -->
-    <form method="GET" action="{{ url_for('admin_action_logs') }}" class="mb-4 p-3 border rounded bg-light visually-hidden">
-        {# This form is hidden for now, will be enabled when filters are fully implemented in backend #}
+    <!-- TODO: Add Specific Filters for Commander Logs if needed -->
+    {#
+    <form method="GET" action="{{ url_for(request.endpoint) }}" class="mb-4 p-3 border rounded bg-light">
         <div class="row g-3">
             <div class="col-md-3">
-                <label for="user_id_filter" class="form-label">Utilizator (ID)</label>
-                <input type="text" name="user_id_filter_val" id="user_id_filter" class="form-control form-control-sm" placeholder="ID Utilizator" value="{{ request.args.get('user_id_filter_val', '') }}">
-            </div>
-            <div class="col-md-3">
                 <label for="action_type_filter" class="form-label">Tip Acțiune</label>
-                <input type="text" name="action_type_filter_val" id="action_type_filter" class="form-control form-control-sm" placeholder="ex: USER_LOGIN" value="{{ request.args.get('action_type_filter_val', '') }}">
+                <input type="text" name="action_type_filter_val" id="action_type_filter" class="form-control form-control-sm" placeholder="ex: CREATE_STUDENT" value="{{ request.args.get('action_type_filter_val', '') }}">
             </div>
             <div class="col-md-3">
                 <label for="target_model_filter" class="form-label">Model Țintă</label>
                 <input type="text" name="target_model_filter_val" id="target_model_filter" class="form-control form-control-sm" placeholder="ex: Student" value="{{ request.args.get('target_model_filter_val', '') }}">
             </div>
+             <div class="col-md-3">
+                <label for="performed_by_user_filter" class="form-label">Efectuat de User (ID)</label>
+                <input type="text" name="performed_by_user_filter_val" id="performed_by_user_filter" class="form-control form-control-sm" placeholder="ID Utilizator" value="{{ request.args.get('performed_by_user_filter_val', '') }}">
+            </div>
             <div class="col-md-3 d-flex align-items-end">
                 <button type="submit" class="btn btn-primary btn-sm">Filtrează</button>
-                 <a href="{{ url_for('admin_action_logs') }}" class="btn btn-outline-secondary btn-sm ms-2">Resetează Filtre</a>
+                 <a href="{{ url_for(request.endpoint) }}" class="btn btn-outline-secondary btn-sm ms-2">Resetează Filtre</a>
             </div>
         </div>
     </form>
+    #}
 
     <div class="table-responsive">
         <table class="table table-striped table-hover table-sm caption-top">
-            <caption>Jurnalul de acțiuni al sistemului. Total: {{ logs_pagination.total }} înregistrări.</caption>
+            <caption>Jurnalul de acțiuni relevante pentru {{ unit_type }} {{ unit_id }}. Total: {{ logs_pagination.total }} înregistrări.</caption>
             <thead>
                 <tr>
-                    <th scope="col">Timestamp (UTC)</th>
-                    <th scope="col">Utilizator</th>
+                    <th scope="col">Timestamp</th>
+                    <th scope="col">Utilizator Acțiune</th>
                     <th scope="col">Tip Acțiune</th>
                     <th scope="col">Model Țintă</th>
                     <th scope="col">ID Țintă</th>
-                    <th scope="col">Descriere</th>
+                    <th scope="col">Descriere Generală</th>
                     <th scope="col">Detalii Înainte</th>
                     <th scope="col">Detalii După</th>
                 </tr>
@@ -53,11 +58,11 @@
                     <td>{{ log_entry.timestamp|localdatetime('%Y-%m-%d %H:%M:%S') }} <small class="text-muted">({{ log_entry.timestamp|localdatetime('%Z') }})</small></td>
                     <td>
                         {% if log_entry.user %}
-                            <span title="ID Utilizator: {{ log_entry.user_id }}">{{ log_entry.user.username }}</span>
+                            <span title="ID Utilizator: {{ log_entry.user_id }}">{{ log_entry.user.username }} ({{log_entry.user.role}})</span>
                         {% elif log_entry.user_id %}
                             Utilizator ID: {{ log_entry.user_id }}
                         {% else %}
-                            Nespecificat
+                            Nespecificat/Sistem
                         {% endif %}
                     </td>
                     <td><span class="badge bg-secondary">{{ log_entry.action_type }}</span></td>
@@ -118,7 +123,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8" class="text-center">Nu există înregistrări în jurnal care să corespundă filtrelor aplicate (dacă există) sau jurnalul este gol.</td>
+                    <td colspan="8" class="text-center">Nu există înregistrări în jurnal pentru această unitate.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -129,31 +134,27 @@
     {% if logs_pagination.pages > 1 %}
     <nav aria-label="Page navigation">
         <ul class="pagination justify-content-center">
-            {# Previous Page Link #}
             {% if logs_pagination.has_prev %}
-                <li class="page-item"><a class="page-link" href="{{ url_for('admin_action_logs', page=logs_pagination.prev_num, **request.args) }}">&laquo; Precedenta</a></li>
+                <li class="page-item"><a class="page-link" href="{{ url_for(request.endpoint, page=logs_pagination.prev_num, **request.args) }}">&laquo; Precedenta</a></li>
             {% else %}
                 <li class="page-item disabled"><span class="page-link">&laquo; Precedenta</span></li>
             {% endif %}
 
-            {# Page Numbers #}
             {% for page_num in logs_pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=3) %}
                 {% if page_num %}
                     {% if logs_pagination.page == page_num %}
                         <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
                     {% else %}
-                        <li class="page-item"><a class="page-link" href="{{ url_for('admin_action_logs', page=page_num, **request.args) }}">{{ page_num }}</a></li>
+                        <li class="page-item"><a class="page-link" href="{{ url_for(request.endpoint, page=page_num, **request.args) }}">{{ page_num }}</a></li>
                     {% endif %}
                 {% elif loop.index0 == 0 or loop.index0 == logs_pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=3)|length -1 %}
-                    {# Ellipsis only if not at the very start/end of all possible iter_pages items #}
                 {% else %}
                      <li class="page-item disabled"><span class="page-link">...</span></li>
                 {% endif %}
             {% endfor %}
 
-            {# Next Page Link #}
             {% if logs_pagination.has_next %}
-                <li class="page-item"><a class="page-link" href="{{ url_for('admin_action_logs', page=logs_pagination.next_num, **request.args) }}">Următoarea &raquo;</a></li>
+                <li class="page-item"><a class="page-link" href="{{ url_for(request.endpoint, page=logs_pagination.next_num, **request.args) }}">Următoarea &raquo;</a></li>
             {% else %}
                 <li class="page-item disabled"><span class="page-link">Următoarea &raquo;</span></li>
             {% endif %}

@@ -75,9 +75,9 @@
                     {% for leave in leaves %}
                     <tr class="{{ 'table-success' if leave.is_active else ('table-warning' if leave.is_upcoming else 'table-secondary') }}">
                         <td>{{ leave.student.nume }} {{ leave.student.prenume }}</td>
-                        <td>{{ leave.leave_date.strftime('%d-%m-%y') }} ({{ leave.leave_date.strftime('%a') }})</td>
-                        <td>{{ leave.start_time.strftime('%H:%M') }}</td>
-                        <td>{{ leave.end_time.strftime('%H:%M') }} {% if leave.end_datetime.date() > leave.leave_date %}<span class="badge bg-info text-dark">ziua următoare</span>{% endif %}</td>
+                        <td>{{ leave.leave_date|localdate('%d-%m-%y (%a)') }}</td>
+                        <td>{{ leave.start_time|localtime('%H:%M') }}</td>
+                        <td>{{ leave.end_time|localtime('%H:%M') }} {% if leave.end_datetime.date() > leave.leave_date %}<span class="badge bg-info text-dark">ziua următoare</span>{% endif %}</td>
                         <td><span class="badge {% if leave.leave_type_display == 'În program' %}bg-primary{% elif leave.leave_type_display == 'Afară program' %}bg-secondary{% else %}bg-light text-dark{% endif %}">{{ leave.leave_type_display }}</span></td>
                         <td>{{ leave.reason if leave.reason else '-' }}</td>
                         <td>

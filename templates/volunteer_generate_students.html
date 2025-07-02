@@ -134,22 +134,27 @@ function copyGeneratedStudents() {
     if (textToCopy) {
         const textarea = document.getElementById('generatedStudentsText');
         textarea.value = textToCopy.trim();
-        // textarea.select(); // Nu e necesar pentru navigator.clipboard
-        // document.execCommand('copy'); // Deprecated
 
-        navigator.clipboard.writeText(textarea.value).then(function() {
-            alert('Lista studenților generați a fost copiată în clipboard!');
-        }, function(err) {
-            alert('Eroare la copierea listei: ' + err);
-            // Fallback pentru browsere mai vechi sau fără permisiuni, dacă e nevoie
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(textarea.value).then(function() {
+                alert('Lista studenților generați a fost copiată în clipboard!');
+            }, function(err) {
+                console.error('Async: Could not copy text: ', err);
+                alert('Eroare la copierea listei (navigator). Încercați manual.');
+            });
+        } else if (document.queryCommandSupported && document.queryCommandSupported('copy')) {
+            // Fallback la document.execCommand
+            textarea.select();
             try {
-                textarea.select();
                 document.execCommand('copy');
                 alert('Lista studenților generați a fost copiată în clipboard! (fallback)');
-            } catch (fallbackErr) {
-                console.error('Fallback copy failed: ', fallbackErr);
+            } catch (err) {
+                console.error('Fallback: Oops, unable to copy: ', err);
+                alert('Eroare la copierea listei (fallback). Încercați manual.');
             }
-        });
+        } else {
+            alert('Copierea automată în clipboard nu este suportată de browserul dvs. Vă rugăm copiați manual.');
+        }
     } else {
         alert('Nu sunt studenți generați pentru a copia.');
     }

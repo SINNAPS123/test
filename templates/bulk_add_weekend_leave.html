@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Adăugare Rapidă Învoiri Weekend{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Adăugare Rapidă Învoiri Weekend</h2>
+        <a href="{{ url_for('list_weekend_leaves') }}" class="btn btn-outline-secondary btn-sm">&laquo; Înapoi la Lista Învoiri Weekend</a>
+    </div>
+    <p class="text-muted">Selectați studenții, weekendul, zilele dorite și orele standard. Acestea vor fi aplicate tuturor studenților selectați. Conflictele individuale nu sunt verificate la acest pas.</p>
+    <hr>
+
+    <form method="POST" action="{{ url_for('gradat_bulk_add_weekend_leave') }}" id="bulkWeekendLeaveForm">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header">
+                <h5>1. Selectează Studenții</h5>
+            </div>
+            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                {% if students %}
+                    <div class="row">
+                        {% for student in students %}
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="student_ids" value="{{ student.id }}" id="student_{{ student.id }}">
+                                <label class="form-check-label" for="student_{{ student.id }}">
+                                    {{ student.grad_militar }} {{ student.nume }} {{ student.prenume }} (Pl. {{ student.pluton }})
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <hr>
+                     <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" id="selectAllStudents">
+                        <label class="form-check-label" for="selectAllStudents">
+                            Selectează/Deselectează Toți Studenții
+                        </label>
+                    </div>
+                {% else %}
+                    <p class="text-muted">Nu aveți studenți în evidență.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header">
+                <h5>2. Selectează Weekendul și Zilele</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="weekend_start_date" class="form-label">Weekendul (pe baza zilei de Vineri) <span class="text-danger">*</span></label>
+                        <select class="form-select" id="weekend_start_date" name="weekend_start_date" required>
+                            <option value="" disabled selected>Alege un weekend...</option>
+                            {% for wknd in upcoming_fridays %}
+                            <option value="{{ wknd.value }}">{{ wknd.display }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <hr>
+                <h6>Selectează Zilele și Definește Orele Standard:</h6>
+                <div class="row mb-2">
+                    {% set default_times = {'Vineri': {'start': '15:00', 'end': '20:00'}, 'Sambata': {'start': '15:00', 'end': '22:00'}, 'Duminica': {'start': '15:00', 'end': '20:00'}} %}
+                    {% for day_name in ['Vineri', 'Sambata', 'Duminica'] %}
+                    <div class="col-md-4">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input day-checkbox-bulk" type="checkbox" name="selected_days" value="{{ day_name }}" id="check_bulk_{{ day_name.lower() }}">
+                            <label class="form-check-label" for="check_bulk_{{ day_name.lower() }}">
+                                <strong>{{ day_name }}</strong>
+                            </label>
+                        </div>
+                        <div class="day-times-bulk d-none" id="times_bulk_{{ day_name.lower() }}">
+                            <div class="mb-2">
+                                <label for="bulk_{{ day_name.lower() }}_start_time" class="form-label form-label-sm">Ora început standard:</label>
+                                <input type="time" class="form-control form-control-sm" id="bulk_{{ day_name.lower() }}_start_time" name="bulk_{{ day_name.lower() }}_start_time" value="{{ default_times[day_name].start }}">
+                            </div>
+                            <div class="mb-2">
+                                <label for="bulk_{{ day_name.lower() }}_end_time" class="form-label form-label-sm">Ora sfârșit standard:</label>
+                                <input type="time" class="form-control form-control-sm" id="bulk_{{ day_name.lower() }}_end_time" name="bulk_{{ day_name.lower() }}_end_time" value="{{ default_times[day_name].end }}">
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                 <div id="day_selection_warning_bulk" class="form-text text-warning mb-2" style="display: none;">
+                    Atenție: Ați selectat 3 zile pentru învoire. Asigurați-vă că acest lucru este permis.
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header">
+                <h5>3. Motiv (Opțional)</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="reason" class="form-label">Motiv comun (va fi aplicat tuturor învoirilor create):</label>
+                    <textarea class="form-control" id="reason" name="reason" rows="2" placeholder="Ex: Vizită familie, Eveniment personal, etc."></textarea>
+                </div>
+            </div>
+        </div>
+
+        <hr>
+        <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary btn-lg">
+                <i class="fas fa-check-double"></i> Adaugă Învoiri Multiple
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dayCheckboxes = document.querySelectorAll('.day-checkbox-bulk');
+    const warningDivBulk = document.getElementById('day_selection_warning_bulk');
+    const maxDaysAllowedBulk = 3;
+
+    dayCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const dayNameLower = this.value.toLowerCase();
+            const timesDiv = document.getElementById('times_bulk_' + dayNameLower);
+            const startTimeInput = document.getElementById('bulk_' + dayNameLower + '_start_time');
+            const endTimeInput = document.getElementById('bulk_' + dayNameLower + '_end_time');
+
+            if (this.checked) {
+                timesDiv.classList.remove('d-none');
+                startTimeInput.required = true;
+                endTimeInput.required = true;
+            } else {
+                timesDiv.classList.add('d-none');
+                startTimeInput.required = false;
+                endTimeInput.required = false;
+            }
+
+            let checkedCount = 0;
+            dayCheckboxes.forEach(cb => { if (cb.checked) checkedCount++; });
+
+            if (checkedCount > maxDaysAllowedBulk) {
+                this.checked = false; // Uncheck
+                timesDiv.classList.add('d-none');
+                startTimeInput.required = false;
+                endTimeInput.required = false;
+                alert('Puteți selecta maxim ' + maxDaysAllowedBulk + ' zile.');
+                // Re-calculate checkedCount after unchecking
+                checkedCount = 0;
+                dayCheckboxes.forEach(cb => { if (cb.checked) checkedCount++; });
+            }
+
+            warningDivBulk.style.display = (checkedCount === 3) ? 'block' : 'none';
+        });
+        // Initial state for required attribute based on checkbox
+        const dayNameLowerInitial = checkbox.value.toLowerCase();
+        const timesDivInitial = document.getElementById('times_bulk_' + dayNameLowerInitial);
+        const startTimeInputInitial = document.getElementById('bulk_' + dayNameLowerInitial + '_start_time');
+        const endTimeInputInitial = document.getElementById('bulk_' + dayNameLowerInitial + '_end_time');
+        if (checkbox.checked) {
+            timesDivInitial.classList.remove('d-none');
+            startTimeInputInitial.required = true;
+            endTimeInputInitial.required = true;
+        } else {
+            timesDivInitial.classList.add('d-none');
+            startTimeInputInitial.required = false;
+            endTimeInputInitial.required = false;
+        }
+    });
+
+    const selectAllCheckbox = document.getElementById('selectAllStudents');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            const studentCheckboxes = document.querySelectorAll('input[name="student_ids"]');
+            studentCheckboxes.forEach(cb => {
+                cb.checked = this.checked;
+            });
+        });
+    }
+
+    const form = document.getElementById('bulkWeekendLeaveForm');
+    if (form) {
+        form.addEventListener('submit', function(event) {
+            const selectedStudents = document.querySelectorAll('input[name="student_ids"]:checked').length;
+            if (selectedStudents === 0) {
+                alert('Vă rugăm selectați cel puțin un student.');
+                event.preventDefault();
+                return;
+            }
+            const selectedDays = document.querySelectorAll('input[name="selected_days"]:checked').length;
+            if (selectedDays === 0) {
+                alert('Vă rugăm selectați cel puțin o zi din weekend.');
+                event.preventDefault();
+                return;
+            }
+            // Additional validation for time inputs if day is checked can be added here if needed
+        });
+    }
+});
+</script>
+{% endblock %}

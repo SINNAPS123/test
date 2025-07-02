@@ -13,6 +13,9 @@
                 </svg>
                 Adaugă Permisie Nouă
             </a>
+            <a href="{{ url_for('gradat_bulk_add_permission') }}" class="btn btn-success me-2" title="Adaugă rapid aceeași permisie pentru mai mulți studenți">
+                <i class="fas fa-users-cog"></i> Adăugare Rapidă Multiplă
+            </a>
             <button type="button" class="btn btn-info me-2" data-bs-toggle="modal" data-bs-target="#bulkImportPermissionsModal">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-upload" viewBox="0 0 16 16">
                     <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
@@ -50,8 +53,8 @@
                     <tr class="{{ 'table-success' if p.is_active else ('table-warning' if p.is_upcoming else 'table-secondary') }}">
                         <td>{{ p.student.nume }} {{ p.student.prenume }}</td>
                         <td>{{ p.student.grad_militar }}</td>
-                        <td>{{ p.start_datetime.strftime('%d-%m-%Y %H:%M') }}</td>
-                        <td>{{ p.end_datetime.strftime('%d-%m-%Y %H:%M') }}</td>
+                        <td>{{ p.start_datetime|localdatetime('%d-%m-%Y %H:%M') }}</td>
+                        <td>{{ p.end_datetime|localdatetime('%d-%m-%Y %H:%M') }}</td>
                         <td>{{ p.destination if p.destination else '-' }}</td>
                         <td>{{ p.transport_mode if p.transport_mode else '-' }}</td>
                         <td>{{ p.reason if p.reason else '-' }}</td>

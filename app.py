@@ -17,9 +17,53 @@ import re
 from unidecode import unidecode
 import json
 from sqlalchemy import inspect
+import pytz # Adăugat pentru fusuri orare
 
 # Inițializare aplicație Flask
 app = Flask(__name__)
+
+# Definire fus orar pentru România
+EUROPE_BUCHAREST = pytz.timezone('Europe/Bucharest')
+
+# Funcție helper pentru a obține ora curentă localizată
+def get_localized_now():
+    return datetime.now(EUROPE_BUCHAREST)
+
+# Filtru Jinja pentru a formata datetime-uri cu fusul orar local
+@app.template_filter('localdatetime')
+def localdatetime_filter(dt, fmt='%d-%m-%Y %H:%M:%S'):
+    if not dt:
+        return ""
+    if dt.tzinfo is None:
+        # Presupunem că datetime-urile naive sunt în ora serverului (care ar trebui să fie Europe/Bucharest)
+        # sau sunt UTC și trebuie convertite. Pentru siguranță, dacă e naive, îl localizăm ca UTC apoi convertim.
+        # Dar majoritatea datetime-urilor create cu datetime.now() fără tz sunt deja în ora sistemului.
+        # Cel mai sigur este să verificăm dacă provin din datetime.utcnow() sau datetime.now()
+        # Pentru ActionLog.timestamp care e default=datetime.utcnow, va fi conștient de fus (UTC)
+        # Pentru celelalte (ex: Permission.start_datetime), sunt stocate ca naive.
+        # Le vom considera ca fiind în ora serverului și le vom localiza.
+        # Totuși, o practică mai bună ar fi să stocăm totul ca UTC.
+        # Având în vedere structura actuală, vom considera datetime-urile naive ca fiind în ora serverului.
+        localized_dt = EUROPE_BUCHAREST.localize(dt, is_dst=None) # is_dst=None pentru a gestiona tranzițiile DST
+    else:
+        localized_dt = dt.astimezone(EUROPE_BUCHAREST)
+    return localized_dt.strftime(fmt)
+
+@app.template_filter('localtime')
+def localtime_filter(t, fmt='%H:%M'):
+    if not t:
+        return ""
+    # Ora (time object) nu are fus orar, deci o formatăm direct.
+    # Dacă ar fi nevoie de conversie bazată pe dată, ar fi mai complex.
+    return t.strftime(fmt)
+
+@app.template_filter('localdate')
+def localdate_filter(d, fmt='%d-%m-%Y'):
+    if not d:
+        return ""
+    # Data (date object) nu are fus orar.
+    return d.strftime(fmt)
+
 # IMPORTANT: Change this to a strong, unique, and static secret key in a real environment!
 # Using a static key is crucial for session persistence across app restarts.
 # For production, load from an environment variable.
@@ -94,11 +138,11 @@ class Permission(db.Model):
     created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     creator = db.relationship('User', backref=db.backref('permissions_created', lazy=True))
     @property
-    def is_active(self): now = datetime.now(); return self.start_datetime <= now <= self.end_datetime and self.status == 'Aprobată'
+    def is_active(self): now = get_localized_now(); return self.start_datetime <= now <= self.end_datetime and self.status == 'Aprobată'
     @property
-    def is_upcoming(self): now = datetime.now(); return self.start_datetime > now and self.status == 'Aprobată'
+    def is_upcoming(self): now = get_localized_now(); return self.start_datetime > now and self.status == 'Aprobată'
     @property
-    def is_past(self): now = datetime.now(); return self.end_datetime < now or self.status == 'Anulată'
+    def is_past(self): now = get_localized_now(); return self.end_datetime < now or self.status == 'Anulată'
 
 class DailyLeave(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -119,11 +163,11 @@ class DailyLeave(db.Model):
         if self.end_time < self.start_time: effective_end_date += timedelta(days=1)
         return datetime.combine(effective_end_date, self.end_time)
     @property
-    def is_active(self): now = datetime.now(); return self.start_datetime <= now <= self.end_datetime and self.status == 'Aprobată'
+    def is_active(self): now = get_localized_now(); return self.start_datetime <= now <= self.end_datetime and self.status == 'Aprobată'
     @property
-    def is_upcoming(self): now = datetime.now(); return self.start_datetime > now and self.status == 'Aprobată'
+    def is_upcoming(self): now = get_localized_now(); return self.start_datetime > now and self.status == 'Aprobată'
     @property
-    def is_past(self): now = datetime.now(); return self.end_datetime < now or self.status == 'Anulată'
+    def is_past(self): now = get_localized_now(); return self.end_datetime < now or self.status == 'Anulată'
     @property
     def leave_type_display(self):
         in_program_start, in_program_end = time(7,0), time(14,20)
@@ -172,7 +216,7 @@ class WeekendLeave(db.Model):
         return sorted(intervals, key=lambda x: x['start'])
     @property
     def is_overall_active_or_upcoming(self):
-        now = datetime.now()
+        now = get_localized_now()
         if self.status != 'Aprobată': return False
         return any(interval["end"] >= now for interval in self.get_intervals())
     @property
@@ -180,10 +224,10 @@ class WeekendLeave(db.Model):
         if self.status != 'Aprobată':
             return False
         # This code is only reached if status is 'Aprobată'
-        now = datetime.now()
+        now = get_localized_now()
         return any(interval["start"] <= now <= interval["end"] for interval in self.get_intervals())
     @property
-    def is_overall_past(self): now = datetime.now(); return True if self.status == 'Anulată' else not self.is_overall_active_or_upcoming
+    def is_overall_past(self): now = get_localized_now(); return True if self.status == 'Anulată' else not self.is_overall_active_or_upcoming
     @property
     def display_days_and_times(self): return "; ".join([f"{i['day_name']} ({i['start'].strftime('%d.%m')}) {i['start'].strftime('%H:%M')}-{i['end'].strftime('%H:%M')}" for i in self.get_intervals()]) or "Nespecificat"
 
@@ -216,11 +260,11 @@ class ServiceAssignment(db.Model):
     created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     creator = db.relationship('User', backref=db.backref('service_assignments_created', lazy=True))
     @property
-    def is_active(self): now = datetime.now(); return self.start_datetime <= now <= self.end_datetime
+    def is_active(self): now = get_localized_now(); return self.start_datetime <= now <= self.end_datetime
     @property
-    def is_upcoming(self): now = datetime.now(); return self.start_datetime > now
+    def is_upcoming(self): now = get_localized_now(); return self.start_datetime > now
     @property
-    def is_past(self): now = datetime.now(); return self.end_datetime < now
+    def is_past(self): now = get_localized_now(); return self.end_datetime < now
 
 class ActionLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -254,7 +298,7 @@ def init_db():
         print("DB initialized.")
 
 def get_next_friday(start_date=None):
-    d = start_date if start_date else date.today();
+    d = start_date if start_date else get_localized_now().date() # Use localized date
     while d.weekday() != 4: d += timedelta(days=1)
     return d
 
@@ -264,7 +308,7 @@ def get_upcoming_fridays(num_fridays=5):
     Returns a list of dicts, each with 'value' (YYYY-MM-DD string) and 'display' (Month Day, Year string).
     """
     fridays_list = []
-    today = date.today()
+    today = get_localized_now().date() # Use localized date
     # Start from the Friday of the current week or previous week if today is past Friday
     current_friday_offset = today.weekday() - 4 # Friday is weekday 4
     if current_friday_offset > 0: # If today is Sat (5) or Sun (6)
@@ -650,9 +694,10 @@ def dashboard():
         student_ids_managed = [s.id for s in Student.query.filter_by(created_by_user_id=current_user.id).with_entities(Student.id).all()]
         student_count = len(student_ids_managed)
 
-        today_start = datetime.combine(date.today(), time.min)
-        today_end = datetime.combine(date.today(), time.max)
-        now = datetime.now()
+    today_localized = get_localized_now().date()
+    today_start = datetime.combine(today_localized, time.min)
+    today_end = datetime.combine(today_localized, time.max)
+    # now = get_localized_now() # 'now' variabila nu este folosita direct aici, today_start/end sunt suficiente
 
         # Permisii active AZI (se suprapun cu ziua de azi)
         permissions_today_count = Permission.query.filter(
@@ -666,7 +711,7 @@ def dashboard():
         daily_leaves_today_count = DailyLeave.query.filter(
             DailyLeave.student_id.in_(student_ids_managed),
             DailyLeave.status == 'Aprobată',
-            DailyLeave.leave_date == date.today() # Direct filter by date
+            DailyLeave.leave_date == today_localized # Folosim data localizată
         ).count()
 
         # Învoiri weekend active AZI (cel puțin un interval se suprapune cu ziua de azi)
@@ -678,9 +723,9 @@ def dashboard():
         for wl in all_wl_gradat:
             for interval in wl.get_intervals():
                 # Verificăm dacă intervalul (care poate trece în ziua următoare) se suprapune cu ziua de azi
-                if interval['start'].date() == date.today() or \
-                   interval['end'].date() == date.today() or \
-                   (interval['start'].date() < date.today() and interval['end'].date() > date.today()):
+                if interval['start'].date() == today_localized or \
+                   interval['end'].date() == today_localized or \
+                   (interval['start'].date() < today_localized and interval['end'].date() > today_localized):
                     weekend_leaves_active_today += 1
                     break # Trecem la următoarea învoire de weekend
 
@@ -1251,7 +1296,7 @@ def _get_commander_unit_id(username, role_prefix):
 
 # --- Helper function to determine standard roll call time ---
 def get_standard_roll_call_datetime(for_date=None):
-    target_date = for_date if for_date else date.today()
+    target_date = for_date if for_date else get_localized_now().date() # Folosim data localizată
     weekday = target_date.weekday() # Monday is 0 and Sunday is 6
 
     if 0 <= weekday <= 3: # Monday to Thursday
@@ -1404,39 +1449,70 @@ def company_commander_dashboard():
     total_company_presence_roll_call = _calculate_presence_data(students_in_company_all, roll_call_datetime) # For existing roll call report
 
     # New stats for "today"
-    today_start = datetime.combine(date.today(), time.min)
-    today_end = datetime.combine(date.today(), time.max)
+    today_localized_company = get_localized_now().date()
+    today_start = datetime.combine(today_localized_company, time.min)
+    today_end = datetime.combine(today_localized_company, time.max)
 
-    permissions_today_company = Permission.query.filter(
+    permissions_today_company_count = Permission.query.filter(
         Permission.student_id.in_(student_ids_in_company),
         Permission.status == 'Aprobată',
         Permission.start_datetime <= today_end,
         Permission.end_datetime >= today_start
     ).count()
 
-    daily_leaves_today_company = DailyLeave.query.filter(
+    daily_leaves_today_company_count = DailyLeave.query.filter(
         DailyLeave.student_id.in_(student_ids_in_company),
         DailyLeave.status == 'Aprobată',
-        DailyLeave.leave_date == date.today()
+        DailyLeave.leave_date == today_localized_company
     ).count()
 
-    weekend_leaves_today_company = 0
-    all_wl_company = WeekendLeave.query.filter(WeekendLeave.student_id.in_(student_ids_in_company), WeekendLeave.status == 'Aprobată').all()
-    for wl in all_wl_company:
-        for interval in wl.get_intervals():
-            if interval['start'].date() == date.today() or \
-               interval['end'].date() == date.today() or \
-               (interval['start'].date() < date.today() and interval['end'].date() > date.today()):
-                weekend_leaves_today_company += 1
+    weekend_leaves_today_company_count = 0
+    all_wl_company_for_today_stats = WeekendLeave.query.filter(WeekendLeave.student_id.in_(student_ids_in_company), WeekendLeave.status == 'Aprobată').all()
+    for wl_today in all_wl_company_for_today_stats:
+        for interval_today in wl_today.get_intervals():
+            if interval_today['start'].date() == today_localized_company or \
+               interval_today['end'].date() == today_localized_company or \
+               (interval_today['start'].date() < today_localized_company and interval_today['end'].date() > today_localized_company):
+                weekend_leaves_today_company_count += 1
                 break
 
-    total_leaves_today_company = daily_leaves_today_company + weekend_leaves_today_company
+    total_leaves_today_company_count = daily_leaves_today_company_count + weekend_leaves_today_company_count
 
-    services_today_company = ServiceAssignment.query.filter(
+    services_today_company_count = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids_in_company),
         ServiceAssignment.start_datetime <= today_end,
         ServiceAssignment.end_datetime >= today_start
     ).count()
+
+    # Stats for "NOW"
+    now_localized = get_localized_now()
+    permissions_active_now_company = Permission.query.filter(
+        Permission.student_id.in_(student_ids_in_company),
+        Permission.status == 'Aprobată',
+        Permission.start_datetime <= now_localized,
+        Permission.end_datetime >= now_localized
+    ).count()
+
+    daily_leaves_active_now_company = 0
+    all_dl_company = DailyLeave.query.filter(DailyLeave.student_id.in_(student_ids_in_company), DailyLeave.status == 'Aprobată').all()
+    for dl_now in all_dl_company:
+        if dl_now.is_active: # is_active already uses get_localized_now()
+            daily_leaves_active_now_company +=1
+
+    weekend_leaves_active_now_company = 0
+    all_wl_company_for_now_stats = WeekendLeave.query.filter(WeekendLeave.student_id.in_(student_ids_in_company), WeekendLeave.status == 'Aprobată').all()
+    for wl_now in all_wl_company_for_now_stats:
+        if wl_now.is_any_interval_active_now: # is_any_interval_active_now uses get_localized_now()
+            weekend_leaves_active_now_company += 1
+
+    total_on_leave_now_company = permissions_active_now_company + daily_leaves_active_now_company + weekend_leaves_active_now_company
+
+    services_active_now_company = ServiceAssignment.query.filter(
+        ServiceAssignment.student_id.in_(student_ids_in_company),
+        ServiceAssignment.start_datetime <= now_localized,
+        ServiceAssignment.end_datetime >= now_localized
+    ).count()
+
 
     platoons_data_roll_call = {}
     platoons_in_company = sorted(list(set(s.pluton for s in students_in_company_all if s.pluton)))
@@ -1448,12 +1524,137 @@ def company_commander_dashboard():
     return render_template('company_commander_dashboard.html',
                            company_id=company_id_str,
                            roll_call_time_str=roll_call_time_str,
-                           total_company_presence=total_company_presence_roll_call, # Renamed for clarity in template if needed
-                           platoons_data=platoons_data_roll_call, # Renamed for clarity
-                           permissions_today_count=permissions_today_company,
-                           total_leaves_today_count=total_leaves_today_company,
-                           services_today_count=services_today_company,
-                           total_students_company=len(student_ids_in_company))
+                            total_company_presence=total_company_presence_roll_call,
+                            platoons_data=platoons_data_roll_call,
+                            # Statistici "Astăzi"
+                            permissions_today_count=permissions_today_company_count,
+                            daily_leaves_today_company=daily_leaves_today_company_count, # Nume nou pentru claritate
+                            weekend_leaves_today_company=weekend_leaves_today_company_count, # Nume nou
+                            total_leaves_today_count=total_leaves_today_company_count,
+                            services_today_count=services_today_company_count,
+                            total_students_company=len(student_ids_in_company),
+                            # Statistici "ACUM"
+                            permissions_active_now_company=permissions_active_now_company,
+                            daily_leaves_active_now_company=daily_leaves_active_now_company,
+                            weekend_leaves_active_now_company=weekend_leaves_active_now_company,
+                            total_on_leave_now_company=total_on_leave_now_company,
+                            services_active_now_company=services_active_now_company,
+                            current_time_for_display=now_localized
+                           )
+
+@app.route('/company_commander/logs', endpoint='company_commander_logs')
+@login_required
+def company_commander_logs():
+    if current_user.role != 'comandant_companie':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    company_id_str = _get_commander_unit_id(current_user.username, "CmdC")
+    if not company_id_str:
+        flash('ID-ul companiei nu a putut fi determinat.', 'warning')
+        return redirect(url_for('company_commander_dashboard'))
+
+    page = request.args.get('page', 1, type=int)
+    per_page = 25
+
+    # Subquery pentru a găsi ID-urile studenților din compania comandantului
+    student_ids_in_company = db.session.query(Student.id).filter(Student.companie == company_id_str).scalar_subquery()
+
+    # Interogare principală pentru ActionLog
+    # Filtrăm logurile unde target_id (dacă modelul este Student, Permission, etc.) corespunde unui student din companie.
+    # Acest query este complex și ar putea necesita optimizări sau o abordare diferită pentru performanță pe volume mari.
+
+    # Interogare principală pentru ActionLog, optimizată
+    base_query = ActionLog.query.join(User, ActionLog.user_id == User.id, isouter=True).options(joinedload(ActionLog.user))
+
+    conditions = []
+
+    # Condiție pentru Studenți
+    student_subquery = db.session.query(Student.id).filter(Student.companie == company_id_str).scalar_subquery()
+    conditions.append(and_(ActionLog.target_model == 'Student', ActionLog.target_id.in_(student_subquery)))
+
+    # Condiție pentru Permisii
+    permission_subquery = db.session.query(Permission.id).join(Student, Permission.student_id == Student.id).filter(Student.companie == company_id_str).scalar_subquery()
+    conditions.append(and_(ActionLog.target_model == 'Permission', ActionLog.target_id.in_(permission_subquery)))
+
+    # Condiție pentru DailyLeave
+    daily_leave_subquery = db.session.query(DailyLeave.id).join(Student, DailyLeave.student_id == Student.id).filter(Student.companie == company_id_str).scalar_subquery()
+    conditions.append(and_(ActionLog.target_model == 'DailyLeave', ActionLog.target_id.in_(daily_leave_subquery)))
+
+    # Condiție pentru WeekendLeave
+    weekend_leave_subquery = db.session.query(WeekendLeave.id).join(Student, WeekendLeave.student_id == Student.id).filter(Student.companie == company_id_str).scalar_subquery()
+    conditions.append(and_(ActionLog.target_model == 'WeekendLeave', ActionLog.target_id.in_(weekend_leave_subquery)))
+
+    # Condiție pentru ServiceAssignment
+    service_subquery = db.session.query(ServiceAssignment.id).join(Student, ServiceAssignment.student_id == Student.id).filter(Student.companie == company_id_str).scalar_subquery()
+    conditions.append(and_(ActionLog.target_model == 'ServiceAssignment', ActionLog.target_id.in_(service_subquery)))
+
+    # TODO: Adaugă condiții pentru alte modele relevante dacă este necesar (ex. VolunteerActivity, ActivityParticipant)
+    # Exemplu pentru ActivityParticipant (dacă s-ar loga target_id-ul participantului)
+    # participant_subquery = db.session.query(ActivityParticipant.id).join(Student, ActivityParticipant.student_id == Student.id).filter(Student.companie == company_id_str).scalar_subquery()
+    # conditions.append(and_(ActionLog.target_model == 'ActivityParticipant', ActionLog.target_id.in_(participant_subquery)))
+
+    # Aplică condițiile cu OR
+    if conditions:
+        final_query = base_query.filter(or_(*conditions)).order_by(ActionLog.timestamp.desc())
+    else: # În caz că nu există condiții (deși e improbabil aici)
+        final_query = base_query.order_by(ActionLog.timestamp.desc()) # Sau returnează o listă goală direct
+
+    logs_pagination = final_query.paginate(page=page, per_page=per_page, error_out=False)
+
+    return render_template('commander_action_logs.html',
+                           logs_pagination=logs_pagination,
+                           title=f"Jurnal Acțiuni Compania {company_id_str}",
+                           unit_id=company_id_str,
+                           unit_type="Compania")
+
+@app.route('/battalion_commander/logs', endpoint='battalion_commander_logs')
+@login_required
+def battalion_commander_logs():
+    if current_user.role != 'comandant_batalion':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    battalion_id_str = _get_commander_unit_id(current_user.username, "CmdB")
+    if not battalion_id_str:
+        flash('ID-ul batalionului nu a putut fi determinat.', 'warning')
+        return redirect(url_for('battalion_commander_dashboard'))
+
+    page = request.args.get('page', 1, type=int)
+    per_page = 25
+
+    # Similar cu company_commander_logs, dar filtrăm pe battalion_id_str
+    base_query_battalion = ActionLog.query.join(User, ActionLog.user_id == User.id, isouter=True).options(joinedload(ActionLog.user))
+    conditions_battalion = []
+
+    student_subquery_b = db.session.query(Student.id).filter(Student.batalion == battalion_id_str).scalar_subquery()
+    conditions_battalion.append(and_(ActionLog.target_model == 'Student', ActionLog.target_id.in_(student_subquery_b)))
+
+    permission_subquery_b = db.session.query(Permission.id).join(Student, Permission.student_id == Student.id).filter(Student.batalion == battalion_id_str).scalar_subquery()
+    conditions_battalion.append(and_(ActionLog.target_model == 'Permission', ActionLog.target_id.in_(permission_subquery_b)))
+
+    daily_leave_subquery_b = db.session.query(DailyLeave.id).join(Student, DailyLeave.student_id == Student.id).filter(Student.batalion == battalion_id_str).scalar_subquery()
+    conditions_battalion.append(and_(ActionLog.target_model == 'DailyLeave', ActionLog.target_id.in_(daily_leave_subquery_b)))
+
+    weekend_leave_subquery_b = db.session.query(WeekendLeave.id).join(Student, WeekendLeave.student_id == Student.id).filter(Student.batalion == battalion_id_str).scalar_subquery()
+    conditions_battalion.append(and_(ActionLog.target_model == 'WeekendLeave', ActionLog.target_id.in_(weekend_leave_subquery_b)))
+
+    service_subquery_b = db.session.query(ServiceAssignment.id).join(Student, ServiceAssignment.student_id == Student.id).filter(Student.batalion == battalion_id_str).scalar_subquery()
+    conditions_battalion.append(and_(ActionLog.target_model == 'ServiceAssignment', ActionLog.target_id.in_(service_subquery_b)))
+
+    if conditions_battalion:
+        final_query_battalion = base_query_battalion.filter(or_(*conditions_battalion)).order_by(ActionLog.timestamp.desc())
+    else:
+        final_query_battalion = base_query_battalion.order_by(ActionLog.timestamp.desc())
+
+    logs_pagination = final_query_battalion.paginate(page=page, per_page=per_page, error_out=False)
+
+    return render_template('commander_action_logs.html',
+                           logs_pagination=logs_pagination,
+                           title=f"Jurnal Acțiuni Batalionul {battalion_id_str}",
+                           unit_id=battalion_id_str,
+                           unit_type="Batalionul")
+
 
 @app.route('/dashboard/battalion')
 @login_required
@@ -1476,38 +1677,68 @@ def battalion_commander_dashboard():
     total_battalion_presence_roll_call = _calculate_presence_data(students_in_battalion_all, roll_call_datetime) # For existing roll call report
 
     # New stats for "today"
-    today_start = datetime.combine(date.today(), time.min)
-    today_end = datetime.combine(date.today(), time.max)
+    today_localized_battalion = get_localized_now().date()
+    today_start = datetime.combine(today_localized_battalion, time.min)
+    today_end = datetime.combine(today_localized_battalion, time.max)
 
-    permissions_today_battalion = Permission.query.filter(
+    permissions_today_battalion_count = Permission.query.filter(
         Permission.student_id.in_(student_ids_in_battalion),
         Permission.status == 'Aprobată',
         Permission.start_datetime <= today_end,
         Permission.end_datetime >= today_start
     ).count()
 
-    daily_leaves_today_battalion = DailyLeave.query.filter(
+    daily_leaves_today_battalion_count = DailyLeave.query.filter(
         DailyLeave.student_id.in_(student_ids_in_battalion),
         DailyLeave.status == 'Aprobată',
-        DailyLeave.leave_date == date.today()
+        DailyLeave.leave_date == today_localized_battalion
     ).count()
 
-    weekend_leaves_today_battalion = 0
-    all_wl_battalion = WeekendLeave.query.filter(WeekendLeave.student_id.in_(student_ids_in_battalion), WeekendLeave.status == 'Aprobată').all()
-    for wl in all_wl_battalion:
-        for interval in wl.get_intervals():
-            if interval['start'].date() == date.today() or \
-               interval['end'].date() == date.today() or \
-               (interval['start'].date() < date.today() and interval['end'].date() > date.today()):
-                weekend_leaves_today_battalion += 1
+    weekend_leaves_today_battalion_count = 0
+    all_wl_battalion_for_today_stats = WeekendLeave.query.filter(WeekendLeave.student_id.in_(student_ids_in_battalion), WeekendLeave.status == 'Aprobată').all()
+    for wl_today in all_wl_battalion_for_today_stats:
+        for interval_today in wl_today.get_intervals():
+            if interval_today['start'].date() == today_localized_battalion or \
+               interval_today['end'].date() == today_localized_battalion or \
+               (interval_today['start'].date() < today_localized_battalion and interval_today['end'].date() > today_localized_battalion):
+                weekend_leaves_today_battalion_count += 1
                 break
 
-    total_leaves_today_battalion = daily_leaves_today_battalion + weekend_leaves_today_battalion
+    total_leaves_today_battalion_count = daily_leaves_today_battalion_count + weekend_leaves_today_battalion_count
 
-    services_today_battalion = ServiceAssignment.query.filter(
+    services_today_battalion_count = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids_in_battalion),
         ServiceAssignment.start_datetime <= today_end,
         ServiceAssignment.end_datetime >= today_start
+    ).count()
+
+    # Stats for "NOW"
+    now_localized_b = get_localized_now()
+    permissions_active_now_battalion = Permission.query.filter(
+        Permission.student_id.in_(student_ids_in_battalion),
+        Permission.status == 'Aprobată',
+        Permission.start_datetime <= now_localized_b,
+        Permission.end_datetime >= now_localized_b
+    ).count()
+
+    daily_leaves_active_now_battalion = 0
+    all_dl_battalion = DailyLeave.query.filter(DailyLeave.student_id.in_(student_ids_in_battalion), DailyLeave.status == 'Aprobată').all()
+    for dl_now_b in all_dl_battalion:
+        if dl_now_b.is_active:
+            daily_leaves_active_now_battalion +=1
+
+    weekend_leaves_active_now_battalion = 0
+    all_wl_battalion_for_now_stats = WeekendLeave.query.filter(WeekendLeave.student_id.in_(student_ids_in_battalion), WeekendLeave.status == 'Aprobată').all()
+    for wl_now_b in all_wl_battalion_for_now_stats:
+        if wl_now_b.is_any_interval_active_now:
+            weekend_leaves_active_now_battalion += 1
+
+    total_on_leave_now_battalion = permissions_active_now_battalion + daily_leaves_active_now_battalion + weekend_leaves_active_now_battalion
+
+    services_active_now_battalion = ServiceAssignment.query.filter(
+        ServiceAssignment.student_id.in_(student_ids_in_battalion),
+        ServiceAssignment.start_datetime <= now_localized_b,
+        ServiceAssignment.end_datetime >= now_localized_b
     ).count()
 
     companies_data_roll_call = {}
@@ -1522,56 +1753,76 @@ def battalion_commander_dashboard():
                            roll_call_time_str=roll_call_time_str,
                            total_battalion_presence=total_battalion_presence_roll_call,
                            companies_data=companies_data_roll_call,
-                           permissions_today_count=permissions_today_battalion,
-                           total_leaves_today_count=total_leaves_today_battalion,
-                           services_today_count=services_today_battalion,
-                           total_students_battalion=len(student_ids_in_battalion))
+                           # Statistici "Astăzi"
+                           permissions_today_count=permissions_today_battalion_count,
+                           daily_leaves_today_battalion=daily_leaves_today_battalion_count, # Nume nou
+                           weekend_leaves_today_battalion=weekend_leaves_today_battalion_count, # Nume nou
+                           total_leaves_today_count=total_leaves_today_battalion_count,
+                           services_today_count=services_today_battalion_count,
+                           total_students_battalion=len(student_ids_in_battalion),
+                           # Statistici "ACUM"
+                           permissions_active_now_battalion=permissions_active_now_battalion,
+                           daily_leaves_active_now_battalion=daily_leaves_active_now_battalion,
+                           weekend_leaves_active_now_battalion=weekend_leaves_active_now_battalion,
+                           total_on_leave_now_battalion=total_on_leave_now_battalion,
+                           services_active_now_battalion=services_active_now_battalion,
+                           current_time_for_display=now_localized_b
+                           )
 
 # --- Presence Report Route ---
 @app.route('/reports/presence', methods=['GET', 'POST'])
 @login_required
 def presence_report():
-    if current_user.role not in ['gradat', 'admin', 'comandant_companie', 'comandant_batalion']: # Admin/Commanders might also want to see this for their unit? For now, primarily gradat.
+    if current_user.role not in ['gradat', 'admin', 'comandant_companie', 'comandant_batalion']: # Admin/Commanders might also want tosee this for their unit? For now, primarily gradat.
         flash('Acces neautorizat pentru rolul dumneavoastră.', 'danger')
         return redirect(url_for('dashboard'))
 
-    current_dt_str_for_form = datetime.now().strftime('%Y-%m-%dT%H:%M')
+    current_dt_str_for_form = get_localized_now().strftime('%Y-%m-%dT%H:%M') # Folosim ora localizată pentru valoarea default a formularului
     report_data_to_render = None
 
     if request.method == 'POST':
         report_type = request.form.get('report_type')
         custom_datetime_str = request.form.get('custom_datetime')
-        datetime_to_check = None
+        datetime_to_check = None # Acesta va fi un datetime naive, dar bazat pe inputuri locale
         report_title_detail = ""
 
         if report_type == 'current':
-            datetime_to_check = datetime.now()
+            datetime_to_check = get_localized_now() # Acesta este deja timezone-aware
             report_title_detail = "Prezență Curentă"
         elif report_type == 'evening_roll_call':
-            datetime_to_check = get_standard_roll_call_datetime() # Uses today's date by default
+            # get_standard_roll_call_datetime() returnează un datetime naive în ora locală
+            datetime_to_check = get_standard_roll_call_datetime()
             report_title_detail = f"Apel de Seară ({datetime_to_check.strftime('%H:%M')})"
         elif report_type == 'company_report':
-            datetime_to_check = datetime.combine(date.today(), time(14, 20))
+            # Construim un datetime naive în ora locală
+            datetime_to_check = datetime.combine(get_localized_now().date(), time(14, 20))
             report_title_detail = "Raport Companie (14:20)"
         elif report_type == 'morning_check':
-            # Use the date part from custom_datetime_str if available and valid, otherwise default to today
-            target_d = date.today() # Default to today
-            if custom_datetime_str: # If a custom date string is provided
+            target_d = get_localized_now().date() # Default to today (localized)
+            if custom_datetime_str:
                 try:
-                    # Attempt to parse the date part from the custom datetime input
                     target_d = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M').date()
                 except (ValueError, TypeError):
-                    # If parsing fails, stick to the default (today)
                     flash('Data custom specificată era invalidă, s-a folosit data curentă pentru raportul de dimineață.', 'warning')
-            datetime_to_check = datetime.combine(target_d, time(7, 0))
+            datetime_to_check = datetime.combine(target_d, time(7, 0)) # Naive, ora locală
             report_title_detail = f"Prezență Dimineață ({target_d.strftime('%d.%m.%Y')} 07:00)"
         elif report_type == 'custom':
             try:
-                datetime_to_check = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M')
+                # custom_datetime_str este deja în ora locală din formular
+                datetime_to_check = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M') # Naive, ora locală
+                # Pentru a fi consecvenți, dacă _calculate_presence_data se așteaptă la timezone-aware, localizăm:
+                # datetime_to_check = EUROPE_BUCHAREST.localize(datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M'), is_dst=None)
+                # Dar _calculate_presence_data primește 'check_datetime' și îl folosește direct.
+                # Important e ca 'now' în interiorul _calculate_presence_data să fie comparabil.
+                # Dacă 'check_datetime' e naive local, și 'now' în _calculate_presence_data e naive local, e ok.
+                # Dacă 'check_datetime' e timezone-aware local, și 'now' e timezone-aware local, e ok.
+                # Momentan, _calculate_presence_data folosește get_localized_now() care e timezone-aware.
+                # Deci, și datetime_to_check ar trebui să fie timezone-aware.
+                datetime_to_check = EUROPE_BUCHAREST.localize(datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M'))
+
                 report_title_detail = f"Dată Specifică ({datetime_to_check.strftime('%d.%m.%Y %H:%M')})"
             except (ValueError, TypeError):
                 flash('Format dată și oră custom invalid. Folosiți formatul corect.', 'danger')
-                # Return to form without report_data, current_dt_str_for_form will be used
                 return render_template('presence_report.html', current_datetime_str=current_dt_str_for_form, report_data=None)
         else:
             flash('Tip de raport invalid selectat.', 'danger')
@@ -1667,7 +1918,7 @@ def volunteer_home():
     # GET request
     activities = VolunteerActivity.query.filter_by(created_by_user_id=current_user.id).order_by(VolunteerActivity.activity_date.desc()).all()
     students_with_points = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.volunteer_points.desc(), Student.nume).all()
-    today_str_for_form = date.today().strftime('%Y-%m-%d')
+    today_str_for_form = get_localized_now().date().strftime('%Y-%m-%d') # Folosim data localizată
 
     return render_template('volunteer_home.html',
                            activities=activities,
@@ -1821,6 +2072,88 @@ def volunteer_generate_students():
                            generated_students=generated_students_list,
                            num_students_requested=num_students_req_val,
                            exclude_girls_opt=exclude_girls_val)
+
+@app.route('/volunteer/activity/delete/<int:activity_id>', methods=['POST'], endpoint='delete_volunteer_activity')
+@login_required
+def delete_volunteer_activity(activity_id):
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('volunteer_home'))
+
+    activity_to_delete = VolunteerActivity.query.get_or_404(activity_id)
+
+    if activity_to_delete.created_by_user_id != current_user.id:
+        flash('Nu aveți permisiunea să ștergeți această activitate de voluntariat.', 'danger')
+        return redirect(url_for('volunteer_home'))
+
+    activity_name_for_log = activity_to_delete.name
+    details_before_activity_delete = model_to_dict(activity_to_delete)
+    participants_details_before = []
+    student_points_adjustments = {} # student_id: {old_total: X, points_removed: Y, new_total: Z}
+
+    try:
+        # Iterează prin participanți pentru a ajusta punctele și a colecta detalii pentru log
+        for participant in activity_to_delete.participants: # activity.participants este o interogare lazy='dynamic'
+            student = participant.student # Ar trebui să existe datorită FK
+            if student:
+                points_to_remove = participant.points_awarded
+
+                participants_details_before.append({
+                    "participant_id": participant.id,
+                    "student_id": student.id,
+                    "student_name": f"{student.nume} {student.prenume}",
+                    "points_awarded_in_activity": points_to_remove,
+                    "student_total_points_before_adj": student.volunteer_points
+                })
+
+                student.volunteer_points = max(0, student.volunteer_points - points_to_remove)
+
+                student_points_adjustments[student.id] = {
+                    "old_total": participants_details_before[-1]["student_total_points_before_adj"], # Ultima valoare adăugată
+                    "points_removed": points_to_remove,
+                    "new_total": student.volunteer_points
+                }
+
+            # Nu este nevoie să ștergem explicit participantul dacă cascade="all, delete-orphan" este setat
+            # pe VolunteerActivity.participants și funcționează corect.
+            # Dar dacă vrem să fim siguri sau dacă cascada nu e setată/funcțională:
+            # db.session.delete(participant) # Acest lucru va fi gestionat de cascadă
+
+        # Șterge activitatea (participanții ar trebui șterși prin cascadă)
+        db.session.delete(activity_to_delete)
+
+        # Log principal pentru ștergerea activității
+        log_description = (
+            f"User {current_user.username} deleted volunteer activity '{activity_name_for_log}' (ID: {activity_id}). "
+            f"{len(participants_details_before)} participant records were associated. Points adjusted for students."
+        )
+        # Adăugăm și detaliile despre ajustarea punctelor la descriere sau ca un JSON separat
+        # Poate fi prea mult pentru description, mai bine în details_before/after dacă e cazul
+
+        log_action("DELETE_VOLUNTEER_ACTIVITY_SUCCESS",
+                   target_model_name="VolunteerActivity",
+                   target_id=activity_id,
+                   details_before_dict={
+                       "activity": details_before_activity_delete,
+                       "participants_before_delete": participants_details_before,
+                       "student_points_adjustments": student_points_adjustments
+                   },
+                   description=log_description)
+
+        db.session.commit()
+        flash(f'Activitatea de voluntariat "{activity_name_for_log}" și punctele asociate au fost șterse cu succes.', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la ștergerea activității de voluntariat: {str(e)}', 'danger')
+        log_action("DELETE_VOLUNTEER_ACTIVITY_FAIL",
+                   target_model_name="VolunteerActivity",
+                   target_id=activity_id,
+                   details_before_dict=details_before_activity_delete, # Log ce s-a încercat să se șteargă
+                   description=f"User {current_user.username} failed to delete volunteer activity '{activity_name_for_log}'. Error: {str(e)}")
+        db.session.commit() # Commit log-ul de eroare
+
+    return redirect(url_for('volunteer_home'))
 
 
 # --- Management Studenți ---
@@ -2222,7 +2555,7 @@ def list_permissions():
     if not student_ids_managed_by_gradat:
         return render_template('list_permissions.html', active_permissions=[], upcoming_permissions=[], past_permissions=[], title="Listă Permisii")
 
-    now = datetime.now()
+    now = get_localized_now() # Folosim ora localizată
     base_query = Permission.query.options(joinedload(Permission.student)).filter(Permission.student_id.in_(student_ids_managed_by_gradat))
 
     active_permissions = base_query.filter(
@@ -2660,7 +2993,7 @@ def export_permissions_word():
         flash('Nu aveți studenți pentru a exporta permisii.', 'info')
         return redirect(url_for('list_permissions'))
 
-    now = datetime.now()
+    now = get_localized_now() # Folosim ora localizată
     # Fetch active and upcoming permissions only for the export
     permissions_to_export = Permission.query.options(joinedload(Permission.student)).filter(
         Permission.student_id.in_(student_ids_managed_by_gradat),
@@ -2821,7 +3154,7 @@ def list_daily_leaves():
     if current_user.role != 'gradat': flash('Acces neautorizat.', 'danger'); return redirect(url_for('dashboard'))
     student_id_tuples = db.session.query(Student.id).filter_by(created_by_user_id=current_user.id).all()
     student_ids = [s[0] for s in student_id_tuples]
-    today_string_for_form = date.today().strftime('%Y-%m-%d')
+    today_string_for_form = get_localized_now().date().strftime('%Y-%m-%d') # Folosim data localizată
     if not student_ids:
         return render_template('list_daily_leaves.html', active_leaves=[], upcoming_leaves=[], past_leaves=[], title="Listă Învoiri Zilnice", today_str=today_string_for_form)
 
@@ -2842,7 +3175,7 @@ def list_daily_leaves():
 @login_required
 def add_edit_daily_leave(leave_id=None):
     if current_user.role != 'gradat': flash('Acces neautorizat.', 'danger'); return redirect(url_for('dashboard'))
-    form_title = "Adaugă Învoire Zilnică"; daily_leave = None; today_string = date.today().strftime('%Y-%m-%d')
+    form_title = "Adaugă Învoire Zilnică"; daily_leave = None; today_string = get_localized_now().date().strftime('%Y-%m-%d') # Folosim data localizată
     if leave_id:
         daily_leave = DailyLeave.query.get_or_404(leave_id)
         student_of_leave = Student.query.get(daily_leave.student_id)
@@ -3729,7 +4062,7 @@ def list_services():
                                 past_services=[],
                                 title="Management Servicii")
 
-    now = datetime.now()
+    now = get_localized_now() # Folosim ora localizată
 
     upcoming_services = ServiceAssignment.query.options(joinedload(ServiceAssignment.student))\
                             .filter(
@@ -3782,12 +4115,13 @@ def assign_service(assignment_id=None):
         flash('Nu aveți studenți pentru a le asigna servicii.', 'warning')
         return redirect(url_for('list_students'))
 
-    default_times_for_js = {
+    default_times_for_js = { # Acestea sunt stringuri, nu necesită localizare directă aici
         "GSS": ("07:00", "07:00"), "SVM": ("05:50", "20:00"),
         "Intervenție": ("20:00", "00:00"),
         "Planton 1": ("22:00", "00:00"), "Planton 2": ("00:00", "02:00"),
         "Planton 3": ("02:00", "04:00"), "Altul": ("", "")
     }
+    today_iso_str = get_localized_now().date().isoformat() # Pentru valoarea default a datei
 
     if request.method == 'POST':
         student_id = request.form.get('student_id')
@@ -3802,7 +4136,7 @@ def assign_service(assignment_id=None):
 
         if not all([student_id, service_type, service_date_str, start_time_str, end_time_str]):
             flash('Toate câmpurile marcate cu * (student, tip, dată, ore) sunt obligatorii.', 'warning')
-            return render_template('assign_service.html', form_title=form_title, service_assignment=service_assignment, students=students, service_types=SERVICE_TYPES, default_times=default_times_for_js, today_str=date.today().isoformat(), form_data=current_form_data)
+            return render_template('assign_service.html', form_title=form_title, service_assignment=service_assignment, students=students, service_types=SERVICE_TYPES, default_times=default_times_for_js, today_str=today_iso_str, form_data=current_form_data)
 
         try:
             service_date_obj = datetime.strptime(service_date_str, '%Y-%m-%d').date()
@@ -3810,9 +4144,10 @@ def assign_service(assignment_id=None):
             end_time_obj = datetime.strptime(end_time_str, '%H:%M').time()
         except ValueError:
             flash('Format dată sau oră invalid.', 'danger')
-            return render_template('assign_service.html', form_title=form_title, service_assignment=service_assignment, students=students, service_types=SERVICE_TYPES, default_times=default_times_for_js, today_str=date.today().isoformat(), form_data=current_form_data)
+            return render_template('assign_service.html', form_title=form_title, service_assignment=service_assignment, students=students, service_types=SERVICE_TYPES, default_times=default_times_for_js, today_str=today_iso_str, form_data=current_form_data)
 
-        start_dt_obj = datetime.combine(service_date_obj, start_time_obj)
+        # Datele și orele sunt deja locale din formular, le combinăm
+        start_dt_obj = datetime.combine(service_date_obj, start_time_obj) # Naive, local
         effective_end_date = service_date_obj
         if end_time_obj < start_time_obj:
             effective_end_date += timedelta(days=1)
@@ -3820,17 +4155,18 @@ def assign_service(assignment_id=None):
 
         if end_dt_obj <= start_dt_obj:
             flash('Intervalul orar al serviciului este invalid (sfârșitul trebuie să fie după început).', 'danger')
-            return render_template('assign_service.html', form_title=form_title, service_assignment=service_assignment, students=students, service_types=SERVICE_TYPES, default_times=default_times_for_js, today_str=date.today().isoformat(), form_data=current_form_data)
+            return render_template('assign_service.html', form_title=form_title, service_assignment=service_assignment, students=students, service_types=SERVICE_TYPES, default_times=default_times_for_js, today_str=today_iso_str, form_data=current_form_data)
 
         stud = Student.query.filter_by(id=student_id, created_by_user_id=current_user.id).first()
         if not stud:
             flash('Student selectat invalid sau nu vă aparține.', 'danger')
-            return render_template('assign_service.html', form_title=form_title, service_assignment=service_assignment, students=students, service_types=SERVICE_TYPES, default_times=default_times_for_js, today_str=date.today().isoformat(), form_data=current_form_data)
+            return render_template('assign_service.html', form_title=form_title, service_assignment=service_assignment, students=students, service_types=SERVICE_TYPES, default_times=default_times_for_js, today_str=today_iso_str, form_data=current_form_data)
 
+        # check_service_conflict_for_student se așteaptă la datetime-uri naive locale
         conflict_msg = check_service_conflict_for_student(stud.id, start_dt_obj, end_dt_obj, service_type, assignment_id)
         if conflict_msg:
             flash(f"Conflict: studentul are deja {conflict_msg}", 'danger')
-            return render_template('assign_service.html', form_title=form_title, service_assignment=service_assignment, students=students, service_types=SERVICE_TYPES, default_times=default_times_for_js, today_str=date.today().isoformat(), form_data=current_form_data)
+            return render_template('assign_service.html', form_title=form_title, service_assignment=service_assignment, students=students, service_types=SERVICE_TYPES, default_times=default_times_for_js, today_str=today_iso_str, form_data=current_form_data)
 
         if service_assignment:
             service_assignment.student_id = stud.id
@@ -3857,7 +4193,7 @@ def assign_service(assignment_id=None):
         except Exception as e:
             db.session.rollback()
             flash(f'Eroare la salvarea serviciului: {str(e)}', 'danger')
-            return render_template('assign_service.html', form_title=form_title, service_assignment=service_assignment, students=students, service_types=SERVICE_TYPES, default_times=default_times_for_js, today_str=date.today().isoformat(), form_data=current_form_data)
+            return render_template('assign_service.html', form_title=form_title, service_assignment=service_assignment, students=students, service_types=SERVICE_TYPES, default_times=default_times_for_js, today_str=today_iso_str, form_data=current_form_data)
 
     data_to_populate_form_with = {}
     if request.method == 'POST':
@@ -3871,7 +4207,7 @@ def assign_service(assignment_id=None):
                            students=students,
                            service_types=SERVICE_TYPES,
                            default_times=default_times_for_js,
-                           today_str=date.today().isoformat(),
+                           today_str=today_iso_str, # Folosim variabila actualizată
                            form_data=data_to_populate_form_with)
 
 @app.route('/gradat/services/assign_multiple', methods=['GET', 'POST'])
@@ -4002,11 +4338,12 @@ def assign_multiple_services():
 
     # GET request
     student_id_selected_on_get = request.args.get('student_id_selected', type=int)
+    today_iso_str_get = get_localized_now().date().isoformat() # Pentru valoarea default a datei în formular
     return render_template('assign_multiple_services.html',
                            students=students,
                            service_types=SERVICE_TYPES,
                            default_times_json=json.dumps(default_times_for_js), # Pass as JSON for JS
-                           today_str=date.today().isoformat(),
+                           today_str=today_iso_str_get,
                            student_id_selected=student_id_selected_on_get)
 
 
@@ -4040,7 +4377,7 @@ def delete_service_assignment(assignment_id):
 @app.route('/reports/export/permissions_scoped', endpoint='export_permissions_scoped_word')
 @login_required
 def export_permissions_scoped_word():
-    now = datetime.now()
+    now = get_localized_now() # Folosim ora localizată
     student_ids_in_scope = []
     report_title_detail = ""
     # Sanitize username for filename, removing non-alphanumeric characters
@@ -4113,7 +4450,7 @@ def export_permissions_scoped_word():
 
     document.add_heading(f'Raport Permisii Studenți - {report_title_detail}', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    user_info_text = f"Raport generat de: {current_user.username} ({current_user.role})\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    user_info_text = f"Raport generat de: {current_user.username} ({current_user.role})\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}" # Folosim ora localizată
     p_user = document.add_paragraph()
     p_user.add_run(user_info_text).italic = True
     p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -4189,7 +4526,7 @@ def export_permissions_scoped_word():
     f_io.seek(0)
 
     clean_report_title = re.sub(r'\W+', '_', report_title_detail)
-    filename = f"Raport_Permisii_{clean_report_title}_{current_username_for_file}_{date.today().strftime('%Y%m%d')}.docx"
+    filename = f"Raport_Permisii_{clean_report_title}_{current_username_for_file}_{get_localized_now().date().strftime('%Y%m%d')}.docx" # Folosim data localizată
 
     return send_file(f_io,
                      download_name=filename,
@@ -4199,7 +4536,7 @@ def export_permissions_scoped_word():
 @app.route('/reports/export/weekend_leaves_scoped', endpoint='export_weekend_leaves_scoped_word')
 @login_required
 def export_weekend_leaves_scoped_word():
-    now = datetime.now()
+    # now = get_localized_now() # 'now' nu este folosit direct în această funcție după modificări
     student_ids_in_scope = []
     report_title_detail = ""
     current_username_for_file = re.sub(r'\W+', '', current_user.username)
@@ -4271,7 +4608,7 @@ def export_weekend_leaves_scoped_word():
         section.top_margin = Inches(0.75); section.bottom_margin = Inches(0.75)
 
     document.add_heading(f'Raport Învoiri Weekend - {report_title_detail}', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
-    user_info_text = f"Raport generat de: {current_user.username} ({current_user.role})\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    user_info_text = f"Raport generat de: {current_user.username} ({current_user.role})\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}" # Folosim ora localizată
     p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True
     p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph()
@@ -4331,7 +4668,7 @@ def export_weekend_leaves_scoped_word():
     f_io.seek(0)
 
     clean_report_title = re.sub(r'\W+', '_', report_title_detail)
-    filename = f"Raport_Invoiri_Weekend_{clean_report_title}_{current_username_for_file}_{date.today().strftime('%Y%m%d')}.docx"
+    filename = f"Raport_Invoiri_Weekend_{clean_report_title}_{current_username_for_file}_{get_localized_now().date().strftime('%Y%m%d')}.docx" # Folosim data localizată
 
     return send_file(f_io,
                      download_name=filename,
@@ -4507,6 +4844,366 @@ def admin_action_logs():
     return render_template('admin_action_logs.html',
                            logs_pagination=logs_pagination,
                            title="Jurnal Acțiuni Sistem")
+
+@app.route('/admin/profile/change_password', methods=['GET', 'POST'], endpoint='admin_change_self_password')
+@login_required
+def admin_change_self_password():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        confirm_new_password = request.form.get('confirm_new_password')
+
+        if not current_user.check_password(current_password):
+            flash('Parola curentă este incorectă.', 'danger')
+            return redirect(url_for('admin_change_self_password'))
+
+        if not new_password or len(new_password) < 6: # Exemplu de politică simplă de parolă
+            flash('Parola nouă trebuie să aibă minim 6 caractere.', 'warning')
+            return redirect(url_for('admin_change_self_password'))
+
+        if new_password != confirm_new_password:
+            flash('Parolele noi nu se potrivesc.', 'warning')
+            return redirect(url_for('admin_change_self_password'))
+
+        details_before = {"user_id": current_user.id, "username": current_user.username, "action": "Attempt change own password"}
+        current_user.set_password(new_password)
+        try:
+            log_action("ADMIN_CHANGE_OWN_PASSWORD_SUCCESS", target_model_name="User", target_id=current_user.id,
+                       details_before_dict=details_before, # details_after nu arată parola
+                       description=f"Admin {current_user.username} changed their own password successfully.")
+            db.session.commit()
+            flash('Parola a fost schimbată cu succes!', 'success')
+            # Opțional, se poate face logout adminului după schimbarea parolei pentru a forța re-autentificare
+            # logout_user()
+            # flash('Parola a fost schimbată cu succes! Te rugăm să te autentifici din nou.', 'success')
+            # return redirect(url_for('admin_login'))
+            return redirect(url_for('admin_dashboard_route'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Eroare la schimbarea parolei: {str(e)}', 'danger')
+            log_action("ADMIN_CHANGE_OWN_PASSWORD_FAIL", target_model_name="User", target_id=current_user.id,
+                       details_before_dict=details_before,
+                       description=f"Admin {current_user.username} failed to change their own password. Error: {str(e)}")
+            db.session.commit() # Commit log-ul de eroare
+            return redirect(url_for('admin_change_self_password'))
+
+    return render_template('admin_change_password.html')
+
+@app.route('/admin/user/<int:user_id>/set_personal_code', methods=['GET', 'POST'], endpoint='admin_set_user_personal_code')
+@login_required
+def admin_set_user_personal_code(user_id):
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    target_user = db.session.get(User, user_id)
+    if not target_user:
+        flash('Utilizatorul specificat nu a fost găsit.', 'danger')
+        return redirect(url_for('admin_dashboard_route'))
+
+    if target_user.role == 'admin':
+        flash('Codul personal nu poate fi setat pentru un alt administrator prin această metodă.', 'warning')
+        return redirect(url_for('admin_dashboard_route'))
+
+    if request.method == 'POST':
+        new_code = request.form.get('new_personal_code')
+        confirm_new_code = request.form.get('confirm_new_personal_code')
+
+        if not new_code or len(new_code) < 4:
+            flash('Noul cod personal trebuie să aibă minim 4 caractere.', 'warning')
+            return render_template('admin_set_user_personal_code.html', target_user=target_user)
+
+        if new_code != confirm_new_code:
+            flash('Codurile personale introduse nu se potrivesc.', 'warning')
+            return render_template('admin_set_user_personal_code.html', target_user=target_user)
+
+        details_before = model_to_dict(target_user, exclude_fields=['password_hash', 'unique_code', 'personal_code_hash'])
+        details_before['personal_code_was_set'] = target_user.personal_code_hash is not None
+        details_before['was_first_login'] = target_user.is_first_login
+
+        target_user.set_personal_code(new_code) # Aceasta setează hash-ul și is_first_login = False
+
+        try:
+            details_after = model_to_dict(target_user, exclude_fields=['password_hash', 'unique_code', 'personal_code_hash'])
+            details_after['personal_code_is_set'] = True
+            details_after['is_first_login'] = False
+
+            log_action("ADMIN_SET_USER_PERSONAL_CODE_SUCCESS", target_model_name="User", target_id=target_user.id,
+                       details_before_dict=details_before, details_after_dict=details_after,
+                       description=f"Admin {current_user.username} set new personal code for user {target_user.username} (ID: {target_user.id}).")
+            db.session.commit()
+            flash(f'Noul cod personal pentru utilizatorul {target_user.username} a fost setat cu succes.', 'success')
+            return redirect(url_for('admin_dashboard_route'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Eroare la setarea codului personal: {str(e)}', 'danger')
+            # Log failure
+            log_action("ADMIN_SET_USER_PERSONAL_CODE_FAIL", target_model_name="User", target_id=target_user.id,
+                       details_before_dict=details_before, # Log state before attempted change
+                       description=f"Admin {current_user.username} failed to set new personal code for {target_user.username}. Error: {str(e)}")
+            db.session.commit()
+            return render_template('admin_set_user_personal_code.html', target_user=target_user)
+
+    return render_template('admin_set_user_personal_code.html', target_user=target_user)
+
+@app.route('/gradat/weekend_leave/bulk_add', methods=['GET', 'POST'], endpoint='gradat_bulk_add_weekend_leave')
+@login_required
+def gradat_bulk_add_weekend_leave():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    students_managed = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.pluton, Student.nume).all()
+    upcoming_fridays_list = get_upcoming_fridays() # Funcție existentă
+
+    if request.method == 'POST':
+        student_ids_selected = request.form.getlist('student_ids')
+        weekend_start_date_str = request.form.get('weekend_start_date')
+        selected_days_names = request.form.getlist('selected_days') # Numele zilelor: 'Vineri', 'Sambata', 'Duminica'
+        reason_common = request.form.get('reason', '').strip()
+
+        if not student_ids_selected:
+            flash('Nu ați selectat niciun student.', 'warning')
+            return render_template('bulk_add_weekend_leave.html', students=students_managed, upcoming_fridays=upcoming_fridays_list, form_data=request.form)
+
+        if not weekend_start_date_str:
+            flash('Data de început a weekendului (Vineri) este obligatorie.', 'warning')
+            return render_template('bulk_add_weekend_leave.html', students=students_managed, upcoming_fridays=upcoming_fridays_list, form_data=request.form)
+
+        if not selected_days_names:
+            flash('Nu ați selectat nicio zi din weekend.', 'warning')
+            return render_template('bulk_add_weekend_leave.html', students=students_managed, upcoming_fridays=upcoming_fridays_list, form_data=request.form)
+
+        try:
+            friday_date_obj = datetime.strptime(weekend_start_date_str, '%Y-%m-%d').date()
+            if friday_date_obj.weekday() != 4: # Vineri
+                flash('Data de început a weekendului selectată nu este o zi de Vineri.', 'warning')
+                return render_template('bulk_add_weekend_leave.html', students=students_managed, upcoming_fridays=upcoming_fridays_list, form_data=request.form)
+        except ValueError:
+            flash('Format dată weekend invalid.', 'danger')
+            return render_template('bulk_add_weekend_leave.html', students=students_managed, upcoming_fridays=upcoming_fridays_list, form_data=request.form)
+
+        day_inputs_from_form = []
+        for day_name_form in selected_days_names:
+            start_time_str = request.form.get(f'bulk_{day_name_form.lower()}_start_time')
+            end_time_str = request.form.get(f'bulk_{day_name_form.lower()}_end_time')
+
+            if not start_time_str or not end_time_str:
+                flash(f'Orele de început și sfârșit sunt obligatorii pentru {day_name_form} în formularul de adăugare rapidă.', 'warning')
+                return render_template('bulk_add_weekend_leave.html', students=students_managed, upcoming_fridays=upcoming_fridays_list, form_data=request.form)
+            try:
+                start_time_obj = datetime.strptime(start_time_str, '%H:%M').time()
+                end_time_obj = datetime.strptime(end_time_str, '%H:%M').time()
+            except ValueError:
+                flash(f'Format oră invalid pentru {day_name_form}.', 'danger')
+                return render_template('bulk_add_weekend_leave.html', students=students_managed, upcoming_fridays=upcoming_fridays_list, form_data=request.form)
+
+            if end_time_obj == start_time_obj:
+                flash(f'Ora de început și sfârșit nu pot fi identice pentru {day_name_form}.', 'warning')
+                return render_template('bulk_add_weekend_leave.html', students=students_managed, upcoming_fridays=upcoming_fridays_list, form_data=request.form)
+
+            day_offset_map = {'Vineri': 0, 'Sambata': 1, 'Duminica': 2}
+            actual_date_for_day = friday_date_obj + timedelta(days=day_offset_map[day_name_form])
+
+            # Validare interval (similar cu formularul individual)
+            current_interval_start_dt = datetime.combine(actual_date_for_day, start_time_obj)
+            effective_end_date_for_interval = actual_date_for_day
+            if end_time_obj < start_time_obj:  # Trece în ziua următoare
+                effective_end_date_for_interval += timedelta(days=1)
+            current_interval_end_dt = datetime.combine(effective_end_date_for_interval, end_time_obj)
+
+            if current_interval_end_dt <= current_interval_start_dt:
+                flash(f'Interval orar invalid pentru {day_name_form} (sfârșitul trebuie să fie după început).', 'warning')
+                return render_template('bulk_add_weekend_leave.html', students=students_managed, upcoming_fridays=upcoming_fridays_list, form_data=request.form)
+
+            day_inputs_from_form.append({
+                'name': day_name_form,
+                'date': actual_date_for_day,
+                'start_time': start_time_obj,
+                'end_time': end_time_obj
+            })
+
+        day_inputs_from_form.sort(key=lambda x: x['date']) # Sortează după dată
+
+        added_count = 0
+        skipped_due_to_conflict_count = 0
+        error_details_conflict = []
+
+        for student_id_str in student_ids_selected:
+            student_id = int(student_id_str)
+            # Verificare conflict pentru acest student cu intervalele selectate
+            conflict_for_this_student = False
+            for day_data_input in day_inputs_from_form:
+                start_dt_check = datetime.combine(day_data_input['date'], day_data_input['start_time'])
+                end_dt_check = datetime.combine(day_data_input['date'], day_data_input['end_time'])
+                if day_data_input['end_time'] < day_data_input['start_time']: # trece in ziua urmatoare
+                    end_dt_check += timedelta(days=1)
+
+                # Simplificare: check_leave_conflict verifică și servicii. Pentru bulk, putem fi mai permisivi sau loga conflictele
+                # Aici vom face o verificare de bază, dar ideal ar fi o strategie mai complexă.
+                # Momentan, vom sări peste student dacă există *orice* conflict pe *oricare* din zilele selectate.
+                conflict_reason = check_leave_conflict(student_id, start_dt_check, end_dt_check, leave_type='weekend_leave', existing_leave_id=None)
+                if conflict_reason:
+                    student_obj = db.session.get(Student, student_id)
+                    error_details_conflict.append(f"Studentul {student_obj.nume} {student_obj.prenume}: conflict pe {day_data_input['name']} ({conflict_reason}). Învoirea nu a fost adăugată.")
+                    conflict_for_this_student = True
+                    break
+
+            if conflict_for_this_student:
+                skipped_due_to_conflict_count += 1
+                continue
+
+            # Creează învoirea
+            new_leave = WeekendLeave(
+                student_id=student_id,
+                weekend_start_date=friday_date_obj,
+                reason=reason_common,
+                status='Aprobată',
+                created_by_user_id=current_user.id,
+                duminica_biserica=False # Standard, nu se setează din bulk add
+            )
+
+            # Atribuie zilele și orele
+            if len(day_inputs_from_form) >= 1:
+                new_leave.day1_selected = day_inputs_from_form[0]['name']
+                new_leave.day1_date = day_inputs_from_form[0]['date']
+                new_leave.day1_start_time = day_inputs_from_form[0]['start_time']
+                new_leave.day1_end_time = day_inputs_from_form[0]['end_time']
+            if len(day_inputs_from_form) >= 2:
+                new_leave.day2_selected = day_inputs_from_form[1]['name']
+                new_leave.day2_date = day_inputs_from_form[1]['date']
+                new_leave.day2_start_time = day_inputs_from_form[1]['start_time']
+                new_leave.day2_end_time = day_inputs_from_form[1]['end_time']
+            if len(day_inputs_from_form) >= 3:
+                new_leave.day3_selected = day_inputs_from_form[2]['name']
+                new_leave.day3_date = day_inputs_from_form[2]['date']
+                new_leave.day3_start_time = day_inputs_from_form[2]['start_time']
+                new_leave.day3_end_time = day_inputs_from_form[2]['end_time']
+
+            db.session.add(new_leave)
+            added_count += 1
+
+        try:
+            db.session.commit()
+            if added_count > 0:
+                flash(f'{added_count} învoiri de weekend au fost adăugate cu succes.', 'success')
+            if skipped_due_to_conflict_count > 0:
+                flash(f'{skipped_due_to_conflict_count} învoiri au fost omise din cauza conflictelor existente. Detalii mai jos.', 'warning')
+                for err_detail in error_details_conflict:
+                    flash(err_detail, 'info') # Afișează fiecare conflict
+            if added_count == 0 and skipped_due_to_conflict_count == 0 and len(student_ids_selected) > 0:
+                 flash('Nicio învoire nu a fost adăugată. Verificați selecțiile și încercați din nou.', 'info')
+
+            # Logare acțiune bulk
+            log_action("BULK_ADD_WEEKEND_LEAVE",
+                       description=f"User {current_user.username} attempted bulk weekend leave. Added: {added_count}, Skipped (conflict): {skipped_due_to_conflict_count} for weekend starting {friday_date_obj.isoformat()}.",
+                       details_after_dict={"students_selected_count": len(student_ids_selected), "days_selected": selected_days_names, "conflicts_details": error_details_conflict[:5]}) # Log first 5 conflicts
+            db.session.commit() # Commit log-ul separat
+
+            return redirect(url_for('list_weekend_leaves'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Eroare la salvarea învoirilor de weekend: {str(e)}', 'danger')
+            log_action("BULK_ADD_WEEKEND_LEAVE_FAIL", description=f"Bulk add weekend leave failed for user {current_user.username}. Error: {str(e)}")
+            db.session.commit()
+
+    return render_template('bulk_add_weekend_leave.html', students=students_managed, upcoming_fridays=upcoming_fridays_list, form_data=None)
+
+@app.route('/gradat/permission/bulk_add', methods=['GET', 'POST'], endpoint='gradat_bulk_add_permission')
+@login_required
+def gradat_bulk_add_permission():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    students_managed = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.pluton, Student.nume).all()
+
+    if request.method == 'POST':
+        student_ids_selected = request.form.getlist('student_ids')
+        start_datetime_str = request.form.get('start_datetime')
+        end_datetime_str = request.form.get('end_datetime')
+        destination = request.form.get('destination', '').strip()
+        transport_mode = request.form.get('transport_mode', '').strip()
+        reason = request.form.get('reason', '').strip()
+
+        if not student_ids_selected:
+            flash('Nu ați selectat niciun student.', 'warning')
+            return render_template('bulk_add_permission.html', students=students_managed, form_data=request.form)
+
+        if not start_datetime_str or not end_datetime_str:
+            flash('Data de început și de sfârșit sunt obligatorii.', 'warning')
+            return render_template('bulk_add_permission.html', students=students_managed, form_data=request.form)
+
+        try:
+            # Datetime-urile din form sunt deja în ora locală. Le vom stoca ca naive.
+            start_dt = datetime.strptime(start_datetime_str, '%Y-%m-%dT%H:%M')
+            end_dt = datetime.strptime(end_datetime_str, '%Y-%m-%dT%H:%M')
+        except ValueError:
+            flash('Format dată/oră invalid.', 'danger')
+            return render_template('bulk_add_permission.html', students=students_managed, form_data=request.form)
+
+        if end_dt <= start_dt:
+            flash('Data de sfârșit trebuie să fie după data de început.', 'warning')
+            return render_template('bulk_add_permission.html', students=students_managed, form_data=request.form)
+
+        added_count = 0
+        skipped_due_to_conflict_count = 0
+        conflict_details_messages = []
+
+        for student_id_str in student_ids_selected:
+            student_id = int(student_id_str)
+
+            # Verificare conflict (folosind datetime-uri naive locale)
+            # check_leave_conflict se așteaptă la datetime-uri naive
+            conflict_msg = check_leave_conflict(student_id, start_dt, end_dt, leave_type='permission', existing_leave_id=None)
+            if conflict_msg:
+                student_obj = db.session.get(Student, student_id)
+                conflict_details_messages.append(f"Student {student_obj.nume} {student_obj.prenume}: conflict ({conflict_msg}). Permisia nu a fost adăugată.")
+                skipped_due_to_conflict_count += 1
+                continue
+
+            new_permission = Permission(
+                student_id=student_id,
+                start_datetime=start_dt,
+                end_datetime=end_dt,
+                destination=destination,
+                transport_mode=transport_mode,
+                reason=reason,
+                status='Aprobată', # Implicit aprobată la adăugare bulk
+                created_by_user_id=current_user.id
+            )
+            db.session.add(new_permission)
+            added_count += 1
+
+        try:
+            db.session.commit()
+            if added_count > 0:
+                flash(f'{added_count} permisii au fost adăugate cu succes.', 'success')
+            if skipped_due_to_conflict_count > 0:
+                flash(f'{skipped_due_to_conflict_count} permisii au fost omise din cauza conflictelor. Detalii mai jos.', 'warning')
+                for detail_msg in conflict_details_messages:
+                    flash(detail_msg, 'info')
+            if added_count == 0 and skipped_due_to_conflict_count == 0 and len(student_ids_selected) > 0:
+                 flash('Nicio permisie nu a fost adăugată. Verificați selecțiile și încercați din nou.', 'info')
+
+            log_action("BULK_ADD_PERMISSION",
+                       description=f"User {current_user.username} attempted bulk permission. Added: {added_count}, Skipped (conflict): {skipped_due_to_conflict_count}.",
+                       details_after_dict={"students_selected_count": len(student_ids_selected),
+                                           "start_datetime": start_datetime_str, "end_datetime": end_datetime_str,
+                                           "destination": destination, "conflict_messages": conflict_details_messages[:5]})
+            db.session.commit()
+            return redirect(url_for('list_permissions'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Eroare la salvarea permisiilor: {str(e)}', 'danger')
+            log_action("BULK_ADD_PERMISSION_FAIL", description=f"Bulk add permission failed for user {current_user.username}. Error: {str(e)}")
+            db.session.commit()
+
+    return render_template('bulk_add_permission.html', students=students_managed, form_data=None, timedelta=timedelta, get_localized_now=get_localized_now)
 
 
 if __name__ == '__main__':
