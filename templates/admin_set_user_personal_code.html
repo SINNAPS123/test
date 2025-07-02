@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Setare Cod Personal pentru {{ target_user.username }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-7">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h3 class="mb-0">Setare Cod Personal pentru Utilizatorul: <strong>{{ target_user.username }}</strong> (Rol: {{ target_user.role }})</h3>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Această acțiune va seta un nou cod personal pentru utilizator. Utilizatorul va putea folosi acest cod pentru autentificare. Câmpul "Cod Unic" va rămâne neschimbat dar nu va mai fi necesar pentru login dacă se setează un cod personal aici.</p>
+
+                    <form method="POST" action="{{ url_for('admin_set_user_personal_code', user_id=target_user.id) }}">
+                        <div class="mb-3">
+                            <label for="new_personal_code" class="form-label">Noul Cod Personal <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="new_personal_code" name="new_personal_code" required>
+                            <small class="form-text text-muted">Minim 4 caractere.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirm_new_personal_code" class="form-label">Confirmă Noul Cod Personal <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="confirm_new_personal_code" name="confirm_new_personal_code" required>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('admin_dashboard_route') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left"></i> Anulare
+                            </a>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fas fa-user-cog"></i> Setează Cod Personal
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

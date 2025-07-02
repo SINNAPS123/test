@@ -33,6 +33,9 @@
             <a href="{{ url_for('export_weekend_leaves_scoped_word') }}" class="btn btn-sm btn-outline-primary me-2" title="Exportă raportul de învoiri de weekend active/viitoare pentru companie">
                 <i class="fas fa-file-word"></i> Export Învoiri Wk.
             </a>
+            <a href="{{ url_for('company_commander_logs') }}" class="btn btn-sm btn-outline-info me-2" title="Vezi jurnalul de acțiuni pentru compania ta">
+                <i class="fas fa-history"></i> Jurnal Acțiuni Companie
+            </a>
             <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
                 &laquo; Înapoi la Panoul Principal
             </a>
@@ -41,10 +44,10 @@
 
     <hr>
 
-    <h4 class="mb-3">Situația Companiei Astăzi ({{ "now"|format_datetime('short') }})</h4>
+    <h4 class="mb-3">Situația Companiei <span class="text-primary">Astăzi</span> (pentru ziua de {{ get_localized_now()|localdatetime('%d-%m-%Y') }})</h4>
     <div class="row mb-4">
         <div class="col-md-3">
-            <div class="card text-center shadow-sm">
+            <div class="card text-center shadow-sm h-100">
                 <div class="card-body">
                     <h5 class="card-title">Total Studenți</h5>
                     <p class="card-text fs-4 fw-bold">{{ total_students_company }}</p>
@@ -53,37 +56,76 @@
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-center shadow-sm">
+            <div class="card text-center shadow-sm h-100">
                 <div class="card-body">
-                    <h5 class="card-title">Permisii Astăzi</h5>
+                    <h5 class="card-title">Permisii <span class="text-muted small">(în ziua de azi)</span></h5>
                     <p class="card-text fs-4 fw-bold">{{ permissions_today_count }}</p>
-                    <a href="{{ url_for('admin_list_permissions') }}" class="btn btn-sm btn-outline-secondary">Detalii Permisii</a>
+                    <a href="{{ url_for('admin_list_permissions') }}" class="btn btn-sm btn-outline-secondary">Vezi Lista Generală</a>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-center shadow-sm">
+            <div class="card text-center shadow-sm h-100">
                 <div class="card-body">
-                    <h5 class="card-title">Învoiri Astăzi</h5>
+                    <h5 class="card-title">Învoiri <span class="text-muted small">(în ziua de azi)</span></h5>
                     <p class="card-text fs-4 fw-bold">{{ total_leaves_today_count }}</p>
                     <small>(Zilnice: {{ daily_leaves_today_company }}, Weekend: {{ weekend_leaves_today_company }})</small><br>
-                    <a href="{{ url_for('admin_list_daily_leaves') }}" class="btn btn-sm btn-outline-secondary mt-1">Detalii Învoiri</a>
+                    <a href="{{ url_for('admin_list_daily_leaves') }}" class="btn btn-sm btn-outline-secondary mt-1">Vezi Liste Generale</a>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-center shadow-sm">
+            <div class="card text-center shadow-sm h-100">
                 <div class="card-body">
-                    <h5 class="card-title">În Serviciu Astăzi</h5>
+                    <h5 class="card-title">În Serviciu <span class="text-muted small">(în ziua de azi)</span></h5>
                     <p class="card-text fs-4 fw-bold">{{ services_today_count }}</p>
-                    <a href="{{ url_for('admin_list_services') }}" class="btn btn-sm btn-outline-secondary">Detalii Servicii</a>
+                    <a href="{{ url_for('admin_list_services') }}" class="btn btn-sm btn-outline-secondary">Vezi Lista Generală</a>
                 </div>
             </div>
         </div>
     </div>
 
+    <hr>
+    <h4 class="mb-3">Situația Companiei <span class="text-danger">ACUM</span> (Timp Real: {{ current_time_for_display|localdatetime('%H:%M:%S') }})</h4>
+     <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-center shadow-sm bg-light">
+                <div class="card-body">
+                    <h5 class="card-title text-danger">Total Plecați ACUM</h5>
+                    <p class="card-text fs-3 fw-bold text-danger">{{ total_on_leave_now_company }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">În Permisie ACUM</h5>
+                    <p class="card-text fs-4 fw-bold">{{ permissions_active_now_company }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">În Serviciu ACUM</h5>
+                    <p class="card-text fs-4 fw-bold">{{ services_active_now_company }}</p>
+                </div>
+            </div>
+        </div>
+        <!-- Detalii pentru învoiri acum -->
+        <div class="col-12 mt-2">
+             <small class="text-muted">Detaliu plecați acum: Învoiri Zilnice: {{ daily_leaves_active_now_company }}, Învoiri Weekend: {{ weekend_leaves_active_now_company }}</small>
+        </div>
+    </div>
+
+
     <hr class="my-4">
-    <h4 class="mb-3">Situația la Apelul de Seară (<span class="text-muted">{{ roll_call_time_str }}</span>)</h4>
+    <div class="d-flex justify-content-between align-items-center">
+        <h4 class="mb-3">Situația la Apelul de Seară (<span class="text-muted">{{ roll_call_time_str }}</span>)</h4>
+        <a href="{{ url_for('text_report_display_company') }}" class="btn btn-sm btn-outline-secondary" title="Vezi raportul text complet pentru apelul de seară">
+            <i class="fas fa-file-alt"></i> Raport Text Apel
+        </a>
+    </div>
 
     {% macro display_presence_details(data, id_prefix) %}
         {% if data.in_formation_students_details %}

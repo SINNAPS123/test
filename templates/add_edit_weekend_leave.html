@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container mt-4">
     <h2>{{ form_title }}</h2>
-    <p class="text-muted">Selectează un student, weekendul dorit (Vineri-Duminică), apoi 1 sau 2 zile din acel weekend și specifică orele.</p>
+    <p class="text-muted">Selectează un student, weekendul dorit (Vineri-Duminică), apoi între 1 și 3 zile din acel weekend (Vineri, Sâmbătă, Duminică) și specifică orele.</p>
     <hr>
 
     <div class="row justify-content-center">
@@ -43,13 +43,14 @@
                             {% for day_name in ['Vineri', 'Sambata', 'Duminica'] %}
                             <div class="col-md-4">
                                 <div class="form-check mb-2">
+                                    {# Modificat aici pentru a gestiona corect form_data ca dicționar #}
                                     <input class="form-check-input day-checkbox" type="checkbox" name="selected_days[]" value="{{ day_name }}" id="check_{{ day_name.lower() }}"
-                                           {% if form_data and day_name in form_data.getlist('selected_days[]') %}checked{% endif %}>
+                                           {% if form_data and form_data['selected_days[]'] and day_name in form_data['selected_days[]'] %}checked{% endif %}>
                                     <label class="form-check-label" for="check_{{ day_name.lower() }}">
                                         <strong>{{ day_name }}</strong>
                                     </label>
                                 </div>
-                                <div class="day-times {% if not form_data or day_name not in form_data.getlist('selected_days[]') %}d-none{% endif %}" id="times_{{ day_name.lower() }}">
+                                <div class="day-times {% if not form_data or not form_data['selected_days[]'] or day_name not in form_data['selected_days[]'] %}d-none{% endif %}" id="times_{{ day_name.lower() }}">
                                     <div class="mb-2">
                                         <label for="{{ day_name.lower() }}_start_time" class="form-label form-label-sm">Ora început:</label>
                                         <input type="time" class="form-control form-control-sm time-input" id="{{ day_name.lower() }}_start_time" name="{{ day_name.lower() }}_start_time"
@@ -61,7 +62,8 @@
                                                 value="{{ form_data[day_name.lower()~'_end_time'] if form_data and form_data[day_name.lower()~'_end_time'] }}" data-day="{{ day_name.lower() }}">
                                     </div>
                                     {% if day_name == 'Duminica' %}
-                                    <div class="form-check mt-1 mb-2" id="church_option_div" style="display: {% if form_data and 'Duminica' in form_data.getlist('selected_days[]') %}block{% else %}none{% endif %};">
+                                    {# Modificat și aici pentru vizibilitatea opțiunii de biserică #}
+                                    <div class="form-check mt-1 mb-2" id="church_option_div" style="display: {% if form_data and form_data['selected_days[]'] and 'Duminica' in form_data['selected_days[]'] %}block{% else %}none{% endif %};">
                                         <input class="form-check-input" type="checkbox" id="duminica_biserica" name="duminica_biserica" value="true"
                                                {% if form_data and form_data.duminica_biserica %}checked{% endif %}>
                                         <label class="form-check-label form-label-sm" for="duminica_biserica">

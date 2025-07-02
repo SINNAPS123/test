@@ -180,12 +180,39 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function copyReportToClipboard() {
-    const reportText = document.getElementById('reportTextForCopy').innerText.trim();
-    navigator.clipboard.writeText(reportText).then(function() {
-        alert('Raportul a fost copiat în clipboard!');
-    }, function(err) {
-        alert('Eroare la copierea raportului: ', err);
-    });
+    const reportTextElement = document.getElementById('reportTextForCopy');
+    if (!reportTextElement) {
+        alert('Eroare: Elementul text pentru copiere nu a fost găsit.');
+        return;
+    }
+    const reportText = reportTextElement.innerText.trim();
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(reportText).then(function() {
+            alert('Raportul a fost copiat în clipboard!');
+        }, function(err) {
+            console.error('Async: Could not copy text: ', err);
+            alert('Eroare la copierea raportului (navigator). Încercați manual.');
+        });
+    } else if (document.queryCommandSupported && document.queryCommandSupported('copy')) {
+        // Pentru execCommand, trebuie să copiem textul într-un textarea temporar
+        const textarea = document.createElement('textarea');
+        textarea.value = reportText;
+        textarea.style.position = 'fixed'; // Previne scroll-ul
+        textarea.style.opacity = 0;
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            alert('Raportul a fost copiat în clipboard! (fallback)');
+        } catch (err) {
+            console.error('Fallback: Oops, unable to copy: ', err);
+            alert('Eroare la copierea raportului (fallback). Încercați manual.');
+        }
+        document.body.removeChild(textarea);
+    } else {
+        alert('Copierea automată în clipboard nu este suportată de browserul dvs. Vă rugăm selectați și copiați manual textul din raport.');
+    }
 }
 </script>
 {% endblock %}
