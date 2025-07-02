@@ -20,7 +20,7 @@
                 </svg>
                 Import Permisii (Text)
             </button>
-            <a href="{{ url_for('export_permissions_word') }}" class="btn btn-primary me-2">
+            <a href="{{ url_for('gradat_export_permissions_word') }}" class="btn btn-primary me-2">
                 <i class="fas fa-file-word"></i> Export Word (Permisii)
             </a>
              <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Panou Gradat</a>
@@ -122,7 +122,7 @@
 <div class="modal fade" id="bulkImportPermissionsModal" tabindex="-1" aria-labelledby="bulkImportPermissionsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form action="{{ url_for('bulk_import_permissions') }}" method="POST">
+            <form action="{{ url_for('gradat_bulk_import_permissions') }}" method="POST">
                 <div class="modal-header">
                     <h5 class="modal-title" id="bulkImportPermissionsModalLabel">Import Permisii în Masă</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>

@@ -59,6 +59,38 @@
         </div>
     </div>
 
+    <!-- Adăugat înainte de <hr class="my-4"> și "Listă Utilizatori" -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4>Funcționalități Administrative Suplimentare</h4>
+                </div>
+                <div class="card-body">
+                    <a href="{{ url_for('admin_action_logs') }}" class="btn btn-info me-2">
+                        <i class="fas fa-history"></i> Jurnal Acțiuni Sistem
+                    </a>
+                    <a href="{{ url_for('list_students') }}" class="btn btn-secondary me-2">
+                        <i class="fas fa-users"></i> Listă Generală Studenți
+                    </a>
+                    <a href="{{ url_for('admin_list_permissions') }}" class="btn btn-secondary me-2">
+                        <i class="fas fa-calendar-check"></i> Listă Generală Permisii
+                    </a>
+                    <a href="{{ url_for('admin_list_daily_leaves') }}" class="btn btn-secondary me-2">
+                        <i class="fas fa-person-walking-arrow-right"></i> Listă Generală Învoiri Zilnice
+                    </a>
+                     <a href="{{ url_for('admin_list_weekend_leaves') }}" class="btn btn-secondary me-2">
+                        <i class="fas fa-calendar-week"></i> Listă Generală Învoiri Weekend
+                    </a>
+                    <a href="{{ url_for('admin_list_services') }}" class="btn btn-secondary">
+                        <i class="fas fa-clipboard-user"></i> Listă Generală Servicii
+                    </a>
+                    <!-- Alte link-uri admin pot fi adăugate aici -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <hr class="my-4">
 
     <h3 class="mb-3">Listă Utilizatori (Non-Admin)</h3>

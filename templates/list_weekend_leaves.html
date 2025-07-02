@@ -20,7 +20,7 @@
                 </svg>
                 Import Învoiri Weekend (Text)
             </button>
-            <a href="{{ url_for('export_weekend_leaves_word') }}" class="btn btn-primary me-2">
+            <a href="{{ url_for('gradat_export_weekend_leaves_word') }}" class="btn btn-primary me-2">
                 <i class="fas fa-file-word"></i> Export Word (Weekend)
             </a>
             <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Panou Gradat</a>
@@ -129,7 +129,7 @@
 <div class="modal fade" id="bulkImportWeekendLeavesModal" tabindex="-1" aria-labelledby="bulkImportWeekendLeavesModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form action="{{ url_for('process_weekend_leaves_text') }}" method="POST">
+            <form action="{{ url_for('gradat_process_weekend_leaves_text') }}" method="POST">
                 <div class="modal-header">
                     <h5 class="modal-title" id="bulkImportWeekendLeavesModalLabel">Import Învoiri Weekend în Masă</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
