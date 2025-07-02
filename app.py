@@ -346,34 +346,8 @@ def validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj):
     if start_time_obj == end_time_obj: return False, "Ora de început și de sfârșit nu pot fi identice."
     return True, "Valid"
 
-def get_student_status(student_obj_or_user_obj, datetime_check):
-    is_student_object = isinstance(student_obj_or_user_obj, Student)
-    if is_student_object:
-        student_id_to_check = student_obj_or_user_obj.id
-        active_service = ServiceAssignment.query.filter(ServiceAssignment.student_id == student_id_to_check, ServiceAssignment.start_datetime <= datetime_check, ServiceAssignment.end_datetime >= datetime_check).order_by(ServiceAssignment.start_datetime).first()
-        if active_service: 
-            return {"status_code": "on_duty", "reason": f"Serviciu ({active_service.service_type})", "until": active_service.end_datetime, "details": f"Serviciu: {active_service.service_type}", "object": active_service, "participates_in_roll_call": active_service.participates_in_roll_call }
-        active_permission = Permission.query.filter(Permission.student_id == student_id_to_check, Permission.status == 'Aprobată', Permission.start_datetime <= datetime_check, Permission.end_datetime >= datetime_check).order_by(Permission.start_datetime).first()
-        if active_permission: 
-            return {"status_code": "absent_permission", "reason": "Permisie", "until": active_permission.end_datetime, "details": "Permisie", "object": active_permission }
-        weekend_leaves = WeekendLeave.query.filter(WeekendLeave.student_id == student_id_to_check, WeekendLeave.status == 'Aprobată').all()
-        for wl in weekend_leaves:
-            for interval in wl.get_intervals():
-                if interval['start'] <= datetime_check <= interval['end']: 
-                    return {"status_code": "absent_weekend_leave", "reason": f"Învoire Weekend ({interval['day_name']})", "until": interval['end'], "details": f"Învoire Weekend: {interval['day_name']}", "object": wl }
-        daily_leaves = DailyLeave.query.filter(DailyLeave.student_id == student_id_to_check, DailyLeave.status == 'Aprobată').all()
-        for dl in daily_leaves:
-            if dl.start_datetime <= datetime_check <= dl.end_datetime: 
-                return {"status_code": "absent_daily_leave", "reason": f"Învoire Zilnică ({dl.leave_type_display})", "until": dl.end_datetime, "details": f"Învoire Zilnică: {dl.leave_type_display}", "object": dl }
-
-        if hasattr(student_obj_or_user_obj, 'is_platoon_graded_duty') and student_obj_or_user_obj.is_platoon_graded_duty:
-            return {"status_code": "platoon_graded_duty", "reason": "Gradat Pluton", "until": None, "details": "Activitate Gradat Pluton", "object": student_obj_or_user_obj }
-
-        return {"status_code": "present", "reason": "Prezent în formație", "until": None, "details": "Prezent în formație", "object": student_obj_or_user_obj }
-    elif isinstance(student_obj_or_user_obj, User):
-        return {"status_code": "undefined_for_user_role", "reason": "Status de prezență nedefinit pentru un User. Doar Studenții au status de prezență.", "until": None, "details": "N/A"}
-    else:
-        return {"status_code": "unknown", "reason": "Tip obiect necunoscut", "until": None, "details": "Eroare internă"}
+# Funcția get_student_status a fost integrată și optimizată în _calculate_presence_data
+# și nu mai este necesară separat dacă _calculate_presence_data este singurul apelant.
 
 def check_leave_conflict(student_id, leave_start_dt, leave_end_dt, existing_leave_id=None, leave_type=None):
     blocking_services = ['GSS', 'Intervenție']
@@ -682,7 +656,7 @@ def dashboard():
     return render_template('dashboard.html', name=current_user.username)
 
 # --- Admin User Management ---
-@app.route('/admin/users/create', methods=['POST']) # Form is on admin_dashboard, so this handles POST
+@app.route('/admin/users/create', methods=['POST'], endpoint='admin_create_user') # Form is on admin_dashboard, so this handles POST
 @login_required
 def admin_create_user():
     if current_user.role != 'admin':
@@ -739,7 +713,7 @@ def admin_create_user():
 
     return redirect(url_for('admin_dashboard_route'))
 
-@app.route('/admin/users/reset_code/<int:user_id>', methods=['POST'])
+@app.route('/admin/users/reset_code/<int:user_id>', methods=['POST'], endpoint='admin_reset_user_code')
 @login_required
 def admin_reset_user_code(user_id):
     if current_user.role != 'admin':
@@ -787,7 +761,7 @@ def admin_reset_user_code(user_id):
             app.logger.error(f"CRITICAL: Failed to commit failure log for ADMIN_RESET_USER_CODE_FAIL: {str(log_e)}")
     return redirect(url_for('admin_dashboard_route'))
 
-@app.route('/admin/users/delete/<int:user_id>', methods=['POST'])
+@app.route('/admin/users/delete/<int:user_id>', methods=['POST'], endpoint='admin_delete_user')
 @login_required
 def admin_delete_user(user_id):
     if current_user.role != 'admin':
@@ -931,7 +905,7 @@ def admin_edit_student(student_id):
                            form_data=form_data_for_get)
 
 # --- Admin List View for Permissions ---
-@app.route('/admin/permissions')
+@app.route('/admin/permissions', endpoint='admin_list_permissions')
 @login_required
 def admin_list_permissions():
     if current_user.role != 'admin':
@@ -978,7 +952,7 @@ def admin_list_permissions():
                            title="Listă Generală Permisii (Admin)")
 
 # --- Admin List View for Daily Leaves ---
-@app.route('/admin/daily_leaves')
+@app.route('/admin/daily_leaves', endpoint='admin_list_daily_leaves')
 @login_required
 def admin_list_daily_leaves():
     if current_user.role != 'admin':
@@ -1031,7 +1005,7 @@ def admin_list_daily_leaves():
                            title="Listă Generală Învoiri Zilnice (Admin)")
 
 # --- Admin List View for Weekend Leaves ---
-@app.route('/admin/weekend_leaves')
+@app.route('/admin/weekend_leaves', endpoint='admin_list_weekend_leaves')
 @login_required
 def admin_list_weekend_leaves():
     if current_user.role != 'admin':
@@ -1083,7 +1057,7 @@ def admin_list_weekend_leaves():
                            title="Listă Generală Învoiri Weekend (Admin)")
 
 # --- Admin List View for Service Assignments ---
-@app.route('/admin/services')
+@app.route('/admin/services', endpoint='admin_list_services')
 @login_required
 def admin_list_services():
     if current_user.role != 'admin':
@@ -1166,50 +1140,112 @@ def get_standard_roll_call_datetime(for_date=None):
 
     return datetime.combine(target_date, roll_call_time)
 
-# --- Helper function to calculate presence data for a list of students ---
+# --- Helper function to calculate presence data for a list of students (Optimized) ---
 def _calculate_presence_data(student_list, check_datetime):
+    if not student_list:
+        return {
+            "efectiv_control": 0, "efectiv_prezent_total": 0, "efectiv_absent_total": 0,
+            "in_formation_count": 0, "in_formation_students_details": [],
+            "on_duty_count": 0, "on_duty_students_details": [],
+            "platoon_graded_duty_count": 0, "platoon_graded_duty_students_details": [],
+            "absent_students_details": []
+        }
+
+    student_ids = [s.id for s in student_list]
+    now = check_datetime # Folosim check_datetime consistent
+
+    # Preîncărcare date
+    # Folosim dictionare pentru a mapa student_id la obiectul relevant, pentru acces rapid
+    # Presupunem ca un student are cel mult un item activ din fiecare categorie (serviciu, permisie etc.)
+    # Daca pot fi multiple, logica de mai jos ia primul gasit dupa sortare (daca e cazul)
+
+    active_services_map = {sa.student_id: sa for sa in ServiceAssignment.query.filter(
+        ServiceAssignment.student_id.in_(student_ids),
+        ServiceAssignment.start_datetime <= now,
+        ServiceAssignment.end_datetime >= now
+    ).order_by(ServiceAssignment.start_datetime).all()}
+
+    active_permissions_map = {p.student_id: p for p in Permission.query.filter(
+        Permission.student_id.in_(student_ids),
+        Permission.status == 'Aprobată',
+        Permission.start_datetime <= now,
+        Permission.end_datetime >= now
+    ).order_by(Permission.start_datetime).all()}
+
+    all_daily_leaves = DailyLeave.query.filter(
+        DailyLeave.student_id.in_(student_ids),
+        DailyLeave.status == 'Aprobată'
+    ).all()
+    active_daily_leaves_map = {}
+    for dl in all_daily_leaves:
+        if dl.start_datetime <= now <= dl.end_datetime:
+            if dl.student_id not in active_daily_leaves_map: # Ia prima învoire activă
+                 active_daily_leaves_map[dl.student_id] = dl
+
+    all_weekend_leaves = WeekendLeave.query.filter(
+        WeekendLeave.student_id.in_(student_ids),
+        WeekendLeave.status == 'Aprobată'
+    ).all()
+    active_weekend_leaves_map = {}
+    for wl in all_weekend_leaves:
+        for interval in wl.get_intervals(): # get_intervals() ar trebui să fie eficient
+            if interval['start'] <= now <= interval['end']:
+                if wl.student_id not in active_weekend_leaves_map:
+                    active_weekend_leaves_map[wl.student_id] = {"leave": wl, "interval": interval}
+                break
+
     efectiv_control = len(student_list)
     in_formation_list = []
     on_duty_list = []
-    platoon_graded_duty_list = [] # Students who are 'platoon_graded_duty' and not otherwise absent/on duty
-    absent_list = [] # List of strings with student name and reason
+    platoon_graded_duty_list = []
+    absent_list = []
 
     for s in student_list:
-        status_info = get_student_status(s, check_datetime)
         student_display_name = f"{s.grad_militar} {s.nume} {s.prenume}"
+        status_found = False # Flag pentru a ne asigura că un student nu e numărat de mai multe ori
 
-        if status_info["status_code"] == "present":
-            in_formation_list.append(student_display_name)
-        elif status_info["status_code"] == "on_duty":
-            # For company/battalion reports, all students on duty are listed under "on duty",
-            # regardless of their participation in roll call.
-            on_duty_list.append(f"{student_display_name} - {status_info['reason']}")
-        elif status_info["status_code"] == "platoon_graded_duty":
-            # This status means they are present but have a special role.
-            # They are not "absent" but might be reported separately from "in_formation_list"
-            # For commander's view, they are part of Ep (Efectiv Prezent)
-            platoon_graded_duty_list.append(f"{student_display_name} - {status_info['reason']}")
-        elif status_info["status_code"] in ["absent_permission", "absent_daily_leave", "absent_weekend_leave"]:
-            absent_list.append(f"{student_display_name} - {status_info['reason']}")
-        # Other statuses like 'undefined_for_user_role', 'unknown' are ignored for these counts
-        # or should be handled if they represent a form of absence.
+        # Ordinea verificării contează dacă un student ar putea fi în mai multe stări simultan
+        # (de ex. serviciu și permisie - deși conflictele ar trebui prevenite la creare)
+        # Serviciile 'critice' au prioritate.
+        if s.id in active_services_map:
+            active_service = active_services_map[s.id]
+            # Considerăm 'participates_in_roll_call' aici dacă e relevant pentru 'on_duty_list' vs 'in_formation_list'
+            # Pentru moment, toți cei cu serviciu activ sunt 'on_duty'
+            on_duty_list.append(f"{student_display_name} - Serviciu ({active_service.service_type})")
+            status_found = True
+        elif s.id in active_permissions_map:
+            # active_permission = active_permissions_map[s.id] # Nu e nevoie de obiectul în sine pentru mesaj
+            absent_list.append(f"{student_display_name} - Permisie")
+            status_found = True
+        elif s.id in active_weekend_leaves_map:
+            wl_data = active_weekend_leaves_map[s.id]
+            absent_list.append(f"{student_display_name} - Învoire Weekend ({wl_data['interval']['day_name']})")
+            status_found = True
+        elif s.id in active_daily_leaves_map:
+            dl = active_daily_leaves_map[s.id]
+            absent_list.append(f"{student_display_name} - Învoire Zilnică ({dl.leave_type_display})")
+            status_found = True
 
-    # Adjust counts: Platoon Graded Duty students are present.
-    # The main "in_formation_count" for commander dashboards usually means "physically in ranks".
-    # "on_duty_count" means those in service *and not at roll call*.
-    # "platoon_graded_duty_count" are those present with that specific role.
+        if not status_found: # Dacă nu e în niciun serviciu sau învoire/permisie
+            if s.is_platoon_graded_duty:
+                platoon_graded_duty_list.append(f"{student_display_name} - Gradat Pluton")
+            else:
+                in_formation_list.append(student_display_name)
+        # else: studentul a fost deja clasificat (serviciu, permisie, etc.)
 
     in_formation_count = len(in_formation_list)
-    on_duty_count = len(on_duty_list) # These are specifically those NOT at roll call due to duty
+    on_duty_count = len(on_duty_list)
     platoon_graded_duty_count = len(platoon_graded_duty_list)
     efectiv_absent_total = len(absent_list)
 
-    # Ep = (in formation) + (on duty not at roll call) + (platoon graded duty)
+    # Ep = (în formație) + (la datorie, dar nu la apel dacă e cazul) + (gradat pluton prezent)
+    # Simplificat: toți cei care nu sunt absenți sunt prezenți într-o formă sau alta.
+    # on_duty_list și platoon_graded_duty_list sunt considerați prezenți.
     efectiv_prezent_total = in_formation_count + on_duty_count + platoon_graded_duty_count
 
-    # Ensure EC = Ep + Ea, if not, there's a discrepancy (e.g. student without clear status)
-    # This simplified model assumes all students fall into one of these categories.
-    # If EC != Ep + Ea, it means some students were not categorized, which could be an issue.
+    # Verificare consistență (opțional, pentru debug)
+    # if efectiv_control != efectiv_prezent_total + efectiv_absent_total:
+    #     app.logger.warning(f"Discrepancy in presence data: EC({efectiv_control}) != EP({efectiv_prezent_total}) + EA({efectiv_absent_total})")
 
     return {
         "efectiv_control": efectiv_control,
@@ -1789,7 +1825,7 @@ def edit_student(student_id):
 
     return render_template('add_edit_student.html', form_title=f"Editare Student: {s_edit.grad_militar} {s_edit.nume} {s_edit.prenume}", student=s_edit, genders=GENDERS, form_data=s_edit)
 
-@app.route('/gradat/students/bulk_import', methods=['POST'])
+@app.route('/gradat/students/bulk_import', methods=['POST'], endpoint='gradat_bulk_import_students')
 @login_required
 def bulk_import_students():
     if current_user.role != 'gradat':
@@ -2222,7 +2258,7 @@ def find_student_for_bulk_import(name_line, gradat_id):
     return None, f"Studentul '{name_line}' nu a fost găsit sau potrivirea este ambiguă."
 
 
-@app.route('/gradat/permissions/bulk_import', methods=['POST'])
+@app.route('/gradat/permissions/bulk_import', methods=['POST'], endpoint='gradat_bulk_import_permissions')
 @login_required
 def bulk_import_permissions():
     if current_user.role != 'gradat':
@@ -2384,7 +2420,7 @@ def bulk_import_permissions():
 
     return redirect(url_for('list_permissions'))
 
-@app.route('/gradat/permissions/export_word')
+@app.route('/gradat/permissions/export_word', endpoint='gradat_export_permissions_word')
 @login_required
 def export_permissions_word():
     if current_user.role != 'gradat':
@@ -2798,7 +2834,7 @@ def parse_weekend_leave_line(line_text_raw):
     return student_name_part, parsed_intervals, is_biserica_requested, None
 
 
-@app.route('/gradat/daily_leaves/process_text', methods=['POST'])
+@app.route('/gradat/daily_leaves/process_text', methods=['POST'], endpoint='gradat_process_daily_leaves_text')
 @login_required
 def process_daily_leaves_text():
     if current_user.role != 'gradat': flash('Acces neautorizat.', 'danger'); return redirect(url_for('dashboard'))
@@ -3133,7 +3169,7 @@ def cancel_weekend_leave(leave_id):
     else: flash('Această învoire de weekend nu poate fi anulată (statusul curent nu este "Aprobată").', 'warning')
     return redirect(url_for('list_weekend_leaves'))
 
-@app.route('/gradat/weekend_leaves/process_text', methods=['POST'])
+@app.route('/gradat/weekend_leaves/process_text', methods=['POST'], endpoint='gradat_process_weekend_leaves_text')
 @login_required
 def process_weekend_leaves_text():
     if current_user.role != 'gradat':
@@ -3318,7 +3354,7 @@ def process_weekend_leaves_text():
 
     return redirect(url_for('list_weekend_leaves'))
 
-@app.route('/gradat/weekend_leaves/export_word')
+@app.route('/gradat/weekend_leaves/export_word', endpoint='gradat_export_weekend_leaves_word')
 @login_required
 def export_weekend_leaves_word():
     if current_user.role != 'gradat':
@@ -3771,7 +3807,7 @@ def text_report_display_battalion():
                            report_datetime_str=report_datetime_str)
 
 # --- Admin Action Log Viewer ---
-@app.route('/admin/action_logs')
+@app.route('/admin/action_logs', endpoint='admin_action_logs')
 @login_required
 def admin_action_logs():
     if current_user.role != 'admin':
