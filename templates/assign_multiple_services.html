@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asignează Multiple Servicii</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .service-entry {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .service-entry label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .service-entry input[type="date"],
+        .service-entry input[type="time"],
+        .service_entry select,
+        .service-entry textarea {
+            width: calc(100% - 22px);
+            padding: 8px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        .service-entry input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        .service-entry .form-actions {
+            text-align: right;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    {% include 'includes/header.html' %}
+    <main class="container">
+        <h1>Asignează Multiple Servicii unui Student</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('assign_multiple_services') }}">
+            <div class="form-group">
+                <label for="student_id">Selectează Studentul:*</label>
+                <select name="student_id" id="student_id" class="form-control" required>
+                    <option value="">-- Alege un student --</option>
+                    {% for student in students %}
+                        <option value="{{ student.id }}" {% if student_id_selected and student_id_selected == student.id %}selected{% endif %}>
+                            {{ student.grad_militar }} {{ student.nume }} {{ student.prenume }} (Pl. {{student.pluton }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div id="services-container">
+                <!-- Service entries will be added here by JavaScript -->
+            </div>
+
+            <button type="button" id="add-service-btn" class="btn btn-info">Adaugă Încă un Serviciu</button>
+            <hr>
+            <button type="submit" class="btn btn-primary">Salvează Toate Serviciile</button>
+            <a href="{{ url_for('list_services') }}" class="btn btn-secondary">Anulează</a>
+        </form>
+    </main>
+    {% include 'includes/footer.html' %}
+
+    <script>
+        const defaultTimes = JSON.parse('{{ default_times_json | safe }}');
+        const serviceTypes = {{ service_types | tojson | safe }};
+        const todayStr = '{{ today_str }}';
+        let serviceEntryIndex = 0;
+
+        function createServiceEntry(index) {
+            const entryDiv = document.createElement('div');
+            entryDiv.classList.add('service-entry');
+            entryDiv.setAttribute('id', `service-entry-${index}`);
+
+            let optionsHtml = '<option value="">-- Alege tipul --</option>';
+            serviceTypes.forEach(type => {
+                optionsHtml += `<option value="${type}">${type}</option>`;
+            });
+
+            entryDiv.innerHTML = `
+                <h4>Serviciul #${index + 1} <button type="button" class="btn btn-danger btn-sm remove-service-btn" data-index="${index}" style="float: right;">Șterge</button></h4>
+                <div class="form-group">
+                    <label for="service_type_${index}">Tip Serviciu:*</label>
+                    <select name="service_type_${index}" id="service_type_${index}" class="form-control service-type-select" data-index="${index}" required>
+                        ${optionsHtml}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="service_date_${index}">Data Serviciului:*</label>
+                    <input type="date" name="service_date_${index}" id="service_date_${index}" class="form-control" value="${todayStr}" required>
+                </div>
+                <div class="form-group">
+                    <label for="start_time_${index}">Ora Început:*</label>
+                    <input type="time" name="start_time_${index}" id="start_time_${index}" class="form-control start-time-input" data-index="${index}" required>
+                </div>
+                <div class="form-group">
+                    <label for="end_time_${index}">Ora Sfârșit:*</label>
+                    <input type="time" name="end_time_${index}" id="end_time_${index}" class="form-control end-time-input" data-index="${index}" required>
+                </div>
+                <div class="form-group">
+                    <input type="checkbox" name="participates_${index}" id="participates_${index}" checked>
+                    <label for="participates_${index}" style="display: inline; font-weight: normal;">Participă la apel</label>
+                </div>
+                <div class="form-group">
+                    <label for="notes_${index}">Observații:</label>
+                    <textarea name="notes_${index}" id="notes_${index}" rows="2" class="form-control"></textarea>
+                </div>
+            `;
+            return entryDiv;
+        }
+
+        function addService() {
+            const container = document.getElementById('services-container');
+            const newEntry = createServiceEntry(serviceEntryIndex);
+            container.appendChild(newEntry);
+
+            // Add event listener for service type change to update times
+            const serviceTypeSelect = newEntry.querySelector('.service-type-select');
+            serviceTypeSelect.addEventListener('change', handleServiceTypeChange);
+
+            // Add event listener for remove button
+            const removeButton = newEntry.querySelector('.remove-service-btn');
+            removeButton.addEventListener('click', handleRemoveService);
+
+            serviceEntryIndex++;
+        }
+
+        function handleServiceTypeChange(event) {
+            const selectedType = event.target.value;
+            const index = event.target.dataset.index;
+            const times = defaultTimes[selectedType] || ["", ""];
+
+            document.getElementById(`start_time_${index}`).value = times[0];
+            document.getElementById(`end_time_${index}`).value = times[1];
+        }
+
+        function handleRemoveService(event) {
+            const indexToRemove = event.target.dataset.index;
+            const entryToRemove = document.getElementById(`service-entry-${indexToRemove}`);
+            if (entryToRemove) {
+                entryToRemove.remove();
+            }
+            // Note: This doesn't re-index subsequent entries.
+            // The backend handles submitted data based on the indices it receives.
+        }
+
+        document.getElementById('add-service-btn').addEventListener('click', addService);
+
+        // Add one service entry by default when page loads
+        addService();
+    </script>
+</body>
+</html>

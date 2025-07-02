@@ -45,7 +45,7 @@
                 <div class="card-body">
                     <h5 class="card-title">Permisii</h5>
                     <p class="card-text">Gestionează cererile de permisie ale studenților.</p>
-                    <p class="card-text"><small class="text-muted">Permisii active acum: {{ active_permissions_count }}</small></p>
+                    <p class="card-text"><small class="text-muted">Permisii active astăzi: <strong>{{ permissions_today_count }}</strong></small></p>
                     <a href="{{ url_for('list_permissions') }}" class="btn btn-primary">Gestionează Permisii</a>
                 </div>
             </div>
@@ -57,8 +57,8 @@
                 <div class="card-body">
                     <h5 class="card-title">Învoiri</h5>
                     <p class="card-text">Gestionează învoirile zilnice (L-J) și de weekend (V-D).</p>
-                    <p class="card-text"><small class="text-muted">Învoiri zilnice active: {{ active_daily_leaves_count }}</small><br>
-                                         <small class="text-muted">Învoiri weekend active: {{ active_weekend_leaves_count }}</small></p>
+                    <p class="card-text"><small class="text-muted">Învoiri zilnice active astăzi: <strong>{{ daily_leaves_today_count }}</strong></small><br>
+                                         <small class="text-muted">Învoiri weekend active astăzi: <strong>{{ weekend_leaves_today_count }}</strong></small></p>
                     <a href="{{ url_for('list_daily_leaves') }}" class="btn btn-primary mb-2 d-block">Învoiri Zilnice (L-J)</a>
                     <a href="{{ url_for('list_weekend_leaves') }}" class="btn btn-primary d-block">Învoiri Weekend (V-D)</a>
                 </div>
@@ -73,7 +73,7 @@
                 <div class="card-body">
                     <h5 class="card-title">Servicii</h5>
                     <p class="card-text">Planifică și vizualizează serviciile studenților.</p>
-                    <p class="card-text"><small class="text-muted">Servicii active acum: {{ active_services_count }}</small></p>
+                    <p class="card-text"><small class="text-muted">Studenți în serviciu astăzi: <strong>{{ services_today_count }}</strong></small></p>
                     <a href="{{ url_for('list_services') }}" class="btn btn-primary">Gestionează Servicii</a>
                 </div>
             </div>
