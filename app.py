@@ -1,6 +1,11 @@
-from flask import Flask, render_template, redirect, url_for, flash, request, jsonify
+from flask import Flask, render_template, redirect, url_for, flash, request, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import joinedload
+import io
+from docx import Document
+from docx.shared import Pt, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from werkzeug.security import generate_password_hash, check_password_hash
 import bcrypt
@@ -1230,6 +1235,150 @@ def edit_student(student_id):
 
     return render_template('add_edit_student.html', form_title=f"Editare Student: {s_edit.grad_militar} {s_edit.nume} {s_edit.prenume}", student=s_edit, genders=GENDERS, form_data=s_edit)
 
+@app.route('/gradat/students/bulk_import', methods=['POST'])
+@login_required
+def bulk_import_students():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('list_students'))
+
+    student_bulk_data = request.form.get('student_bulk_data', '').strip()
+    if not student_bulk_data:
+        flash('Nu au fost furnizate date pentru import.', 'warning')
+        return redirect(url_for('list_students'))
+
+    lines = student_bulk_data.splitlines()
+    added_count = 0
+    error_count = 0
+    error_details = []
+
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if not line:
+            continue
+
+        parts = line.split()
+        if len(parts) < 7: # Grad Nume Prenume Gen Pluton Companie Batalion
+            error_details.append(f"Linia {i+1} ('{line}'): Format incorect - prea puține câmpuri.")
+            error_count += 1
+            continue
+
+        # Assuming format: Grad Nume Prenume Gen Pluton Companie Batalion
+        # Grad could be one or more words
+        # Nume is one word
+        # Prenume is one word (or more, but this simple split won't handle it well without more complex parsing)
+        # For simplicity, let's assume Nume and Prenume are single words for now,
+        # and Grad takes up the initial part.
+        # A more robust parser would be needed for multi-word names/ranks.
+
+        # Tentative parsing:
+        # Batalion is the last part
+        # Companie is the second to last
+        # Pluton is the third to last
+        # Gen is the fourth to last
+        # This leaves Grad, Nume, Prenume for the rest.
+        # Let's assume Nume is parts[-5] and Prenume is parts[-6] if they exist,
+        # and Grad is everything before that.
+
+        try:
+            batalion = parts[-1]
+            companie = parts[-2]
+            pluton = parts[-3]
+            gender_input_original = parts[-4]
+            gender_input_upper = gender_input_original.upper()
+
+            gender_db_val = None
+            if gender_input_upper == "M":
+                gender_db_val = "M"
+            elif gender_input_upper == "F":
+                gender_db_val = "F"
+            # Check against GENDERS list, comparing uppercase input with uppercase GENDERS values
+            # This handles "Nespecificat", "nespecificat", "NESPECIFICAT" etc.
+            elif gender_input_upper in [g.upper() for g in GENDERS]:
+                # Find the original casing from GENDERS to store in DB
+                gender_db_val = next(g_val for g_val in GENDERS if g_val.upper() == gender_input_upper)
+            else:
+                error_details.append(f"Linia {i+1} ('{line}'): Gen '{gender_input_original}' invalid. Folosiți M, F sau Nespecificat.")
+                error_count += 1
+                continue
+
+            # The remaining parts are for Grad, Nume, Prenume
+            # Example: "Mm V Renț Francisc" -> parts_for_name_rank = ["Mm", "V", "Renț", "Francisc"]
+            # Assume Prenume is the second to last of these, Nume is before Prenume.
+            # This is a simplification.
+            name_rank_parts = parts[:-4]
+            if len(name_rank_parts) < 3: # Need at least Grad, Nume, Prenume
+                error_details.append(f"Linia {i+1} ('{line}'): Format insuficient pentru Grad, Nume, Prenume.")
+                error_count += 1
+                continue
+
+            prenume = name_rank_parts[-1]
+            nume = name_rank_parts[-2]
+            grad_militar = " ".join(name_rank_parts[:-2])
+
+            if not all([grad_militar, nume, prenume, pluton, companie, batalion]):
+                error_details.append(f"Linia {i+1} ('{line}'): Unul sau mai multe câmpuri obligatorii lipsesc după parsare.")
+                error_count += 1
+                continue
+
+            # Basic check for existing student (by name and platoon/company) to avoid simple duplicates by this import
+            # A more robust check might use id_unic_student if provided and unique
+            existing_student_check = Student.query.filter_by(
+                nume=nume, prenume=prenume, grad_militar=grad_militar,
+                pluton=pluton, companie=companie, batalion=batalion,
+                created_by_user_id=current_user.id
+            ).first()
+
+            if existing_student_check:
+                error_details.append(f"Linia {i+1} ('{line}'): Student similar există deja (verificare nume, grad, unitate).")
+                error_count += 1
+                continue
+
+
+            new_student = Student(
+                grad_militar=grad_militar,
+                nume=nume,
+                prenume=prenume,
+                gender=gender_db_val,
+                pluton=pluton,
+                companie=companie,
+                batalion=batalion,
+                created_by_user_id=current_user.id,
+                is_platoon_graded_duty=False # Default, can be edited later
+            )
+            db.session.add(new_student)
+            added_count += 1
+
+        except IndexError:
+            error_details.append(f"Linia {i+1} ('{line}'): Format incorect - eroare la extragerea câmpurilor.")
+            error_count += 1
+            continue
+        except Exception as e:
+            error_details.append(f"Linia {i+1} ('{line}'): Eroare neașteptată la procesare - {str(e)}.")
+            error_count += 1
+            db.session.rollback() # Rollback for this specific error if it occurred mid-student-creation
+            continue
+
+    if added_count > 0:
+        try:
+            db.session.commit()
+            flash(f'{added_count} studenți au fost adăugați cu succes.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Eroare la salvarea studenților în baza de date: {str(e)}', 'danger')
+            error_count += added_count # Consider them errors if commit failed
+            added_count = 0
+
+    if error_count > 0:
+        flash(f'{error_count} linii nu au putut fi procesate sau au generat erori.', 'danger')
+        if error_details:
+            flash_detail_msg = "Detalii erori:<br>" + "<br>".join(error_details)
+            if len(flash_detail_msg) > 500: # Limit flash message length
+                flash_detail_msg = flash_detail_msg[:497] + "..."
+            flash(flash_detail_msg, 'warning')
+
+    return redirect(url_for('list_students'))
+
 # Funcționalitatea 'Gradat Companie' a fost eliminată. Am șters ruta și funcția admin_toggle_company_grader_status.
 
 @app.route('/gradat/delete_student/<int:student_id>', methods=['POST'])
@@ -1342,6 +1491,331 @@ def add_edit_permission(permission_id=None):
                            permission=permission,
                            students=students_managed,
                            form_data=data_to_populate_form_with)
+
+def find_student_for_bulk_import(name_line, gradat_id):
+    """
+    Helper function to find a student based on a name line (Grad Nume Prenume).
+    Uses unidecode for accent-insensitive matching.
+    Prioritizes exact matches on (Grad, Nume, Prenume).
+    Then tries partial matches on (Nume, Prenume) if Grad is also similar or not specified.
+    """
+    name_line_norm = unidecode(name_line.lower().strip())
+    if not name_line_norm:
+        return None, "Linie nume goală."
+
+    students_managed = Student.query.filter_by(created_by_user_id=gradat_id).all()
+    if not students_managed:
+        return None, "Niciun student gestionat de acest gradat."
+
+    # Try to extract rank for more precise matching
+    parsed_grad_bulk = None
+    student_name_str_bulk = name_line # Default to full line if no rank pattern matches
+    for pattern in KNOWN_RANK_PATTERNS: # KNOWN_RANK_PATTERNS is global
+        match = pattern.match(name_line)
+        if match:
+            parsed_grad_bulk = match.group(0).strip()
+            student_name_str_bulk = pattern.sub("", name_line).strip()
+            break
+
+    normalized_search_name_bulk = unidecode(student_name_str_bulk.lower())
+
+    matched_students = []
+    # Pass 1: Exact match on normalized name and rank (if rank parsed)
+    for s in students_managed:
+        s_fullname_norm = unidecode(f"{s.nume} {s.prenume}".lower())
+        s_grad_norm = unidecode(s.grad_militar.lower())
+
+        if parsed_grad_bulk:
+            parsed_grad_bulk_norm = unidecode(parsed_grad_bulk.lower())
+            if normalized_search_name_bulk == s_fullname_norm and parsed_grad_bulk_norm == s_grad_norm:
+                matched_students.append(s)
+        else: # No rank in input, try to match only by name
+            if normalized_search_name_bulk == s_fullname_norm:
+                 matched_students.append(s)
+
+    if len(matched_students) == 1: return matched_students[0], None
+    if len(matched_students) > 1: return None, f"Potriviri multiple exacte pentru '{name_line}'"
+
+    # Pass 2: More lenient matching (e.g., input name is part of DB name or vice-versa, rank is similar)
+    # This is more complex and might lead to false positives, keeping it simpler for now.
+    # For now, if exact match failed, we rely on the user providing very precise names.
+    # A simpler fallback: if no exact match, check if the normalized_search_name_bulk (name without rank)
+    # matches any student's normalized full name, and if so, if there's only one such student.
+
+    candidate_students_by_name_only = []
+    for s in students_managed:
+        s_fullname_norm = unidecode(f"{s.nume} {s.prenume}".lower())
+        if normalized_search_name_bulk == s_fullname_norm:
+            candidate_students_by_name_only.append(s)
+        # Consider also if input name is "Prenume Nume"
+        s_fullname_reversed_norm = unidecode(f"{s.prenume} {s.nume}".lower())
+        if normalized_search_name_bulk == s_fullname_reversed_norm:
+            if s not in candidate_students_by_name_only: # Avoid duplicates if name and surname are same
+                 candidate_students_by_name_only.append(s)
+
+
+    if len(candidate_students_by_name_only) == 1:
+        # If only one student matches by name, and a rank was provided in input,
+        # check if that rank is at least similar to the student's rank.
+        if parsed_grad_bulk:
+            s_grad_norm = unidecode(candidate_students_by_name_only[0].grad_militar.lower())
+            parsed_grad_bulk_norm = unidecode(parsed_grad_bulk.lower())
+            if parsed_grad_bulk_norm in s_grad_norm or s_grad_norm in parsed_grad_bulk_norm : # Simple similarity
+                 return candidate_students_by_name_only[0], None
+            else:
+                return None, f"Student '{student_name_str_bulk}' găsit, dar gradul '{parsed_grad_bulk}' nu corespunde cu '{candidate_students_by_name_only[0].grad_militar}'."
+        else: # No rank in input, one match by name is good enough
+            return candidate_students_by_name_only[0], None
+
+    if len(candidate_students_by_name_only) > 1:
+        return None, f"Potriviri multiple pentru numele '{student_name_str_bulk}'. Specificați gradul sau un nume mai exact."
+
+
+    return None, f"Studentul '{name_line}' nu a fost găsit sau potrivirea este ambiguă."
+
+
+@app.route('/gradat/permissions/bulk_import', methods=['POST'])
+@login_required
+def bulk_import_permissions():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('list_permissions'))
+
+    permission_bulk_data = request.form.get('permission_bulk_data', '').strip()
+    if not permission_bulk_data:
+        flash('Nu au fost furnizate date pentru import.', 'warning')
+        return redirect(url_for('list_permissions'))
+
+    lines = permission_bulk_data.splitlines()
+    added_count = 0
+    error_count = 0
+    error_details = []
+
+    i = 0
+    while i < len(lines):
+        name_line = lines[i].strip()
+        if not name_line: # Skip empty lines that might be between entries
+            i += 1
+            continue
+
+        if i + 2 >= len(lines): # Need at least 2 more lines for datetime and destination
+            error_details.append(f"Intrare incompletă la finalul listei, începând cu '{name_line}'. Date insuficiente.")
+            error_count += 1
+            break
+
+        datetime_line = lines[i+1].strip()
+        destination_line = lines[i+2].strip()
+
+        car_plate_line = ""
+        # Check if there's a 4th line and it's not empty (potentially a car plate)
+        # Also, ensure it doesn't look like the start of a new student name line
+        if i + 3 < len(lines) and lines[i+3].strip():
+            potential_next_name_line = lines[i+3].strip()
+            # Heuristic: if the next line contains typical rank abbreviations or multiple words, it's likely a new student
+            # This is imperfect. A truly blank line separator would be better.
+            is_likely_new_student = any(rank_pattern.match(potential_next_name_line) for rank_pattern in KNOWN_RANK_PATTERNS) or len(potential_next_name_line.split()) > 3
+
+            if not is_likely_new_student:
+                 car_plate_line = potential_next_name_line
+                 current_entry_lines = 4
+            else: # Looks like next student, so current entry has 3 lines
+                 current_entry_lines = 3
+        else: # End of data or an empty line follows, so 3 lines for current or 4 if last line before empty is car
+            if i + 3 < len(lines) and not lines[i+3].strip(): # Explicit empty line after destination means no car
+                current_entry_lines = 3 # Student, DateTime, Destination
+                # We will advance i by 4 later to jump over this empty line too.
+            elif i + 3 < len(lines): # A non-empty line that we assume is a car plate
+                car_plate_line = lines[i+3].strip()
+                current_entry_lines = 4
+            else: # Reached end of lines after destination, so 3 lines
+                current_entry_lines = 3
+
+
+        student_obj, student_error = find_student_for_bulk_import(name_line, current_user.id)
+        if student_error:
+            error_details.append(f"Linia '{name_line}': {student_error}")
+            error_count += 1
+            i += current_entry_lines # Move to next potential entry
+            if current_entry_lines == 3 and i < len(lines) and not lines[i-1].strip(): # If it was 3 lines and previous was destination, and there was an empty line after it.
+                i+=1 # Consume the empty line
+            continue
+
+        # Parse datetime
+        try:
+            dt_parts = datetime_line.split(' - ')
+            if len(dt_parts) != 2:
+                raise ValueError("Format interval datetime invalid, lipsește ' - '")
+
+            start_dt_str, end_dt_str = dt_parts[0].strip(), dt_parts[1].strip()
+            # Datetime format: DD.MM.YYYY HH:MM
+            start_dt = datetime.strptime(start_dt_str, '%d.%m.%Y %H:%M')
+            end_dt = datetime.strptime(end_dt_str, '%d.%m.%Y %H:%M')
+
+            if end_dt <= start_dt:
+                raise ValueError("Data de sfârșit trebuie să fie după data de început.")
+
+        except ValueError as ve:
+            error_details.append(f"Student '{name_line}': Eroare datetime '{datetime_line}' - {str(ve)}")
+            error_count += 1
+            i += current_entry_lines
+            if current_entry_lines == 3 and i < len(lines) and not lines[i-1].strip(): i+=1
+            continue
+
+        reason = destination_line
+        if car_plate_line: # Only add car plate to reason if it exists
+            reason += f" ({car_plate_line})"
+
+        # Conflict Checking
+        conflict = check_leave_conflict(student_obj.id, start_dt, end_dt, leave_type='permission')
+        if conflict:
+            error_details.append(f"Student '{name_line}': Conflict - {conflict}.")
+            error_count += 1
+            i += current_entry_lines
+            if current_entry_lines == 3 and i < len(lines) and not lines[i-1].strip(): i+=1
+            continue
+
+        # Create and add permission
+        new_permission = Permission(
+            student_id=student_obj.id,
+            start_datetime=start_dt,
+            end_datetime=end_dt,
+            reason=reason, # Destination and optional car plate
+            status='Aprobată',
+            created_by_user_id=current_user.id
+        )
+        db.session.add(new_permission)
+        added_count += 1
+
+        i += current_entry_lines
+        if current_entry_lines == 3 and i < len(lines) and not lines[i-1].strip() and (i-1) == (lines.index(destination_line)+1) : # If it was 3 lines ending with destination, and there was an empty line after it.
+            # This logic for consuming empty line is getting complicated.
+            # Simpler: if the line after destination_line is empty, consume it.
+            if (lines.index(destination_line) + 1) < len(lines) and not lines[lines.index(destination_line) + 1].strip():
+                i +=1
+
+
+    if added_count > 0:
+        try:
+            db.session.commit()
+            flash(f'{added_count} permisii au fost adăugate cu succes.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Eroare la salvarea permisiilor în baza de date: {str(e)}', 'danger')
+            error_count += added_count
+            added_count = 0
+
+    if error_count > 0:
+        flash(f'{error_count} intrări nu au putut fi procesate sau au generat erori.', 'danger')
+        if error_details:
+            flash_detail_msg = "Detalii erori:<br>" + "<br>".join(error_details)
+            if len(flash_detail_msg) > 1000: # Limit flash message length further
+                flash_detail_msg = flash_detail_msg[:997] + "..."
+            flash(flash_detail_msg, 'warning')
+
+    return redirect(url_for('list_permissions'))
+
+@app.route('/gradat/permissions/export_word')
+@login_required
+def export_permissions_word():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    student_id_tuples = db.session.query(Student.id).filter_by(created_by_user_id=current_user.id).all()
+    student_ids_managed_by_gradat = [s[0] for s in student_id_tuples]
+
+    if not student_ids_managed_by_gradat:
+        flash('Nu aveți studenți pentru a exporta permisii.', 'info')
+        return redirect(url_for('list_permissions'))
+
+    now = datetime.now()
+    # Fetch active and upcoming permissions only for the export
+    permissions_to_export = Permission.query.options(joinedload(Permission.student)).filter(
+        Permission.student_id.in_(student_ids_managed_by_gradat),
+        Permission.status == 'Aprobată',
+        Permission.end_datetime >= now # Active or upcoming
+    ).order_by(Permission.student.has(Student.nume), Permission.start_datetime).all()
+
+    if not permissions_to_export:
+        flash('Nicio permisie activă sau viitoare de exportat.', 'info')
+        return redirect(url_for('list_permissions'))
+
+    document = Document()
+    document.add_heading('Raport Permisii Studenți', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # User and date info
+    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    p_user = document.add_paragraph()
+    p_user.add_run(user_info_text).italic = True
+    p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    document.add_paragraph() # Spacer
+
+    table = document.add_table(rows=1, cols=7)
+    table.style = 'Table Grid'
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = 'Nr. Crt.'
+    hdr_cells[1].text = 'Grad'
+    hdr_cells[2].text = 'Nume și Prenume'
+    hdr_cells[3].text = 'Data Început'
+    hdr_cells[4].text = 'Data Sfârșit'
+    hdr_cells[5].text = 'Destinația'
+    hdr_cells[6].text = 'Observații (Nr. Auto)'
+
+    for cell in hdr_cells:
+        cell.paragraphs[0].runs[0].font.bold = True
+        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    for idx, p in enumerate(permissions_to_export):
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(idx + 1)
+        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[1].text = p.student.grad_militar
+        row_cells[2].text = f"{p.student.nume} {p.student.prenume}"
+        row_cells[3].text = p.start_datetime.strftime('%d.%m.%Y %H:%M')
+        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[4].text = p.end_datetime.strftime('%d.%m.%Y %H:%M')
+        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # Extract destination and car plate from reason
+        reason_text = p.reason or "-"
+        car_plate_match = re.search(r'\((.*?)\)$', reason_text) # Matches (content) at the end
+        destination = reason_text
+        car_plate = "-"
+        if car_plate_match:
+            car_plate = car_plate_match.group(1)
+            destination = reason_text[:car_plate_match.start()].strip() # Get text before car plate
+            if not destination: destination = "-" # if reason was only car plate
+
+        row_cells[5].text = destination
+        row_cells[6].text = car_plate
+        row_cells[6].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+
+    # Set column widths (optional, but good for layout)
+    widths = {0: 0.5, 1: 0.8, 2: 2.0, 3: 1.2, 4: 1.2, 5: 2.0, 6: 1.0} # Inches
+    for col_idx, width_val in widths.items():
+        for row in table.rows:
+            row.cells[col_idx].width = Inches(width_val)
+
+    # Change font for the whole document (optional)
+    style = document.styles['Normal']
+    font = style.font
+    font.name = 'Calibri'
+    font.size = Pt(11)
+
+    f = io.BytesIO()
+    document.save(f)
+    f.seek(0)
+
+    filename = f"Raport_Permisii_{current_user.username}_{date.today().strftime('%Y%m%d')}.docx"
+
+    return send_file(f,
+                     download_name=filename,
+                     as_attachment=True,
+                     mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
 
 @app.route('/gradat/permission/cancel/<int:permission_id>', methods=['POST'])
 @login_required
@@ -1885,6 +2359,101 @@ def cancel_weekend_leave(leave_id):
         except Exception as e: db.session.rollback(); flash(f'Eroare la anularea învoirii de weekend: {str(e)}', 'danger')
     else: flash('Această învoire de weekend nu poate fi anulată (statusul curent nu este "Aprobată").', 'warning')
     return redirect(url_for('list_weekend_leaves'))
+
+@app.route('/gradat/weekend_leaves/export_word')
+@login_required
+def export_weekend_leaves_word():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    student_id_tuples = db.session.query(Student.id).filter_by(created_by_user_id=current_user.id).all()
+    student_ids = [s[0] for s in student_id_tuples]
+
+    if not student_ids:
+        flash('Nu aveți studenți pentru a exporta învoiri de weekend.', 'info')
+        return redirect(url_for('list_weekend_leaves'))
+
+    # Fetch active and upcoming weekend leaves
+    leaves_to_export = WeekendLeave.query.options(joinedload(WeekendLeave.student)).filter(
+        WeekendLeave.student_id.in_(student_ids),
+        WeekendLeave.status == 'Aprobată'
+        # Further filter by is_overall_active_or_upcoming if only current/future are needed
+        # For a general report, all approved might be fine, or sort them.
+        # Let's fetch all approved and sort them, then decide if we only show active/upcoming ones.
+    ).order_by(WeekendLeave.student.has(Student.nume), WeekendLeave.weekend_start_date).all()
+
+    # Filter for only active or upcoming ones for the report
+    leaves_to_export = [leave for leave in leaves_to_export if leave.is_overall_active_or_upcoming]
+
+
+    if not leaves_to_export:
+        flash('Nicio învoire de weekend activă sau viitoare de exportat.', 'info')
+        return redirect(url_for('list_weekend_leaves'))
+
+    document = Document()
+    document.add_heading('Raport Învoiri Weekend', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    p_user = document.add_paragraph()
+    p_user.add_run(user_info_text).italic = True
+    p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    document.add_paragraph()
+
+    table = document.add_table(rows=1, cols=6) # NrCrt, Grad, Nume, Weekend (Vineri), Intervale, Motiv
+    table.style = 'Table Grid'
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    hdr_cells = table.rows[0].cells
+    col_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Weekend (Vineri)', 'Intervale Selectate', 'Motiv (Biserică)']
+    for i, title in enumerate(col_titles):
+        hdr_cells[i].text = title
+        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
+        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    for idx, leave in enumerate(leaves_to_export):
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(idx + 1)
+        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[1].text = leave.student.grad_militar
+        row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}"
+        row_cells[3].text = leave.weekend_start_date.strftime('%d.%m.%Y')
+        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        intervals_str = []
+        for interval in leave.get_intervals():
+            intervals_str.append(f"{interval['day_name']} ({interval['start'].strftime('%d.%m')}) {interval['start'].strftime('%H:%M')}-{interval['end'].strftime('%H:%M')}")
+        row_cells[4].text = "; ".join(intervals_str) if intervals_str else "N/A"
+
+        reason_text = leave.reason or ""
+        if leave.duminica_biserica:
+            reason_text = (reason_text + " (Biserică Duminică)").strip()
+        if not reason_text: reason_text = "-"
+        row_cells[5].text = reason_text
+
+    # Approx widths: NrCrt(0.5), Grad(0.8), Nume(2.0), Vineri(1.0), Intervale(2.5), Motiv(1.5)
+    widths = {0: 0.5, 1: 0.7, 2: 1.8, 3: 1.0, 4: 2.8, 5: 1.5} # Inches
+    for col_idx, width_val in widths.items():
+        for row in table.rows:
+            if col_idx < len(row.cells): # Check if cell exists
+                 row.cells[col_idx].width = Inches(width_val)
+
+    style = document.styles['Normal']
+    font = style.font
+    font.name = 'Calibri'
+    font.size = Pt(11)
+
+    f = io.BytesIO()
+    document.save(f)
+    f.seek(0)
+
+    filename = f"Raport_Invoiri_Weekend_{current_user.username}_{date.today().strftime('%Y%m%d')}.docx"
+
+    return send_file(f,
+                     download_name=filename,
+                     as_attachment=True,
+                     mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
 
 @app.route('/gradat/weekend_leaves/delete/<int:leave_id>', methods=['POST'])
 @app.route('/admin/weekend_leaves/delete/<int:leave_id>', methods=['POST'])

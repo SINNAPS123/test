@@ -62,7 +62,40 @@
                             </span>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('dashboard') }}">Panou Control</a>
+                            <a class="nav-link" href="{{ url_for('dashboard') }}">Panou Principal</a>
+                        </li>
+
+                        <!-- Dropdown pentru secțiuni specifice rolului -->
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarRoleSpecificLinks" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                Navigare Rapidă
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarRoleSpecificLinks">
+                                {% if current_user.role == 'gradat' %}
+                                    <li><a class="dropdown-item" href="{{ url_for('list_students') }}">Studenți</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('list_permissions') }}">Permisii</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('list_daily_leaves') }}">Învoiri Zilnice</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('list_weekend_leaves') }}">Învoiri Weekend</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('list_services') }}">Servicii</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('volunteer_home') }}">Voluntariat</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('presence_report') }}">Raport Prezență</a></li>
+                                {% elif current_user.role == 'admin' %}
+                                    <li><a class="dropdown-item" href="{{ url_for('admin_dashboard_route') }}">Management Utilizatori</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('list_students') }}">Listă Studenți (Admin)</a></li>
+                                    {# Adaugă alte linkuri specifice adminului aici dacă e cazul #}
+                                {% elif current_user.role == 'comandant_companie' %}
+                                    <li><a class="dropdown-item" href="{{ url_for('company_commander_dashboard') }}">Panou Comandant Companie</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('text_report_display_company') }}">Raport Text Companie</a></li>
+                                     {# Alte linkuri pentru comandant companie #}
+                                {% elif current_user.role == 'comandant_batalion' %}
+                                    <li><a class="dropdown-item" href="{{ url_for('battalion_commander_dashboard') }}">Panou Comandant Batalion</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('text_report_display_battalion') }}">Raport Text Batalion</a></li>
+                                     {# Alte linkuri pentru comandant batalion #}
+                                {% endif %}
+                                 <li><hr class="dropdown-divider"></li>
+                                 <li><a class="dropdown-item" href="{{ url_for('dashboard') }}">Panou Principal Rol</a></li>
+                            </ul>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('logout') }}">Deconectare</a>
