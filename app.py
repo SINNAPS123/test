@@ -1,5 +1,6 @@
 from flask import Flask, render_template, redirect, url_for, flash, request, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate # Added for database migrations
 from sqlalchemy.orm import joinedload
 import io
 from docx import Document
@@ -73,6 +74,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) # Sesiune permanentă de 30 de zile
 
 db = SQLAlchemy(app)
+migrate = Migrate(app, db) # Initialize Flask-Migrate
 login_manager = LoginManager(app)
 login_manager.login_view = 'user_login'
 login_manager.login_message_category = 'info'
@@ -689,15 +691,15 @@ def admin_dashboard_route():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    if current_user.role == 'admin': return redirect(url_for('admin_dashboard_route'))
+    if current_user.role == 'admin':
+        return redirect(url_for('admin_dashboard_route'))
     elif current_user.role == 'gradat':
         student_ids_managed = [s.id for s in Student.query.filter_by(created_by_user_id=current_user.id).with_entities(Student.id).all()]
         student_count = len(student_ids_managed)
 
-    today_localized = get_localized_now().date()
-    today_start = datetime.combine(today_localized, time.min)
-    today_end = datetime.combine(today_localized, time.max)
-    # now = get_localized_now() # 'now' variabila nu este folosita direct aici, today_start/end sunt suficiente
+        today_localized = get_localized_now().date()
+        today_start = datetime.combine(today_localized, time.min)
+        today_end = datetime.combine(today_localized, time.max)
 
         # Permisii active AZI (se suprapun cu ziua de azi)
         permissions_today_count = Permission.query.filter(
@@ -714,20 +716,16 @@ def dashboard():
             DailyLeave.leave_date == today_localized # Folosim data localizată
         ).count()
 
-        # Învoiri weekend active AZI (cel puțin un interval se suprapune cu ziua de azi)
-        # Acest calcul poate fi mai complex; o simplificare este să numărăm cele care au is_any_interval_active_now și al căror weekend_start_date este recent.
-        # Pentru o acuratețe mai mare, ar trebui iterat prin get_intervals și verificată fiecare dată.
-        # Deocamdată, folosim o aproximare bazată pe weekend-uri care includ ziua de azi.
+        # Învoiri weekend active AZI
         weekend_leaves_active_today = 0
         all_wl_gradat = WeekendLeave.query.filter(WeekendLeave.student_id.in_(student_ids_managed), WeekendLeave.status == 'Aprobată').all()
         for wl in all_wl_gradat:
             for interval in wl.get_intervals():
-                # Verificăm dacă intervalul (care poate trece în ziua următoare) se suprapune cu ziua de azi
                 if interval['start'].date() == today_localized or \
                    interval['end'].date() == today_localized or \
                    (interval['start'].date() < today_localized and interval['end'].date() > today_localized):
                     weekend_leaves_active_today += 1
-                    break # Trecem la următoarea învoire de weekend
+                    break
 
         # Servicii active AZI
         services_today_count = ServiceAssignment.query.filter(
@@ -745,8 +743,11 @@ def dashboard():
                                weekend_leaves_today_count=weekend_leaves_active_today,
                                services_today_count=services_today_count,
                                total_volunteer_activities=total_volunteer_activities)
-    elif current_user.role == 'comandant_companie': return redirect(url_for('company_commander_dashboard'))
-    elif current_user.role == 'comandant_batalion': return redirect(url_for('battalion_commander_dashboard'))
+    elif current_user.role == 'comandant_companie':
+        return redirect(url_for('company_commander_dashboard'))
+    elif current_user.role == 'comandant_batalion':
+        return redirect(url_for('battalion_commander_dashboard'))
+
     return render_template('dashboard.html', name=current_user.username)
 
 # --- Admin User Management ---
@@ -5208,7 +5209,25 @@ def gradat_bulk_add_permission():
 
 if __name__ == '__main__':
     with app.app_context():
+        from flask_migrate import upgrade
+
+        print("--------------------------------------------------------")
+        user_input = input("Do you want to attempt to apply database migrations? (yes/no): ")
+        print("--------------------------------------------------------")
+
+        if user_input.lower() == 'yes':
+            try:
+                print("Attempting to apply database migrations...")
+                upgrade()
+                print("Database migrations applied successfully or no new migrations were found.")
+            except Exception as e:
+                print(f"Error applying database migrations: {e}")
+        else:
+            print("Skipping database migrations.")
+
+        # Initialize DB (for admin user creation, etc.)
         init_db()
+
     app.run(host='0.0.0.0', port=5001, debug=False)
 
 [end of app.py]
