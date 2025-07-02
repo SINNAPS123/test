@@ -3,3 +3,4 @@ Flask-SQLAlchemy
 Flask-Login
 bcrypt
 unidecode
+python-docx
