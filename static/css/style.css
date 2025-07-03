@@ -344,8 +344,18 @@ body.dark-mode .table thead th {
     border-radius: 0.25rem;
     padding: 0.4rem 0.8rem; /* Redus padding btn */
     font-weight: 500;
-    transition: color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out;
+    transition: color .15s ease-in-out, background-color .15s ease-in-out, border-color .15s ease-in-out, box-shadow .15s ease-in-out, transform .15s ease-in-out; /* Adăugat transform */
 }
+.btn:hover {
+    transform: translateY(-1px); /* Mic efect de ridicare */
+    filter: brightness(95%); /* Ușor mai întunecat la hover, sau brightness(105%) pentru mai luminos */
+}
+/* Pentru butoanele outline, vrem ca textul și border-ul să devină mai opace, nu tot butonul */
+.btn-outline-primary:hover, .btn-outline-secondary:hover {
+    filter: none; /* Anulăm filter brightness general pentru outline */
+    /* Efectul de umplere la hover e deja definit de Bootstrap și e suficient */
+}
+
 .btn-primary {
     background-color: var(--accent-primary);
     border-color: var(--accent-primary);
@@ -456,6 +466,43 @@ body.dark-mode .table thead th {
     color: var(--text-secondary) !important;
 }
 
+/* Animation for content fade-in */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(15px); /* Slight upward movement */
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.content-wrapper-animated {
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Icon Animations */
+.icon-rotate-hover {
+    display: inline-block; /* Necessary for transform to work as expected */
+    transition: transform 0.3s ease-in-out;
+}
+
+.icon-rotate-hover:hover {
+    transform: rotate(15deg); /* Slight rotation on hover */
+}
+
+/* Specific hover for settings/refresh icons for full rotation */
+.icon-spin-hover:hover {
+    animation: spin 1s ease-in-out;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+
 /* Hr */
 hr {
     border-top: 1px solid var(--border-color);
@@ -537,16 +584,37 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
         margin-bottom: 0.25rem; /* Adaugă un mic spațiu sub butoane dacă se împachetează */
     }
     .table td form.d-inline { /* Asigură că formularele inline nu cauzează probleme de layout */
-        display: block; /* Poate fi necesar ca butoanele de ștergere să ocupe lățime completă */
+        /* display: block; Pot fi probleme dacă vrem btn-group */
         margin-bottom: 0.25rem;
     }
-    .table td form.d-inline .btn {
-        width: 100%; /* Butoanele de ștergere să ocupe lățimea disponibilă */
+    /* Face butoanele individuale (nu cele din grup) să ocupe lățimea maximă */
+    .table td > form.d-inline .btn,
+    .table td > a.btn,
+    .table td > button.btn:not([type='submit']) {
+        width: 100%;
+        margin-right: 0; /* Eliminăm margin-right dacă sunt full-width */
     }
-     .table td a.btn, .table td button.btn:not([type='submit']) { /* Butoane de editare/anulare etc. */
-        width: auto; /* Lățime automată pentru acestea */
-        margin-right: 0.25rem; /* Spațiu între ele dacă sunt pe același rând */
+    /* Menține butoanele dintr-un btn-group inline */
+    .table td .btn-group .btn,
+    .table td .btn-group form.d-inline .btn {
+        width: auto !important; /* Important pentru a suprascrie regula de mai sus */
     }
+    .table td .btn-group {
+        display: flex; /* Asigură că btn-group se întinde dacă e nevoie */
+        flex-wrap: wrap; /* Permite wrap pentru butoane în grup */
+        width: 100%; /* btn-group să ocupe lățimea celulei */
+        justify-content: flex-start; /* Aliniere butoane în grup */
+    }
+    .table td .btn-group > .btn,
+    .table td .btn-group > form { /* Spațiere între elementele din btn-group când fac wrap */
+        margin-bottom: 0.25rem;
+        margin-right: 0.25rem;
+    }
+    .table td .btn-group > *:last-child {
+        margin-right: 0;
+    }
+
+
 }
 
 /* Utility classes */
@@ -571,10 +639,15 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
         text-align: center;
         margin-bottom: 0.5rem;
         margin-right: 0 !important; /* Override me-2 for centering */
+        font-size: 0.8rem; /* Reduced font size for login info on mobile */
     }
 }
 
 @media (max-width: 575.98px) { /* Extra small devices (phones) */
+    .container, .container-fluid {
+        padding-left: 0.75rem; /* Further reduce padding on very small screens */
+        padding-right: 0.75rem;
+    }
     /* Navbar brand logo text defined in base.html, style it here for small screens */
     /* Assuming .unap-logo-text is a child of .navbar-brand */
     .navbar .navbar-brand .unap-logo-text { /* More specific selector if needed */
@@ -583,5 +656,18 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
     .navbar .navbar-brand {
         padding-top: 0.1rem;
         padding-bottom: 0.1rem;
+    }
+
+    /* Reduce card header/title font size on small screens */
+    .card-header h1, .card-header h2, .card-header h3, .card-header h4, .card-header h5, .card-header h6,
+    .card-title { /* Also target .card-title directly if used outside header */
+        font-size: 1.1rem; /* Adjust as needed */
+    }
+    .card-body, .card-footer {
+        font-size: 0.85rem; /* Slightly reduce body/footer font in cards too */
+    }
+    .card-body .btn { /* Ensure buttons in cards are also smaller if not already btn-sm */
+        font-size: 0.8rem;
+        padding: 0.3rem 0.6rem;
     }
 }
