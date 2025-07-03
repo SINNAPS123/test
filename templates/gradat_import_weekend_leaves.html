@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Import Învoiri Weekend în Masă{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Import Învoiri Weekend în Masă</h2>
+        <a href="{{ url_for('list_weekend_leaves') }}" class="btn btn-outline-secondary btn-sm">&laquo; Înapoi la Lista de Învoiri Weekend</a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title">Instrucțiuni Format Text</h5>
+            <p>Introduceți datele învoirilor de weekend, fiecare învoire pe un singur rând. Format per linie:</p>
+            <p><code>Grad Nume Prenume, DD.MM.YYYY HH:MM-HH:MM [, DD.MM.YYYY HH:MM-HH:MM ... ] [, biserica]</code></p>
+            <ul style="font-size: 0.9em; padding-left: 1.5rem;">
+                <li>Numele studentului și gradul trebuie să fie la început.</li>
+                <li>Intervalele de timp trebuie să fie în formatul <code>DD.MM.YYYY HH:MM-HH:MM</code>. Puteți specifica unul, două sau trei intervale (Vineri, Sâmbătă, Duminică), separate prin virgulă.</li>
+                <li>Datele trebuie să corespundă zilelor de Vineri, Sâmbătă, Duminică ale aceluiași weekend. Sistemul va determina automat weekend-ul pe baza primei date valide.</li>
+                <li>Pentru participare la biserică Duminica, adăugați <code>, biserica</code> la sfârșitul liniei (doar dacă Duminica este una din zilele de învoire).</li>
+            </ul>
+            <p><strong>Exemple:</strong></p>
+            <pre class="bg-light p-2 border rounded" style="font-size: 0.85em;"><code>Sdt. Popescu Ion, 02.08.2024 16:00-22:00, 03.08.2024 08:00-22:00, 04.08.2024 08:00-21:00, biserica
+Cap. Ionescu Ana, 02.08.2024 18:00-22:00
+M.m.IV Vasilescu Radu, 03.08.2024 10:00-20:00, 04.08.2024 10:00-18:00</code></pre>
+            <p class="small text-muted">
+                Fiecare intrare trebuie să fie pe un rând nou.
+                Sistemul va încerca să identifice corect studentul pe baza gradului și numelui. Asigurați-vă că acestea corespund cu cele din baza de date.
+            </p>
+
+            <hr class="my-4">
+
+            <form method="POST" action="{{ url_for('gradat_page_import_weekend_leaves') }}">
+                <div class="mb-3">
+                    <label for="weekend_leave_bulk_data" class="form-label">Date Învoiri Weekend (copiați textul aici):</label>
+                    <textarea class="form-control" id="weekend_leave_bulk_data" name="weekend_leave_bulk_data" rows="15" required placeholder="Introduceți datele conform formatului de mai sus..."></textarea>
+                </div>
+                {% if error_details %}
+                    <div class="alert alert-danger">
+                        <p class="mb-1"><strong>S-au găsit următoarele erori:</strong></p>
+                        <ul class="mb-0" style="font-size:0.9em;">
+                        {% for err in error_details %}
+                            <li>Linia: "<code>{{ err.line|truncate(80, True) }}</code>" - Eroare: {{ err.error }}</li>
+                        {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload"></i> Importă Învoiri Weekend
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

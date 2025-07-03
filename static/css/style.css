@@ -262,14 +262,18 @@ body.dark-mode .table-success,
 body.dark-mode .table-success > th,
 body.dark-mode .table-success > td {
     background-color: rgba(40, 167, 69, 0.2) !important; /* Verde mai transparent și mai puțin intens */
-    color: #c6f6d5 !important; /* Text verde deschis, lizibil pe fundal închis */
+    color: var(--text-primary) !important; /* Text primar din dark-mode (ex. #f0f0f0) pentru contrast maxim */
 }
 body.dark-mode .table-success .badge {
     color: #000 !important; /* Text negru pentru badge-uri pe fundal verde deschis, pentru contrast */
     background-color: rgba(40, 167, 69, 0.5) !important; /* Fundal badge mai opac */
 }
 body.dark-mode .table-success a {
-    color: #b3ffc6 !important; /* Linkuri mai vizibile */
+    color: #b3ffc6 !important; /* Linkuri mai vizibile - acestea pot rămâne așa sau ajustate dacă este necesar */
+    /* Dacă linkurile trebuie să fie și ele var(--text-primary), atunci se modifică aici. Momentan le las. */
+    /* O alternativă pentru linkuri, dacă se dorește aceeași culoare ca textul normal: */
+    /* color: var(--text-primary) !important; */
+    /* text-decoration: underline; */ /* Poate fi adăugat dacă se dorește subliniere explicită */
 }
 
 

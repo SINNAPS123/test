@@ -60,7 +60,7 @@
                 <div class="card-body">
                     <h5 class="card-title">Permisii <span class="text-muted small">(în ziua de azi)</span></h5>
                     <p class="card-text fs-4 fw-bold">{{ permissions_today_count }}</p>
-                    <a href="{{ url_for('admin_list_permissions') }}" class="btn btn-sm btn-outline-secondary">Vezi Lista Generală</a>
+                    <a href="{{ url_for('view_scoped_permissions') }}" class="btn btn-sm btn-outline-secondary">Vezi Detalii Permisii</a>
                 </div>
             </div>
         </div>
@@ -70,7 +70,8 @@
                     <h5 class="card-title">Învoiri <span class="text-muted small">(în ziua de azi)</span></h5>
                     <p class="card-text fs-4 fw-bold">{{ total_leaves_today_count }}</p>
                     <small>(Zilnice: {{ daily_leaves_today_company }}, Weekend: {{ weekend_leaves_today_company }})</small><br>
-                    <a href="{{ url_for('admin_list_daily_leaves') }}" class="btn btn-sm btn-outline-secondary mt-1">Vezi Liste Generale</a>
+                    <a href="{{ url_for('view_scoped_daily_leaves') }}" class="btn btn-sm btn-outline-secondary mt-1">Detalii Învoiri Zilnice</a>
+                    <a href="{{ url_for('view_scoped_weekend_leaves') }}" class="btn btn-sm btn-outline-secondary mt-1">Detalii Învoiri Weekend</a>
                 </div>
             </div>
         </div>
@@ -79,7 +80,7 @@
                 <div class="card-body">
                     <h5 class="card-title">În Serviciu <span class="text-muted small">(în ziua de azi)</span></h5>
                     <p class="card-text fs-4 fw-bold">{{ services_today_count }}</p>
-                    <a href="{{ url_for('admin_list_services') }}" class="btn btn-sm btn-outline-secondary">Vezi Lista Generală</a>
+                    <a href="{{ url_for('view_scoped_services') }}" class="btn btn-sm btn-outline-secondary">Vezi Detalii Servicii</a>
                 </div>
             </div>
         </div>
