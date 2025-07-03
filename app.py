@@ -65,6 +65,10 @@ def localdate_filter(d, fmt='%d-%m-%Y'):
     # Data (date object) nu are fus orar.
     return d.strftime(fmt)
 
+@app.context_processor
+def inject_global_vars():
+    return dict(get_localized_now=get_localized_now)
+
 # IMPORTANT: Change this to a strong, unique, and static secret key in a real environment!
 # Using a static key is crucial for session persistence across app restarts.
 # For production, load from an environment variable.

@@ -26,17 +26,17 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center">
         <h2 class="mb-3">Panou Comandant Batalionul {{ battalion_id }}</h2>
-        <div>
+        <div class="d-flex align-items-center">
             <a href="{{ url_for('export_permissions_scoped_word') }}" class="btn btn-sm btn-outline-primary me-2" title="Exportă raportul de permisii active/viitoare pentru batalion">
-                <i class="fas fa-file-word"></i> Export Permisii
+                <i class="fas fa-file-word icon-rotate-hover"></i> Export Permisii
             </a>
             <a href="{{ url_for('export_weekend_leaves_scoped_word') }}" class="btn btn-sm btn-outline-primary me-2" title="Exportă raportul de învoiri de weekend active/viitoare pentru batalion">
-                <i class="fas fa-file-word"></i> Export Învoiri Wk.
+                <i class="fas fa-file-word icon-rotate-hover"></i> Export Învoiri Wk.
             </a>
             <a href="{{ url_for('battalion_commander_logs') }}" class="btn btn-sm btn-outline-info me-2" title="Vezi jurnalul de acțiuni pentru batalionul tău">
-                <i class="fas fa-history"></i> Jurnal Acțiuni Batalion
+                <i class="fas fa-history icon-spin-hover"></i> Jurnal Acțiuni Batalion
             </a>
-            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm ms-2"> <!-- Adăugat ms-2 pentru separare -->
                 &laquo; Înapoi la Panoul Principal
             </a>
         </div>
@@ -120,7 +120,7 @@
     <div class="d-flex justify-content-between align-items-center">
         <h4 class="mb-3">Situația la Apelul de Seară (<span class="text-muted">{{ roll_call_time_str }}</span>)</h4>
         <a href="{{ url_for('text_report_display_battalion') }}" class="btn btn-sm btn-outline-secondary" title="Vezi raportul text complet pentru apelul de seară">
-            <i class="fas fa-file-alt"></i> Raport Text Apel
+            <i class="fas fa-file-alt icon-rotate-hover"></i> Raport Text Apel
         </a>
     </div>
 
