@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>{{ title }}</h2>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Panou Gradat</a>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Filtre Istoric</h5>
+        </div>
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('gradat_invoiri_istoric') }}">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label for="perioada" class="form-label form-label-sm">Perioada:</label>
+                        <select name="perioada" id="perioada" class="form-select form-select-sm" onchange="toggleCustomDate(this.value)">
+                            <option value="toate" {% if selected_period == 'toate' %}selected{% endif %}>Toate învoirile</option>
+                            <option value="ieri" {% if selected_period == 'ieri' %}selected{% endif %}>Ieri</option>
+                            <option value="ultimele_2_zile" {% if selected_period == 'ultimele_2_zile' %}selected{% endif %}>Ultimele 2 zile</option>
+                            <option value="ultimele_7_zile" {% if selected_period == 'ultimele_7_zile' or not selected_period %}selected{% endif %}>Ultimele 7 zile</option>
+                            <option value="custom" {% if selected_period == 'custom' %}selected{% endif %}>Interval customizat</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3" id="custom_date_start_col" style="display: {% if selected_period == 'custom' %}block{% else %}none{% endif %};">
+                        <label for="data_start_custom" class="form-label form-label-sm">Data început:</label>
+                        <input type="date" name="data_start_custom" id="data_start_custom" class="form-control form-control-sm" value="{{ selected_start_custom if selected_start_custom else get_localized_now().date().strftime('%Y-%m-%d') }}">
+                    </div>
+                    <div class="col-md-3" id="custom_date_end_col" style="display: {% if selected_period == 'custom' %}block{% else %}none{% endif %};">
+                        <label for="data_sfarsit_custom" class="form-label form-label-sm">Data sfârșit:</label>
+                        <input type="date" name="data_sfarsit_custom" id="data_sfarsit_custom" class="form-control form-control-sm" value="{{ selected_end_custom if selected_end_custom else get_localized_now().date().strftime('%Y-%m-%d') }}">
+                    </div>
+                    <div class="col-md-auto">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="fas fa-filter me-1"></i> Filtrează
+                        </button>
+                    </div>
+                     <div class="col-md-auto">
+                        <button type="button" class="btn btn-info btn-sm" onclick="copyTableData()">
+                            <i class="fas fa-copy me-1"></i> Copie Listă
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if leaves_history %}
+    <div class="table-responsive shadow-sm">
+        <table class="table table-striped table-hover table-sm" id="invoiriHistoryTable">
+            <thead class="table-light">
+                <tr>
+                    <th>Nr. Crt.</th>
+                    <th>Student</th>
+                    <th>Tip Învoire</th>
+                    <th>Dată Început</th>
+                    <th>Ora Început</th>
+                    <th>Ora Sfârșit</th>
+                    <th>Detalii Specificare Timp</th>
+                    <th>Motiv</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for leave in leaves_history %}
+                <tr class="{% if leave.status == 'Anulată' %}table-secondary text-muted{% elif leave.status == 'Aprobată' and leave.tip == 'Zilnică' and (leave.data_start < get_localized_now().date() or (leave.data_start == get_localized_now().date() and leave.ora_sfarsit < get_localized_now().time())) %}table-light{% elif leave.status == 'Aprobată' and leave.tip == 'Weekend' and leave.data_start < (get_localized_now().date() - timedelta(days=2)) %}table-light{% endif %}">
+                    <td>{{ loop.index }}</td>
+                    <td>{{ leave.student_name }}</td>
+                    <td>
+                        <span class="badge {% if leave.tip == 'Zilnică' %}bg-success{% elif leave.tip == 'Weekend' %}bg-info{% else %}bg-secondary{% endif %}">
+                            {{ leave.tip }}
+                        </span>
+                    </td>
+                    <td>{{ leave.data_start | localdate('%d.%m.%Y') }}</td>
+                    <td>{{ leave.ora_start.strftime('%H:%M') if leave.ora_start else '-' }}</td>
+                    <td>{{ leave.ora_sfarsit.strftime('%H:%M') if leave.ora_sfarsit else '-' }}</td>
+                    <td>{{ leave.detalii }}</td>
+                    <td>{{ leave.motiv }}</td>
+                    <td>
+                        <span class="badge {% if leave.status == 'Aprobată' %}bg-success{% elif leave.status == 'Anulată' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                            {{ leave.status }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info" role="alert">
+        Nicio învoire găsită pentru filtrele selectate sau nu există învoiri în istoricul plutonului.
+    </div>
+    {% endif %}
+
+</div>
+
+<script>
+function toggleCustomDate(selectedValue) {
+    const startDateCol = document.getElementById('custom_date_start_col');
+    const endDateCol = document.getElementById('custom_date_end_col');
+    if (selectedValue === 'custom') {
+        startDateCol.style.display = 'block';
+        endDateCol.style.display = 'block';
+    } else {
+        startDateCol.style.display = 'none';
+        endDateCol.style.display = 'none';
+    }
+}
+
+function copyTableData() {
+    const table = document.getElementById('invoiriHistoryTable');
+    if (!table) {
+        alert("Tabelul nu a fost găsit!");
+        return;
+    }
+
+    let dataToCopy = "";
+    const headers = [];
+    table.querySelectorAll('thead th').forEach(th => {
+        headers.push(th.innerText.trim());
+    });
+    dataToCopy += headers.join('\t') + '\n'; // Tab-separated headers
+
+    table.querySelectorAll('tbody tr').forEach(tr => {
+        const rowData = [];
+        tr.querySelectorAll('td').forEach(td => {
+            rowData.push(td.innerText.trim());
+        });
+        dataToCopy += rowData.join('\t') + '\n'; // Tab-separated row data
+    });
+
+    navigator.clipboard.writeText(dataToCopy)
+        .then(() => {
+            alert('Lista a fost copiată în clipboard!');
+        })
+        .catch(err => {
+            alert('Eroare la copierea listei: ' + err);
+            // Fallback for older browsers or if clipboard API fails (less common now)
+            try {
+                const textArea = document.createElement("textarea");
+                textArea.value = dataToCopy;
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('Lista a fost copiată în clipboard (metoda fallback)!');
+            } catch (execErr) {
+                alert('Eroare la copierea listei (metoda fallback): ' + execErr);
+            }
+        });
+}
+
+// Call on page load to set initial state of custom date fields
+document.addEventListener('DOMContentLoaded', function() {
+    const perioadaSelect = document.getElementById('perioada');
+    if (perioadaSelect) {
+        toggleCustomDate(perioadaSelect.value);
+    }
+});
+</script>
+{% endblock %}

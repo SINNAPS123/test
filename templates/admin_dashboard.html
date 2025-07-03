@@ -98,6 +98,19 @@
                         <i class="fas fa-file-word icon-rotate-hover"></i> Export Învoiri Weekend (Toate)
                     </a>
                     <!-- Alte link-uri admin pot fi adăugate aici -->
+
+                    <hr class="my-3">
+                    <h6 class="text-muted">Exporturi Generale (Text):</h6>
+                    <a href="{{ url_for('admin_export_studenti_text') }}" class="btn btn-sm btn-outline-secondary mb-2" title="Exportă toți studenții în format text simplu">
+                        <i class="fas fa-file-alt icon-rotate-hover"></i> Export Studenți (Text)
+                    </a>
+                    <a href="{{ url_for('admin_export_permisii_text') }}" class="btn btn-sm btn-outline-secondary mb-2" title="Exportă toate permisiile în format text simplu">
+                        <i class="fas fa-file-alt icon-rotate-hover"></i> Export Permisii (Text)
+                    </a>
+                    <a href="{{ url_for('admin_export_invoiri_text') }}" class="btn btn-sm btn-outline-secondary mb-2" title="Exportă toate învoirile (zilnice și weekend) în format text simplu">
+                        <i class="fas fa-file-alt icon-rotate-hover"></i> Export Învoiri (Text)
+                    </a>
+
                 </div>
             </div>
         </div>
