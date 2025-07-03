@@ -7,13 +7,13 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="mb-0">Listă Permisii</h2> <!-- mb-0 for alignment -->
         <div class="d-flex align-items-center">
-            <button type="button" class="btn btn-info btn-sm me-2" data-bs-toggle="modal" data-bs-target="#bulkImportPermissionsModal" title="Importă mai multe permisii dintr-un text copiat">
+            <a href="{{ url_for('gradat_page_import_permissions') }}" class="btn btn-info btn-sm me-2" title="Importă mai multe permisii dintr-un text copiat">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-upload me-1 icon-rotate-hover" viewBox="0 0 16 16">
                     <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
                     <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
                 </svg>
-                Importă (Text)
-            </button>
+                Importă Permisii (Pagină Nouă)
+            </a>
             <a href="{{ url_for('gradat_export_permissions_word') }}" class="btn btn-outline-primary btn-sm me-2" title="Exportă permisiile active/viitoare în format Word">
                 <i class="fas fa-file-word icon-rotate-hover"></i> Exportă (Word)
             </a>
@@ -121,55 +121,7 @@
     </p>
 </div>
 
-<!-- Modal pentru Bulk Import Permisii (Simplified for debugging) -->
-<div class="modal fade" id="bulkImportPermissionsModal" tabindex="-1" aria-labelledby="bulkImportPermissionsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <form action="{{ url_for('gradat_bulk_import_permissions') }}" method="POST">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="bulkImportPermissionsModalLabel">Import Permisii în Masă</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Introduceți datele permisiilor, fiecare permisie pe rânduri consecutive, separate de un rând gol. Format per permisie:</p>
-                    <ol style="font-size: 0.9em; padding-left: 1.5rem;">
-                        <li>Linia 1: <code>Grad Nume Prenume</code></li>
-                        <li>Linia 2: <code>DD.MM.YYYY HH:MM - [DD.MM.YYYY ]HH:MM</code> (dacă data de sfârșit e aceeași, se poate omite)</li>
-                        <li>Linia 3: <code>Destinația</code></li>
-                        <li>Linia 4 (Opțional): <code>Mijloc de transport</code> (lăsați rând gol dacă nu se aplică)</li>
-                        <li>Linia 5 (Opțional): <code>Motiv/Observații/Nr. Auto</code> (lăsați rând gol dacă nu se aplică)</li>
-                    </ol>
-                    <p><strong>Exemplu:</strong></p>
-                    <pre style="font-size: 0.85em; padding: 0.5em; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 0.25rem;"><code>M.m.IV Renț Francisc
-04.07.2024 15:00 - 06.07.2024 22:00
-Slobozia, Argeș
-Autoturism personal
-AG 03 RXF
+{# Modalul pentru Bulk Import Permisii a fost eliminat. Funcționalitatea este acum pe o pagină separată. #}
+{# Se poate șterge acest comentariu și tot conținutul modalului dacă nu mai este necesar ca referință. #}
 
-Sdt. Marinescu Ioana
-10.07.2024 08:00 - 18:00
-București
-Tren
-Vizită familie
-
-Cap. Ionescu Andrei
-12.07.2024 14:00 - 20:00
-Pitești
-Pietonal
-</code></pre>
-                    <p class="small text-muted">Asigurați-vă că există un rând gol între fiecare set de date pentru o permisie. Mijlocul de transport și motivul sunt opționale; dacă unul lipsește și celălalt este prezent, lăsați un rând gol pentru cel lipsă pentru a menține structura.</p>
-
-                    <div class="mb-3">
-                        <label for="permission_bulk_data" class="form-label">Date Permisii:</label>
-                        <textarea class="form-control" id="permission_bulk_data" name="permission_bulk_data" rows="12" required placeholder="Introduceți datele aici..."></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anulează</button>
-                    <button type="submit" class="btn btn-primary">Importă Permisii</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
 {% endblock %}

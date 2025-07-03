@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Import Permisii în Masă{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Import Permisii în Masă</h2>
+        <a href="{{ url_for('list_permissions') }}" class="btn btn-outline-secondary btn-sm">&laquo; Înapoi la Lista de Permisii</a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title">Instrucțiuni Format Text</h5>
+            <p>Introduceți datele permisiilor, fiecare permisie pe un set de rânduri consecutive, separate de un rând gol. Format per permisie:</p>
+            <ol style="font-size: 0.9em; padding-left: 1.5rem;">
+                <li>Linia 1: <code>Grad Nume Prenume</code> (Ex: Sdt. Popescu Ion)</li>
+                <li>Linia 2: <code>DD.MM.YYYY HH:MM - [DD.MM.YYYY ]HH:MM</code> (Ex: 01.08.2024 14:00 - 03.08.2024 22:00 sau 01.08.2024 08:00 - 16:00)</li>
+                <li>Linia 3: <code>Destinația</code> (Ex: București, Acasă)</li>
+                <li>Linia 4 (Opțional): <code>Mijloc de transport</code> (Ex: Tren, Auto AG01XYZ)</li>
+                <li>Linia 5 (Opțional): <code>Motiv/Observații</code> (Ex: Probleme personale, Însoțitor)</li>
+            </ol>
+            <p><strong>Exemplu Complet:</strong></p>
+            <pre class="bg-light p-2 border rounded" style="font-size: 0.85em;"><code>Sdt. Ionescu Vasile
+05.08.2024 16:00 - 08.08.2024 21:30
+Constanța, Acasă
+Tren CFR
+Vizită familie
+
+Cap. Georgescu Maria
+10.08.2024 09:00 - 17:00
+Ploiești
+Auto B123ABC
+
+M.m.IV Popa Andrei
+12.08.2024 14:00 - 12.08.2024 20:00
+București, Spital
+Personal
+Control medical</code></pre>
+            <p class="small text-muted">
+                Asigurați-vă că există un rând gol între fiecare set de date pentru o permisie.
+                Câmpurile opționale (transport, motiv) pot fi omise; dacă unul lipsește și celălalt este prezent, lăsați un rând gol pentru cel lipsă pentru a menține structura corectă a liniilor dacă este necesar, sau pur și simplu omiteți linia. Sistemul va încerca să parseze corect.
+            </p>
+
+            <hr class="my-4">
+
+            <form method="POST" action="{{ url_for('gradat_page_import_permissions') }}">
+                <div class="mb-3">
+                    <label for="permission_bulk_data" class="form-label">Date Permisii (copiați textul aici):</label>
+                    <textarea class="form-control" id="permission_bulk_data" name="permission_bulk_data" rows="15" required placeholder="Introduceți datele conform formatului de mai sus..."></textarea>
+                </div>
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload"></i> Importă Permisii
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
