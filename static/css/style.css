@@ -81,6 +81,15 @@ body.dark-mode {
 
     /* Shadows might need to be less pronounced or use a lighter color if the background is very dark */
     /* For simplicity, we'll keep them for now, but they might be less effective */
+
+    /* Explicit text colors for headings and common elements in dark mode */
+    h1, h2, h3, h4, h5, h6, p, li, dt, dd {
+        color: var(--text-primary);
+    }
+    /* Ensure labels also get the primary text color */
+    label {
+        color: var(--text-primary);
+    }
 }
 
 body.dark-mode ::selection {
@@ -97,6 +106,18 @@ body.dark-mode .text-black {
     color: var(--text-primary) !important;
 }
 
+/* Style for .bg-light in dark mode */
+body.dark-mode .bg-light {
+    background-color: var(--bg-surface-hover) !important; /* A slightly lighter dark background */
+    color: var(--text-primary) !important; /* Ensure text on this background is light */
+}
+/* Ensure elements within .bg-light also inherit text color if needed, e.g., labels */
+body.dark-mode .bg-light label,
+body.dark-mode .bg-light .form-label {
+    color: var(--text-primary) !important;
+}
+
+
 body.dark-mode .table-striped > tbody > tr:nth-of-type(odd) > * {
     background-color: rgba(255, 255, 255, 0.04); /* Subtle light stripe */
 }
@@ -105,16 +126,21 @@ body.dark-mode .table-hover > tbody > tr:hover > * {
 }
 
 body.dark-mode .badge.bg-light { /* Make .bg-light distinct in dark mode */
-    background-color: var(--border-color) !important; /* Using a variable that's dark */
+    background-color: var(--border-color) !important; /* Using a variable that's dark, like a dark grey */
     color: var(--text-primary) !important; /* Text should be light */
 }
-body.dark-mode .badge.bg-warning { /* Ensure warning badge text is readable */
+/* Ensure text on .badge.bg-warning is dark for readability */
+body.dark-mode .badge.bg-warning,
+body.dark-mode .badge.status-urmeaza, /* Common class for "upcoming" status */
+body.dark-mode .badge[class*="bg-warning"] { /* Catch any badge with bg-warning */
     color: #212529 !important; /* Keep dark text on yellow */
+    /* background-color remains var(--accent-warning) or Bootstrap's default yellow */
 }
+
 
 /* Ensure any element with a warning background (yellow) has dark text in dark mode for readability */
 body.dark-mode [style*="background-color: var(--accent-warning)"],
-body.dark-mode .bg-warning,
+body.dark-mode .bg-warning, /* This includes .alert-warning if it uses .bg-warning */
 body.dark-mode [class*="status-urmeaza"], /* Catch classes like status-urmeaza, status-upcoming etc. */
 body.dark-mode [style*="background-color: yellow"],
 body.dark-mode [style*="background: yellow"] {
@@ -146,11 +172,65 @@ body.dark-mode input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 body.dark-mode .card-header {
     background-color: var(--bg-surface-hover);
     border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary); /* Ensure header text is also correct */
 }
 body.dark-mode .table thead th {
     background-color: var(--bg-surface-hover);
     border-bottom: 2px solid var(--border-color);
+    color: var(--text-primary); /* Ensure table header text is correct */
 }
+
+/* Dark Mode Modals */
+body.dark-mode .modal-content {
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+body.dark-mode .modal-header {
+    background-color: var(--bg-surface-hover); /* Slightly different background for header */
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
+}
+body.dark-mode .modal-header .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%); /* Make the 'X' button white */
+}
+body.dark-mode .modal-body {
+    color: var(--text-primary);
+}
+/* Ensure form elements inside modals are also styled correctly for dark mode */
+body.dark-mode .modal-body .form-label {
+    color: var(--text-primary);
+}
+body.dark-mode .modal-body .form-control {
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+    border-color: var(--input-border);
+}
+body.dark-mode .modal-body .form-control::placeholder {
+    color: var(--text-secondary);
+}
+body.dark-mode .modal-body .form-select {
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+    border-color: var(--input-border);
+}
+
+
+body.dark-mode .modal-footer {
+    background-color: var(--bg-surface-hover); /* Slightly different background for footer */
+    border-top: 1px solid var(--border-color);
+}
+/* Ensure buttons in modal footer are styled correctly if they are e.g. btn-secondary */
+body.dark-mode .modal-footer .btn-secondary {
+    color: var(--text-on-accent); /* Or var(--text-primary) if background is light enough */
+    background-color: var(--accent-secondary); /* Or a darker variant if needed */
+    border-color: var(--accent-secondary);
+}
+body.dark-mode .modal-footer .btn-secondary:hover {
+    background-color: var(--accent-secondary-darker);
+    border-color: var(--accent-secondary-darker);
+}
+
 
 /* Asigură contrast pentru rândurile de tabel colorate în dark mode */
 body.dark-mode .table-success,
