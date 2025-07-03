@@ -112,6 +112,23 @@ body.dark-mode .badge.bg-warning { /* Ensure warning badge text is readable */
     color: #212529 !important; /* Keep dark text on yellow */
 }
 
+/* Ensure any element with a warning background (yellow) has dark text in dark mode for readability */
+body.dark-mode [style*="background-color: var(--accent-warning)"],
+body.dark-mode .bg-warning,
+body.dark-mode [class*="status-urmeaza"], /* Catch classes like status-urmeaza, status-upcoming etc. */
+body.dark-mode [style*="background-color: yellow"],
+body.dark-mode [style*="background: yellow"] {
+    color: #212529 !important;
+}
+/* If text-white is explicitly used on a warning background, override it */
+body.dark-mode .bg-warning.text-white,
+body.dark-mode [style*="background-color: var(--accent-warning)"].text-white,
+body.dark-mode [style*="background-color: yellow"].text-white,
+body.dark-mode [style*="background: yellow"].text-white {
+    color: #212529 !important;
+}
+
+
 body.dark-mode .navbar-toggler-icon {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28224, 224, 224, 0.75%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e"); /* Lighter stroke for dark mode */
 }
