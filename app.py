@@ -3502,57 +3502,69 @@ def process_daily_leaves_text():
     if apply_date_obj.weekday() > 3: flash('Învoirile din text pot fi aplicate doar pentru zile de Luni până Joi.', 'warning'); return redirect(url_for('list_daily_leaves'))
 
     lines = leave_list_text.strip().splitlines()
-    students_managed_by_gradat = Student.query.filter_by(created_by_user_id=current_user.id).all()
+    # students_managed_by_gradat = Student.query.filter_by(created_by_user_id=current_user.id).all() # Nu mai este necesar aici
 
-    default_start_time_obj = time(15, 0) # Default start time if not specified in line
-    default_end_time_obj = time(19, 0)   # Default end time if not specified in line
+    default_start_time_obj = time(15, 0)
+    default_end_time_obj = time(19, 0)
 
     processed_count, error_count, already_exists_count = 0,0,0
-    not_found_or_ambiguous = []
+    error_details_import_dl = [] # Listă pentru a stoca detalii despre erori
 
     for line_raw in lines:
-        line = line_raw.strip()
-        if not line: continue
+        line_for_student_find = line_raw.strip()
+        if not line_for_student_find: continue
 
-        parsed_name_norm, parsed_grad, line_start_time, line_end_time = parse_leave_line(line)
+        # Extrage orele din linie, dacă există, înainte de a trimite la find_student_for_bulk_import
+        # parse_leave_line deja face asta și separă numele de oră.
+        # Reutilizăm parse_leave_line pentru a extrage numele și orele.
 
-        if not parsed_name_norm:
-            error_count +=1
-            flash(f"Linie ignorată (format nume/student invalid): '{line_raw}'", "info")
-            continue
+        # `parse_leave_line` returnează: normalized_name_search, grad, parsed_start_time_obj, parsed_end_time_obj
+        # normalized_name_search este numele fără grad.
+        # grad este gradul extras.
+        # Vom reconstrui "Nume Student Grad" pentru find_student_for_bulk_import dacă e posibil,
+        # sau vom folosi linia originală dacă `parse_leave_line` nu separă bine.
 
-        # Student matching logic (existing logic seems fine)
-        matched_students = []
-        for s in students_managed_by_gradat:
-            s_name_norm = unidecode(f"{s.nume} {s.prenume}".lower())
-            s_name_prenume_norm = unidecode(f"{s.prenume} {s.nume}".lower())
-            name_match = (parsed_name_norm in s_name_norm) or \
-                         (parsed_name_norm in s_name_prenume_norm) or \
-                         (s_name_norm in parsed_name_norm) # Allow partial matches too
+        temp_name_norm, temp_grad, temp_start_time, temp_end_time = parse_leave_line(line_for_student_find)
 
-            grad_match = True # Assume grad matches if not specified in input line
-            if parsed_grad:
-                s_grad_norm = parsed_grad.lower().replace('.', '')
-                db_s_grad_norm = s.grad_militar.lower().replace('.', '')
-                grad_match = (s_grad_norm in db_s_grad_norm or db_s_grad_norm in s_grad_norm)
+        # Construim șirul pentru căutarea studentului. `find_student_for_bulk_import` se așteaptă la "Grad Nume Prenume" sau "Nume Prenume"
+        # `parse_leave_line` returnează `temp_name_norm` ca "nume prenume" (sau ce a rămas după extragerea gradului și orei)
+        # și `temp_grad` ca gradul.
 
-            if name_match and grad_match:
-                matched_students.append(s)
+        student_search_string = ""
+        if temp_grad and temp_name_norm: # Avem și grad și nume
+            # `temp_name_norm` este deja normalizat (lowercase, unidecode). `find_student_for_bulk_import` face și el normalizare.
+            # Pentru a pasa corect, ar trebui să avem numele original.
+            # `parse_leave_line` ar trebui să returneze și numele original ne-normalizat.
+            # Modificare: Să folosim direct `line_for_student_find` pentru `find_student_for_bulk_import`
+            # și să extragem orele separat.
 
-        found_student = None
-        if len(matched_students) == 1:
-            found_student = matched_students[0]
-        elif len(matched_students) > 1:
-            not_found_or_ambiguous.append(f"{line_raw} (potriviri multiple: {', '.join([s.nume for s in matched_students])})")
-            error_count += 1
-            continue
-        else:
-            not_found_or_ambiguous.append(f"{line_raw} (student negăsit)")
+            # Abordare mai simplă: extragem orele întâi, restul e numele + gradul.
+            time_match_in_line = re.search(r"(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$", line_for_student_find.strip())
+            student_name_grad_part = line_for_student_find.strip()
+            line_start_time_obj = None
+            line_end_time_obj = None
+
+            if time_match_in_line:
+                student_name_grad_part = line_for_student_find.strip()[:time_match_in_line.start()].strip()
+                try:
+                    line_start_time_obj = datetime.strptime(time_match_in_line.group(1), "%H:%M").time()
+                    line_end_time_obj = datetime.strptime(time_match_in_line.group(2), "%H:%M").time()
+                except ValueError:
+                    pass # Orele nu sunt valide, vor fi tratate ca parte din nume sau se vor folosi cele default
+
+            found_student, student_error = find_student_for_bulk_import(student_name_grad_part, current_user.id)
+
+            if student_error:
+                error_details_import_dl.append(f"Linia '{line_raw}': {student_error}")
+                error_count += 1
+                continue
+        else: # Student negăsit sau eroare la parsarea inițială
+            error_details_import_dl.append(f"Linia '{line_raw}': Nu s-a putut identifica studentul sau format invalid.")
             error_count += 1
             continue
 
         # Determine start and end times for the leave
-        current_start_time = line_start_time if line_start_time else default_start_time_obj
+        current_start_time = line_start_time_obj if line_start_time_obj else default_start_time_obj
         current_end_time = line_end_time if line_end_time else default_end_time_obj
 
         if line_start_time and not line_end_time: # If only start time is given, use default end time
@@ -5306,6 +5318,334 @@ def gradat_bulk_add_permission():
             db.session.commit()
 
     return render_template('bulk_add_permission.html', students=students_managed, form_data=None, timedelta=timedelta, get_localized_now=get_localized_now)
+
+
+# --- Istoric Învoiri Gradat ---
+@app.route('/gradat/invoiri/istoric', methods=['GET'], endpoint='gradat_invoiri_istoric')
+@login_required
+def gradat_invoiri_istoric():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    students_managed_by_gradat = Student.query.filter_by(created_by_user_id=current_user.id).with_entities(Student.id).all()
+    student_ids = [s[0] for s in students_managed_by_gradat]
+
+    if not student_ids:
+        return render_template('invoiri_istoric.html', leaves_history=[], title="Istoric Învoiri Pluton", form_data=request.args)
+
+    # Parsare filtre din request
+    perioada = request.args.get('perioada', 'ultimele_7_zile') # Default la ultimele 7 zile
+    data_start_custom_str = request.args.get('data_start_custom')
+    data_sfarsit_custom_str = request.args.get('data_sfarsit_custom')
+
+    end_date = get_localized_now().date() # Data de sfârșit a intervalului implicit
+    start_date = None
+
+    if perioada == 'ieri':
+        start_date = end_date - timedelta(days=1)
+        end_date = start_date # Pentru 'ieri', intervalul este o singură zi
+    elif perioada == 'ultimele_2_zile':
+        start_date = end_date - timedelta(days=1) # Ultimele 2 zile înseamnă ieri și azi
+    elif perioada == 'ultimele_7_zile':
+        start_date = end_date - timedelta(days=6)
+    elif perioada == 'custom' and data_start_custom_str and data_sfarsit_custom_str:
+        try:
+            start_date = datetime.strptime(data_start_custom_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(data_sfarsit_custom_str, '%Y-%m-%d').date()
+            if start_date > end_date:
+                flash('Data de început custom nu poate fi după data de sfârșit.', 'warning')
+                start_date = end_date # Sau resetează la un default valid
+        except ValueError:
+            flash('Format dată custom invalid. Se afișează ultimele 7 zile.', 'warning')
+            perioada = 'ultimele_7_zile' # Revert la default
+            start_date = get_localized_now().date() - timedelta(days=6)
+            end_date = get_localized_now().date()
+    elif perioada == 'toate':
+        start_date = None # Fără filtru de start
+        end_date = None   # Fără filtru de end
+    else: # Default la ultimele 7 zile dacă perioada e invalidă
+        start_date = get_localized_now().date() - timedelta(days=6)
+        end_date = get_localized_now().date()
+
+
+    leaves_history = []
+
+    # Procesare Daily Leaves
+    daily_leaves_query = DailyLeave.query.options(joinedload(DailyLeave.student)).filter(DailyLeave.student_id.in_(student_ids))
+    if start_date and end_date : # Aplică filtru de dată doar dacă nu e "toate"
+        daily_leaves_query = daily_leaves_query.filter(DailyLeave.leave_date >= start_date, DailyLeave.leave_date <= end_date)
+
+    for dl in daily_leaves_query.order_by(DailyLeave.leave_date.desc(), DailyLeave.start_time.desc()).all():
+        leaves_history.append({
+            "student_name": f"{dl.student.grad_militar} {dl.student.nume} {dl.student.prenume}",
+            "tip": "Zilnică",
+            "data_start": dl.leave_date,
+            "ora_start": dl.start_time,
+            "ora_sfarsit": dl.end_time,
+            "detalii": f"{dl.leave_type_display}",
+            "motiv": dl.reason or "-",
+            "status": dl.status
+        })
+
+    # Procesare Weekend Leaves
+    weekend_leaves_query = WeekendLeave.query.options(joinedload(WeekendLeave.student)).filter(WeekendLeave.student_id.in_(student_ids))
+    # Pentru weekend leaves, filtrul de dată e mai complex.
+    # Vom prelua toate și vom filtra în Python dacă e necesar, sau adaptăm query-ul.
+    # Deocamdată, preluăm toate și filtrăm manual dacă nu e 'toate'.
+
+    all_wl_gradat = weekend_leaves_query.order_by(WeekendLeave.weekend_start_date.desc()).all()
+
+    for wl in all_wl_gradat:
+        # Verificăm dacă vreun interval din învoirea de weekend se încadrează în perioada filtrată
+        relevant_for_period = False
+        if perioada == 'toate':
+            relevant_for_period = True
+        else: # start_date și end_date sunt definite
+            for interval in wl.get_intervals(): # get_intervals returnează datetimes aware
+                # Convertim start_date/end_date (naive date) la datetime naive pentru comparație corectă cu datele intervalelor
+                filter_start_dt_naive = datetime.combine(start_date, time.min)
+                filter_end_dt_naive = datetime.combine(end_date, time.max)
+
+                # Convertim interval.start/end (aware) la naive în același fus orar (presupunând că sunt Europe/Bucharest)
+                interval_start_naive = interval['start'].astimezone(EUROPE_BUCHAREST).replace(tzinfo=None)
+                interval_end_naive = interval['end'].astimezone(EUROPE_BUCHAREST).replace(tzinfo=None)
+
+                # Verificare intersecție intervale: (StartA <= EndB) and (EndA >= StartB)
+                if interval_start_naive <= filter_end_dt_naive and interval_end_naive >= filter_start_dt_naive:
+                    relevant_for_period = True
+                    break
+
+        if relevant_for_period:
+            intervals_display = []
+            for interval_data in wl.get_intervals():
+                intervals_display.append(
+                    f"{interval_data['day_name']} ({interval_data['start'].strftime('%d.%m')}) "
+                    f"{interval_data['start'].strftime('%H:%M')}-{interval_data['end'].strftime('%H:%M')}"
+                )
+
+            leaves_history.append({
+                "student_name": f"{wl.student.grad_militar} {wl.student.nume} {wl.student.prenume}",
+                "tip": "Weekend",
+                "data_start": wl.weekend_start_date, # Data de vineri a weekendului
+                "ora_start": None, # Nu e direct aplicabil, detaliile sunt în 'detalii'
+                "ora_sfarsit": None,
+                "detalii": "; ".join(intervals_display) + (f", Biserica Duminică" if wl.duminica_biserica and any(d['day_name']=='Duminica' for d in wl.get_intervals()) else ""),
+                "motiv": wl.reason or "-",
+                "status": wl.status
+            })
+
+    # Sortare finală a listei combinate după data de început (descendent)
+    leaves_history.sort(key=lambda x: x['data_start'], reverse=True)
+
+    # Paginare manuală simplă (dacă se dorește) sau se poate folosi paginate() pe query-uri separate și apoi combina
+    # Pentru simplitate, momentan fără paginare complexă pe lista combinată.
+
+    return render_template('invoiri_istoric.html',
+                           leaves_history=leaves_history,
+                           title="Istoric Învoiri Pluton",
+                           form_data=request.args, # Pentru a repopula filtrele
+                           selected_period=perioada,
+                           selected_start_custom=data_start_custom_str,
+                           selected_end_custom=data_sfarsit_custom_str
+                           )
+
+
+# --- Admin Text Export Routes ---
+@app.route('/admin/export/text/studenti', endpoint='admin_export_studenti_text')
+@login_required
+def admin_export_studenti_text():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('admin_dashboard_route'))
+
+    students = Student.query.order_by(Student.grad_militar, Student.nume, Student.prenume).all()
+    if not students:
+        flash('Niciun student în baza de date pentru export.', 'info')
+        return redirect(url_for('admin_dashboard_route'))
+
+    output_lines = []
+    # Format: Grad Nume Prenume Gen Pluton Companie Batalion
+    # Example: M.m.IV Renț Francisc M 1 1 1
+    for s in students:
+        line = f"{s.grad_militar} {s.nume} {s.prenume} {s.gender} {s.pluton} {s.companie} {s.batalion}"
+        output_lines.append(line)
+
+    text_content = "\n".join(output_lines)
+
+    # Create a BytesIO object to hold the text data
+    text_file = io.BytesIO()
+    text_file.write(text_content.encode('utf-8'))
+    text_file.seek(0) # Reset stream position
+
+    filename = f"studenti_export_{get_localized_now().strftime('%Y%m%d_%H%M%S')}.txt"
+
+    return send_file(
+        text_file,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='text/plain; charset=utf-8'
+    )
+
+@app.route('/admin/export/text/permisii', endpoint='admin_export_permisii_text')
+@login_required
+def admin_export_permisii_text():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('admin_dashboard_route'))
+
+    permissions = Permission.query.join(Student).options(joinedload(Permission.student)).order_by(Student.nume, Student.prenume, Permission.start_datetime).all()
+    if not permissions:
+        flash('Nicio permisie în baza de date pentru export.', 'info')
+        return redirect(url_for('admin_dashboard_route'))
+
+    output_lines = []
+    # Format based on bulk import for permissions:
+    # Line 1: Student Name (Grad Nume Prenume)
+    # Line 2: Datetime interval (DD.MM.YYYY HH:MM - DD.MM.YYYY HH:MM or DD.MM.YYYY HH:MM - HH:MM)
+    # Line 3: Destination
+    # Line 4: Transport Mode (optional)
+    # Line 5: Reason/Car Plate (optional)
+    # --- Empty line separator ---
+
+    for p in permissions:
+        student_name_line = f"{p.student.grad_militar} {p.student.nume} {p.student.prenume}"
+
+        # Formatare datetime pentru export: DD.MM.YYYY HH:MM - [DD.MM.YYYY ]HH:MM
+        # Datetime-urile sunt stocate ca naive, reprezentând ora locală.
+        start_date_str_export = p.start_datetime.strftime('%d.%m.%Y')
+        start_time_str_export = p.start_datetime.strftime('%H:%M')
+
+        end_date_str_export = p.end_datetime.strftime('%d.%m.%Y')
+        end_time_str_export = p.end_datetime.strftime('%H:%M')
+
+        if start_date_str_export == end_date_str_export:
+            # Dacă datele sunt identice, se omite a doua dată
+            datetime_line = f"{start_date_str_export} {start_time_str_export} - {end_time_str_export}"
+        else:
+            datetime_line = f"{start_date_str_export} {start_time_str_export} - {end_date_str_export} {end_time_str_export}"
+
+        destination_line = p.destination if p.destination else "-" # "-" dacă lipsește, conform așteptărilor implicite
+
+        # Pentru transport_mode și reason, dacă sunt goale, nu se adaugă linii vide,
+        # ci se omit acele linii, conform structurii de import unde sunt opționale.
+        transport_mode_line = p.transport_mode if p.transport_mode else None
+        reason_line = p.reason if p.reason else None
+
+        output_lines.append(student_name_line)
+        output_lines.append(datetime_line)
+        output_lines.append(destination_line)
+
+        if transport_mode_line is not None:
+            output_lines.append(transport_mode_line)
+            # Reason line is only added if transport mode was also present and then reason itself is present
+            if reason_line is not None:
+                 output_lines.append(reason_line)
+        elif reason_line is not None:
+            # If transport is None, but reason is not, add an empty line for transport to maintain structure for reason
+            output_lines.append("")
+            output_lines.append(reason_line)
+
+        output_lines.append("") # Empty line separator între intrări
+
+    text_content = "\n".join(output_lines)
+    text_file = io.BytesIO(text_content.encode('utf-8'))
+    text_file.seek(0)
+
+    filename = f"permisii_export_{get_localized_now().strftime('%Y%m%d_%H%M%S')}.txt"
+    return send_file(text_file, as_attachment=True, download_name=filename, mimetype='text/plain; charset=utf-8')
+
+@app.route('/admin/export/text/invoiri', endpoint='admin_export_invoiri_text')
+@login_required
+def admin_export_invoiri_text():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('admin_dashboard_route'))
+
+    output_lines = []
+
+    # Export Daily Leaves
+    # Format pentru exportul învoirilor zilnice:
+    # Similar cu formatul de procesare text: NumeStudent Grad [HH:MM-HH:MM] (data se subînțelege din contextul listei)
+    # Pentru un export general, vom include și data.
+    # Format: Grad Nume Prenume HH:MM-HH:MM (pentru o anumită dată, grupate)
+    # Sau, mai simplu, fiecare învoire pe o linie separată:
+    # Grad Nume Prenume, Data (DD.MM.YYYY), OrăStart-OrăStop, [Motiv]
+
+    daily_leaves_by_date = {}
+    all_daily_leaves = DailyLeave.query.join(Student).options(joinedload(DailyLeave.student)).order_by(DailyLeave.leave_date, Student.nume, DailyLeave.start_time).all()
+
+    for dl in all_daily_leaves:
+        date_str = dl.leave_date.strftime('%d.%m.%Y')
+        if date_str not in daily_leaves_by_date:
+            daily_leaves_by_date[date_str] = []
+
+        student_name_part = f"{dl.student.grad_militar} {dl.student.nume} {dl.student.prenume}"
+        time_part = f"{dl.start_time.strftime('%H:%M')}-{dl.end_time.strftime('%H:%M')}"
+        # Format pentru importul de învoiri zilnice din text pare a fi:
+        # Nume Prenume Grad HH:MM-HH:MM (fără dată explicită per linie, data e globală)
+        # Sau Nume Prenume Grad (folosește ore implicite)
+        # Pentru export, vom face: Grad Nume Prenume HH:MM-HH:MM
+        # Motivul nu pare a fi parte din formatul de import din text.
+        daily_leaves_by_date[date_str].append(f"{student_name_part} {time_part}")
+
+    if daily_leaves_by_date:
+        output_lines.append("--- ÎNVOIRI ZILNICE (grupate pe dată) ---")
+        for date_group, leaves_in_group in sorted(daily_leaves_by_date.items()):
+            output_lines.append(f"\nData: {date_group}")
+            for leave_entry in leaves_in_group:
+                output_lines.append(leave_entry)
+        output_lines.append("\n")
+
+
+    # Format export învoiri weekend:
+    # Similar cu formatul de import:
+    # NumeStudent Grad, DD.MM.YYYY HH:MM-HH:MM, DD.MM.YYYY HH:MM-HH:MM, [biserica]
+    # Motivul nu pare a fi parte din formatul de import.
+    all_weekend_leaves = WeekendLeave.query.join(Student).options(joinedload(WeekendLeave.student)).order_by(WeekendLeave.weekend_start_date, Student.nume).all()
+    if all_weekend_leaves:
+        output_lines.append("--- ÎNVOIRI WEEKEND ---")
+        for wl in all_weekend_leaves:
+            student_info = f"{wl.student.grad_militar} {wl.student.nume} {wl.student.prenume}"
+            intervals_str_parts = []
+            # Folosim get_intervals() care returnează intervalele sortate și corecte ca datetime-uri aware
+            leave_intervals = wl.get_intervals()
+
+            for interval in leave_intervals:
+                # Formatăm data și ora pentru export ca naive (așa cum ar fi introduse)
+                # get_intervals() returnează start/end ca aware, le convertim la Europe/Bucharest și apoi formatăm
+                date_str = interval['start'].astimezone(EUROPE_BUCHAREST).strftime('%d.%m.%Y')
+                start_time_str = interval['start'].astimezone(EUROPE_BUCHAREST).strftime('%H:%M')
+                end_time_str = interval['end'].astimezone(EUROPE_BUCHAREST).strftime('%H:%M')
+                intervals_str_parts.append(f"{date_str} {start_time_str}-{end_time_str}")
+
+            intervals_full_str = ", ".join(intervals_str_parts)
+
+            # Verificăm dacă "Duminica" este printre zilele selectate efectiv pentru învoire
+            duminica_selectata_efectiv = False
+            if wl.day3_selected == "Duminica" and wl.day3_date and wl.day3_start_time and wl.day3_end_time:
+                duminica_selectata_efectiv = True
+            elif wl.day2_selected == "Duminica" and wl.day2_date and wl.day2_start_time and wl.day2_end_time:
+                 duminica_selectata_efectiv = True
+            elif wl.day1_selected == "Duminica" and wl.day1_date and wl.day1_start_time and wl.day1_end_time:
+                 duminica_selectata_efectiv = True
+
+            biserica_str = ", biserica" if wl.duminica_biserica and duminica_selectata_efectiv else ""
+            # Motivul nu este inclus în formatul de import, deci nu îl adăugăm nici la export.
+            output_lines.append(f"{student_info}, {intervals_full_str}{biserica_str}")
+        output_lines.append("\n")
+
+
+    if not output_lines:
+        flash('Nicio învoire (zilnică sau weekend) în baza de date pentru export.', 'info')
+        return redirect(url_for('admin_dashboard_route'))
+
+    text_content = "\n".join(output_lines)
+    text_file = io.BytesIO(text_content.encode('utf-8'))
+    text_file.seek(0)
+
+    filename = f"invoiri_export_{get_localized_now().strftime('%Y%m%d_%H%M%S')}.txt"
+    return send_file(text_file, as_attachment=True, download_name=filename, mimetype='text/plain; charset=utf-8')
 
 
 if __name__ == '__main__':
