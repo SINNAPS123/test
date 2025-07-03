@@ -13,7 +13,7 @@ import bcrypt
 import os
 import secrets 
 from datetime import datetime, date, time, timedelta 
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_
 import re 
 from unidecode import unidecode
 import json

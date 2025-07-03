@@ -40,7 +40,7 @@
     </style>
 </head>
 <body>
-    {% include 'includes/header.html' %}
+    {# {% include 'includes/header.html' %} #}
     <main class="container">
         <h1>Asignează Multiple Servicii unui Student</h1>
 
@@ -75,7 +75,7 @@
             <a href="{{ url_for('list_services') }}" class="btn btn-secondary">Anulează</a>
         </form>
     </main>
-    {% include 'includes/footer.html' %}
+    {# {% include 'includes/footer.html' %} #}
 
     <script>
         const defaultTimes = JSON.parse('{{ default_times_json | safe }}');
