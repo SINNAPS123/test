@@ -602,8 +602,12 @@ def public_updates_page():
     # Sau, dacă aveți un template generic pentru "în construcție"
     # return render_template('placeholder.html', page_title="Anunțuri")
     # Să presupunem că aveți un template 'public_updates.html' și vom trece o listă goală deocamdată
-    updates = UpdateTopic.query.filter_by(is_visible=True).order_by(UpdateTopic.is_pinned.desc(), UpdateTopic.updated_at.desc()).all()
-    return render_template('public_updates.html', updates=updates, title="Anunțuri")
+    page = request.args.get('page', 1, type=int)
+    per_page = 10 # Sau orice alt număr de elemente pe pagină doriți
+    updates_pagination = UpdateTopic.query.filter_by(is_visible=True)\
+        .order_by(UpdateTopic.is_pinned.desc(), UpdateTopic.updated_at.desc())\
+        .paginate(page=page, per_page=per_page, error_out=False)
+    return render_template('public_updates.html', updates_pagination=updates_pagination, title="Anunțuri")
 
 @app.route('/user_login', methods=['GET', 'POST'])
 def user_login():
