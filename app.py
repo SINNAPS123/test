@@ -590,6 +590,21 @@ def home():
     except Exception as e: pass
     return render_template('home.html', total_students=total_students, total_users=total_users, total_volunteer_activities=total_volunteer_activities)
 
+@app.route('/updates')
+@login_required # Sau eliminați @login_required dacă pagina este publică
+def public_updates_page():
+    # Aici veți adăuga logica pentru a prelua anunțurile/actualizările din baza de date
+    # De exemplu: updates = UpdateTopic.query.order_by(UpdateTopic.created_at.desc()).all()
+    # Momentan, vom presupune că există un template public_updates.html
+    # return render_template('public_updates.html', updates=updates)
+    # Pentru a evita o nouă eroare dacă template-ul nu există, redăm un text simplu
+    # return "Pagina de Anunțuri Publice va fi aici."
+    # Sau, dacă aveți un template generic pentru "în construcție"
+    # return render_template('placeholder.html', page_title="Anunțuri")
+    # Să presupunem că aveți un template 'public_updates.html' și vom trece o listă goală deocamdată
+    updates = UpdateTopic.query.filter_by(is_visible=True).order_by(UpdateTopic.is_pinned.desc(), UpdateTopic.updated_at.desc()).all()
+    return render_template('public_updates.html', updates=updates, title="Anunțuri")
+
 @app.route('/user_login', methods=['GET', 'POST'])
 def user_login():
     if current_user.is_authenticated:
