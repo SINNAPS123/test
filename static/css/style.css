@@ -152,14 +152,76 @@ body.dark-mode .table thead th {
     border-bottom: 2px solid var(--border-color);
 }
 
+/* Asigură contrast pentru rândurile de tabel colorate în dark mode */
+body.dark-mode .table-success,
+body.dark-mode .table-success > th,
+body.dark-mode .table-success > td {
+    background-color: rgba(40, 167, 69, 0.2) !important; /* Verde mai transparent și mai puțin intens */
+    color: #c6f6d5 !important; /* Text verde deschis, lizibil pe fundal închis */
+}
+body.dark-mode .table-success .badge {
+    color: #000 !important; /* Text negru pentru badge-uri pe fundal verde deschis, pentru contrast */
+    background-color: rgba(40, 167, 69, 0.5) !important; /* Fundal badge mai opac */
+}
+body.dark-mode .table-success a {
+    color: #b3ffc6 !important; /* Linkuri mai vizibile */
+}
+
+
+body.dark-mode .table-warning,
+body.dark-mode .table-warning > th,
+body.dark-mode .table-warning > td {
+    background-color: rgba(255, 193, 7, 0.2) !important; /* Galben mai transparent */
+    color: #ffeeba !important; /* Text galben deschis, lizibil pe fundal închis */
+}
+body.dark-mode .table-warning .badge.bg-info.text-dark {
+    color: #000 !important;
+    background-color: rgba(13, 202, 240, 0.5) !important;
+}
+body.dark-mode .table-warning a {
+    color: #ffeca0 !important;
+}
+
+
+body.dark-mode .table-secondary,
+body.dark-mode .table-secondary > th,
+body.dark-mode .table-secondary > td {
+    background-color: rgba(108, 117, 125, 0.2) !important; /* Gri mai transparent */
+    color: #e2e3e5 !important; /* Text gri deschis, lizibil pe fundal închis */
+}
+body.dark-mode .table-secondary a {
+    color: #cdd2d6 !important;
+}
+
+
+/* Badge-uri specifice pentru vizibilitate în dark mode */
+body.dark-mode .badge.bg-dark {
+    background-color: #495057 !important; /* Un gri mai deschis decât fundalul general */
+    color: var(--text-primary) !important;
+}
+
+body.dark-mode .badge.bg-info {
+    /* bg-info este un cyan. Textul default Bootstrap pentru .badge.bg-info este #000. */
+    /* Dacă se dorește text alb: color: var(--text-on-accent) !important; */
+    /* Dar pentru lizibilitate pe cyan, textul închis este de obicei mai bun. */
+    /* Bootstrap 5 .badge.bg-info are deja text închis. */
+}
+body.dark-mode .badge.bg-info.text-dark { /* Asigurare că text-dark e aplicat */
+    color: #000 !important;
+}
+
+
 /* Minimal alert adjustments for readability */
 body.dark-mode .alert-warning {
     /* Bootstrap's default .alert-warning has dark text on light yellow. */
     /* This should remain readable if the var(--accent-warning) isn't changed for dark mode. */
     /* If --accent-warning was made dark, this would need inversion. */
+     color: #3e2d02; /* Text mai închis pentru .alert-warning */
+     background-color: #4d38023b; /* Fundal mai închis pentru .alert-warning */
+     border-color: #4d38028a; /* Border mai închis pentru .alert-warning */
 }
 body.dark-mode .alert-warning a.alert-link, body.dark-mode .alert-warning .alert-link {
-    color: #4d3802; /* Ensure link color is dark enough on yellow background */
+    color: #2c1f01; /* Ensure link color is dark enough on yellow background */
 }
 body.dark-mode .alert-light { /* Bootstrap's .alert-light */
     color: var(--text-primary);
@@ -170,6 +232,13 @@ body.dark-mode .alert-secondary {
      color: var(--text-primary);
     background-color: var(--bg-surface-hover);
     border-color: var(--border-color);
+}
+
+/* Stil pentru listele de studenți din presence_report.html */
+body.dark-mode .list-group-item {
+    background-color: var(--bg-surface); /* Fundalul cardului */
+    color: var(--text-primary); /* Text deschis */
+    border-color: var(--border-color); /* Separator între itemi */
 }
 
 
