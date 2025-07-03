@@ -40,6 +40,11 @@
             padding-top: 0.2rem; /* Redus padding-top pentru compactare */
             padding-bottom: 0.2rem; /* Redus padding-bottom pentru compactare */
         }
+        .navbar-brand img.logo-img {
+            height: 30px; /* Ajustați înălțimea după cum este necesar */
+            width: auto;
+            margin-right: 5px; /* Spațiu între logo și textul Beta (dacă există) */
+        }
         .navbar { margin-bottom: 0.5rem !important; } /* Redus margin-bottom pentru navbar */
         .footer { margin-top: 0.5rem !important; } /* Redus margin-top pentru footer */
     </style>
@@ -48,8 +53,8 @@
     <nav class="navbar navbar-expand-lg navbar-light bg-light"> <!-- Eliminat mb-4 -->
         <div class="container-fluid">
             <a class="navbar-brand unap-brand" href="{{ url_for('home') }}" style="display: flex; align-items: center;">
-                {# Aici ar veni <img src="{{ url_for('static', filename='images/unap_logo.png') }}" alt="UNAP"> dacă am avea un logo #}
-                <span class="unap-logo-text">UNAP</span>
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="UNAP Logo" class="logo-img">
+                {# <span class="unap-logo-text">UNAP</span> #}
                 <span class="badge ms-2" style="padding: 0.2em 0.4em; font-size: 0.55em; color: white; background-image: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);">BETA</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
