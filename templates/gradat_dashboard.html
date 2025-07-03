@@ -100,8 +100,56 @@
         </div>
     </div>
 
-    <hr>
-    <p><a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">Înapoi la Panoul General</a></p>
+    <!-- Mini Situație Pluton (ACUM) -->
+    <div class="mt-4 p-3 border rounded bg-light shadow-sm">
+        <h4 class="mb-3"><i class="fas fa-street-view me-2"></i>Situație Pluton (ACUM) <span class="badge bg-info fs-6 align-middle">{{ get_localized_now().strftime('%d-%m-%Y %H:%M') }}</span></h4>
+        <div class="row">
+            <div class="col-lg-2 col-md-4 col-sm-6 mb-3">
+                <div class="card border-primary h-100 shadow-sm">
+                    <div class="card-body text-center p-2">
+                        <h6 class="card-title text-primary mb-1"><i class="fas fa-users me-1"></i>Total</h6>
+                        <p class="card-text display-6 fw-bold">{{ sit_total_studenti }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+                <div class="card border-success h-100 shadow-sm">
+                    <div class="card-body text-center p-2">
+                        <h6 class="card-title text-success mb-1"><i class="fas fa-user-check me-1"></i>Prezenți Formație</h6>
+                        <p class="card-text display-6 fw-bold">{{ sit_prezenti_formatie }}</p>
+                        {% if sit_gradat_pluton_prezent_acum > 0 %}
+                        <small class="text-muted d-block" style="font-size: 0.75rem;">(+ {{ sit_gradat_pluton_prezent_acum }} gradat pluton)</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4 col-md-4 col-sm-12 mb-3"> <!-- Wider for more buttons -->
+                <div class="card border-warning h-100 shadow-sm">
+                    <div class="card-body text-center p-2">
+                        <h6 class="card-title text-warning mb-1"><i class="fas fa-user-clock me-1"></i>Total Învoiți/Absenți</h6>
+                        <p class="card-text display-6 fw-bold">{{ sit_total_invoiti_acum }}</p>
+                        <div class="btn-group btn-group-sm d-flex mt-1" role="group" aria-label="Detalii Invoiri">
+                            <a href="{{ url_for('list_permissions') }}" class="btn btn-outline-warning w-100" style="font-size: 0.75rem;">Permisii</a>
+                            <a href="{{ url_for('list_daily_leaves') }}" class="btn btn-outline-warning w-100" style="font-size: 0.75rem;">Zilnice</a>
+                            <a href="{{ url_for('list_weekend_leaves') }}" class="btn btn-outline-warning w-100" style="font-size: 0.75rem;">Weekend</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-12 col-sm-12 mb-3"> <!-- Full width on md if it's the last one on a row for md -->
+                <div class="card border-info h-100 shadow-sm">
+                    <div class="card-body text-center p-2">
+                        <h6 class="card-title text-info mb-1"><i class="fas fa-tools me-1"></i>În Serviciu</h6>
+                        <p class="card-text display-6 fw-bold">{{ sit_in_serviciu_acum }}</p>
+                        <a href="{{ url_for('list_services') }}" class="btn btn-outline-info btn-sm mt-1 d-block w-100" style="font-size: 0.75rem;">Detalii Servicii</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr class="mt-4">
+    <p class="text-center"><a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">Panou General (Dashboard)</a></p>
 
 </div>
 {% endblock %}

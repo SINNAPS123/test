@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title or "Editare Anunț" }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>{{ title }}</h2>
+    <hr>
+
+    <form method="POST" action="{{ request.url }}">
+        <div class="mb-3">
+            <label for="title" class="form-label">Titlu Anunț <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="title" name="title" value="{{ form_data.get('title', topic.title if topic else '') }}" required>
+        </div>
+
+        <div class="mb-3">
+            <label for="content" class="form-label">Conținut Anunț <span class="text-danger">*</span></label>
+            <textarea class="form-control" id="content" name="content" rows="10" required>{{ form_data.get('content', topic.content if topic else '') }}</textarea>
+            <small class="form-text text-muted">Puteți folosi HTML simplu pentru formatare (ex: &lt;b&gt;bold&lt;/b&gt;, &lt;i&gt;italic&lt;/i&gt;, &lt;br&gt; pentru linie nouă, &lt;ul&gt;&lt;li&gt;listă&lt;/li&gt;&lt;/ul&gt;).</small>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label for="status_color" class="form-label">Culoare de Fundal/Status</label>
+                <select class="form-select" id="status_color" name="status_color">
+                    <option value="None" {% if (form_data.get('status_color', topic.status_color if topic else 'None')) == 'None' %}selected{% endif %}>Niciuna (Implicit)</option>
+                    {% for color in available_colors %}
+                        <option value="{{ color }}"
+                                {% if (form_data.get('status_color', topic.status_color if topic else '')) == color %}selected{% endif %}
+                                style="background-color: var(--bs-{{ color }}); color: {{ 'var(--bs-dark)' if color in ['warning', 'info', 'light'] else 'var(--bs-light)'}};">
+                            {{ color|capitalize }}
+                        </option>
+                    {% endfor %}
+                </select>
+                <small class="form-text text-muted">Alege o culoare pentru a evidenția anunțul (opțional).</small>
+            </div>
+            <div class="col-md-4 mb-3 d-flex align-items-center">
+                <div class="form-check form-switch mt-3">
+                    <input class="form-check-input" type="checkbox" role="switch" id="is_pinned" name="is_pinned" value="true"
+                           {% if form_data.get('is_pinned', topic.is_pinned if topic else false) %}checked{% endif %}>
+                    <label class="form-check-label" for="is_pinned">Fixează Anunțul Sus (Pinned)</label>
+                </div>
+            </div>
+             <div class="col-md-4 mb-3 d-flex align-items-center">
+                <div class="form-check form-switch mt-3">
+                    <input class="form-check-input" type="checkbox" role="switch" id="is_visible" name="is_visible" value="true"
+                           {% if form_data.get('is_visible', topic.is_visible if topic else true) %}checked{% endif %}>
+                    <label class="form-check-label" for="is_visible">Este Vizibil Public</label>
+                </div>
+            </div>
+        </div>
+
+        <hr>
+        <div class="d-flex justify-content-between">
+            <a href="{{ url_for('admin_list_updates') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Anulează și Înapoi la Listă
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i> Salvează Anunțul
+            </button>
+        </div>
+    </form>
+</div>
+
+{% block extra_js %}
+<script>
+// Script simplu pentru a actualiza previzualizarea culorii selectate, dacă e necesar.
+// Momentan, opțiunile din select au deja stil.
+document.addEventListener('DOMContentLoaded', function() {
+    const statusColorSelect = document.getElementById('status_color');
+    if (statusColorSelect) {
+        // Funcție pentru a seta culoarea textului selectului bazat pe fundal (dacă e necesar)
+        function updateSelectTextColor() {
+            let selectedOption = statusColorSelect.options[statusColorSelect.selectedIndex];
+            if (selectedOption.value === 'None' || !selectedOption.value) {
+                statusColorSelect.style.backgroundColor = '';
+                statusColorSelect.style.color = '';
+            } else {
+                let bgColor = getComputedStyle(selectedOption).backgroundColor;
+                // Simple check for light background to set dark text, assumes var(--bs-dark) or var(--bs-light) are well defined
+                // This is a basic heuristic. Bootstrap's default select styling might handle this.
+                // The options themselves are styled, this is for the select box itself.
+                // For now, we'll rely on default browser/Bootstrap select styling after selection.
+            }
+        }
+        // statusColorSelect.addEventListener('change', updateSelectTextColor);
+        // updateSelectTextColor(); // Initial call
+    }
+});
+</script>
+{% endblock %}
+{% endblock %}
