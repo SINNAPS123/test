@@ -67,6 +67,9 @@ def localdate_filter(d, fmt='%d-%m-%Y'):
 
 @app.context_processor
 def inject_global_vars():
+    # This context processor makes the get_localized_now function available
+    # to all Jinja templates. If 'get_localized_now' is undefined in a template,
+    # ensure this processor is correctly registered and the Flask app is restarted.
     return dict(get_localized_now=get_localized_now)
 
 # IMPORTANT: Change this to a strong, unique, and static secret key in a real environment!
@@ -1390,7 +1393,11 @@ def _calculate_presence_data(student_list, check_datetime):
     ).all()
     active_daily_leaves_map = {}
     for dl in all_daily_leaves:
-        if dl.start_datetime <= now <= dl.end_datetime:
+        # Make dl.start_datetime and dl.end_datetime (which are naive properties) timezone-aware
+        # Assuming they represent time in EUROPE_BUCHAREST timezone
+        dl_start_aware = EUROPE_BUCHAREST.localize(dl.start_datetime)
+        dl_end_aware = EUROPE_BUCHAREST.localize(dl.end_datetime)
+        if dl_start_aware <= now <= dl_end_aware:
             if dl.student_id not in active_daily_leaves_map: # Ia prima învoire activă
                  active_daily_leaves_map[dl.student_id] = dl
 
