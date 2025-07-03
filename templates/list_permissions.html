@@ -121,16 +121,18 @@
     </p>
 </div>
 
-<!-- Modal pentru Bulk Import Permisii -->
+<!-- Modal pentru Bulk Import Permisii (Simplified for debugging) -->
 <div class="modal fade" id="bulkImportPermissionsModal" tabindex="-1" aria-labelledby="bulkImportPermissionsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form action="{{ url_for('gradat_bulk_import_permissions') }}" method="POST">
+            <!-- <form action="{{ url_for('gradat_bulk_import_permissions') }}" method="POST"> -->
                 <div class="modal-header">
-                    <h5 class="modal-title" id="bulkImportPermissionsModalLabel">Import Permisii în Masă</h5>
+                    <h5 class="modal-title" id="bulkImportPermissionsModalLabel">Test Import Permisii</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
+                    <p>Acesta este un test. Dacă vedeți acest text, modalul de bază funcționează.</p>
+                    <!-- Original content commented out for debugging
                     <p>Introduceți datele permisiilor, fiecare permisie pe rânduri consecutive, în formatul:</p>
                     <pre><code>Grad Nume Prenume
 Data_inceput Ora_inceput - Data_sfarsit Ora_sfarsit
@@ -152,12 +154,13 @@ București
                         <label for="permission_bulk_data" class="form-label">Date Permisii:</label>
                         <textarea class="form-control" id="permission_bulk_data" name="permission_bulk_data" rows="12" required placeholder="M.m.IV Renț Francisc\n04.07.2024 15:00 - 06.07.2024 22:00\nSlobozia, Argeș\nAG 03 RXF\n\nSdt. Popescu Vasile\n05.08.2024 10:00 - 05.08.2024 19:00\nCraiova\n"></textarea>
                     </div>
+                    -->
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anulează</button>
-                    <button type="submit" class="btn btn-primary">Importă Permisii</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Închide Test</button>
+                    <!-- <button type="submit" class="btn btn-primary">Importă Permisii</button> -->
                 </div>
-            </form>
+            <!-- </form> -->
         </div>
     </div>
 </div>

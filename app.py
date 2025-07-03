@@ -335,12 +335,28 @@ class ActionLog(db.Model):
         description_desc = f" - {self.description[:50]}..." if self.description else ""
         return f'<ActionLog {self.timestamp.strftime("%Y-%m-%d %H:%M:%S")} - {user_desc} - {self.action_type}{target_desc}{description_desc}>'
 
+class UpdateTopic(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    author = db.relationship('User', backref=db.backref('update_topics_authored', lazy=True))
+    is_pinned = db.Column(db.Boolean, default=False, nullable=False)
+    # status_color can map to Bootstrap alert/badge classes e.g., 'primary', 'success', 'warning', 'danger', 'info', 'light', 'dark'
+    status_color = db.Column(db.String(20), nullable=True)
+    is_visible = db.Column(db.Boolean, default=True, nullable=False) # For soft delete or drafts
+
+    def __repr__(self):
+        return f'<UpdateTopic {self.id}: {self.title[:50]}>'
+
 @login_manager.user_loader
 def load_user(user_id): return db.session.get(User, int(user_id))
 
 def init_db():
     with app.app_context():
-        db.create_all()
+        db.create_all() # This will create UpdateTopic table if it doesn't exist
         if not User.query.filter_by(username='admin').first():
             admin = User(username='admin', role='admin', is_first_login=False); admin.set_password('admin123')
             db.session.add(admin); db.session.commit(); print("Admin user created.")
@@ -784,13 +800,50 @@ def dashboard():
 
         total_volunteer_activities = VolunteerActivity.query.filter_by(created_by_user_id=current_user.id).count()
 
+        # Data for "Mini Situație Pluton (ACUM)"
+        now_for_dashboard = get_localized_now()
+        students_managed_by_gradat = Student.query.filter_by(created_by_user_id=current_user.id).all()
+
+        # Use _calculate_presence_data for current situation
+        # Ensure _calculate_presence_data correctly identifies "present in formation"
+        # _calculate_presence_data returns:
+        # "efectiv_control", "efectiv_prezent_total", "efectiv_absent_total",
+        # "in_formation_count", "on_duty_count", "platoon_graded_duty_count", "absent_students_details"
+
+        # "Prezenți" for mini-dashboard = "in_formation_count" (cei care nu sunt in permisie/serviciu/etc.)
+        # "Învoiți" = "efectiv_absent_total" (cei care sunt in permisie, invoire zilnica, invoire weekend)
+        # "În Serviciu" = "on_duty_count"
+        # "Gradat Pluton Prezent" = "platoon_graded_duty_count" (dacă e considerat separat de "Prezenți")
+
+        current_platoon_situation = {}
+        if students_managed_by_gradat:
+            current_platoon_situation = _calculate_presence_data(students_managed_by_gradat, now_for_dashboard)
+            # Consolidate "absent" categories for the "Învoiți" count for simplicity on dashboard
+            # _calculate_presence_data already gives 'efectiv_absent_total' which is this sum.
+        else: # Default values if no students
+            current_platoon_situation = {
+                "efectiv_control": 0,
+                "in_formation_count": 0, # Prezenți în formație
+                "efectiv_absent_total": 0, # Total învoiți/absenți motivat
+                "on_duty_count": 0, # În Serviciu
+                "platoon_graded_duty_count": 0 # Gradat pluton (dacă e separat)
+            }
+
+
         return render_template('gradat_dashboard.html',
                                student_count=student_count,
-                               permissions_today_count=permissions_today_count,
-                               daily_leaves_today_count=daily_leaves_today_count,
-                               weekend_leaves_today_count=weekend_leaves_active_today,
-                               services_today_count=services_today_count,
-                               total_volunteer_activities=total_volunteer_activities)
+                               permissions_today_count=permissions_today_count, # Statistică veche "azi"
+                               daily_leaves_today_count=daily_leaves_today_count, # Statistică veche "azi"
+                               weekend_leaves_today_count=weekend_leaves_active_today, # Statistică veche "azi"
+                               services_today_count=services_today_count, # Statistică veche "azi"
+                               total_volunteer_activities=total_volunteer_activities,
+                               # Date noi pentru "Mini Situație ACUM"
+                               sit_total_studenti=current_platoon_situation.get("efectiv_control", 0),
+                               sit_prezenti_formatie=current_platoon_situation.get("in_formation_count", 0),
+                               sit_total_invoiti_acum=current_platoon_situation.get("efectiv_absent_total", 0),
+                               sit_in_serviciu_acum=current_platoon_situation.get("on_duty_count", 0),
+                               sit_gradat_pluton_prezent_acum=current_platoon_situation.get("platoon_graded_duty_count",0)
+                               )
     elif current_user.role == 'comandant_companie':
         return redirect(url_for('company_commander_dashboard'))
     elif current_user.role == 'comandant_batalion':

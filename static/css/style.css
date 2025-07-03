@@ -119,11 +119,24 @@ body.dark-mode .bg-light .form-label {
 
 
 body.dark-mode .table-striped > tbody > tr:nth-of-type(odd) > * {
-    background-color: rgba(255, 255, 255, 0.04); /* Subtle light stripe */
+    background-color: rgba(0, 0, 0, 0.1); /* Darker subtle stripe for dark mode */
 }
 body.dark-mode .table-hover > tbody > tr:hover > * {
-    background-color: rgba(255, 255, 255, 0.08); /* Subtle light hover */
+    background-color: rgba(0, 0, 0, 0.15); /* Darker subtle hover for dark mode */
 }
+
+/* Ensure text in table-danger is light and background is dark enough in dark mode */
+body.dark-mode .table-danger,
+body.dark-mode .table-danger > th,
+body.dark-mode .table-danger > td {
+    background-color: rgba(220, 53, 69, 0.25) !important; /* Darker, more transparent red */
+    color: #f8d7da !important; /* Light red/pinkish text for readability on dark red background */
+    border-color: rgba(220, 53, 69, 0.35) !important; /* Adjusted border color */
+}
+body.dark-mode .table-danger a {
+    color: #fcc9cf !important; /* Lighter links for visibility */
+}
+
 
 body.dark-mode .badge.bg-light { /* Make .bg-light distinct in dark mode */
     background-color: var(--border-color) !important; /* Using a variable that's dark, like a dark grey */
@@ -178,6 +191,18 @@ body.dark-mode .table thead th {
     background-color: var(--bg-surface-hover);
     border-bottom: 2px solid var(--border-color);
     color: var(--text-primary); /* Ensure table header text is correct */
+}
+
+/* General Modal Styling (ensure visibility) */
+.modal {
+    display: none; /* Handled by Bootstrap JS */
+    /* Ensure z-index is high enough if other elements are interfering */
+    /* z-index: 1050; Bootstrap default, usually fine */
+}
+.modal.show .modal-dialog {
+    /* Ensure modal dialog itself is not positioned off-screen or transparent */
+    transform: none; /* Override any accidental transforms */
+    opacity: 1; /* Ensure not transparent */
 }
 
 /* Dark Mode Modals */

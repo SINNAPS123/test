@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title or "Anunțuri și Actualizări" }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0"><i class="fas fa-bullhorn me-2"></i>Anunțuri și Actualizări</h2>
+        {# Potențial buton de refresh sau filtru aici în viitor #}
+    </div>
+
+    {% if updates_pagination.items %}
+        {% for topic in updates_pagination.items %}
+        <div class="card mb-4 shadow-sm {% if topic.is_pinned %}border-primary border-2{% endif %}">
+            <div class="card-header {% if topic.status_color %}bg-{{topic.status_color}}{% if topic.status_color not in ['light', 'warning', 'info'] %} text-white{% else %} text-dark{% endif %}{% else %}bg-light{% endif %}">
+                <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                    <span>
+                        {% if topic.is_pinned %}
+                            <i class="fas fa-thumbtack text-primary me-2" title="Anunț Fixat"></i>
+                        {% endif %}
+                        {{ topic.title }}
+                    </span>
+                    {% if topic.status_color and not topic.is_pinned %} {# Show badge if color set and not already indicated by pin border #}
+                        {# <span class="badge bg-{{topic.status_color}}">{{ topic.status_color|capitalize }}</span> #}
+                    {% endif %}
+                </h5>
+            </div>
+            <div class="card-body">
+                {# Permit HTML simplu pentru conținut. Asigură-te că este sanitizat la input dacă editezi conținutul #}
+                {# Pentru afișare sigură, dacă nu e sanitizat, ar trebui folosit `|safe` cu grijă sau un parser Markdown/HTML #}
+                <p class="card-text">{{ topic.content|safe }}</p>
+            </div>
+            <div class="card-footer text-muted small">
+                <div class="row">
+                    <div class="col-md-6">
+                        Publicat de: <strong>{{ topic.author.username if topic.author else "N/A" }}</strong>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        Ultima actualizare: {{ topic.updated_at|localdatetime('%d %B %Y, %H:%M') }}
+                        (Creat: {{ topic.created_at|localdatetime('%d %B %Y, %H:%M') }})
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- Pagination -->
+        {% if updates_pagination.pages > 1 %}
+        <nav aria-label="Page navigation announcements">
+            <ul class="pagination justify-content-center">
+                {% if updates_pagination.has_prev %}
+                    <li class="page-item"><a class="page-link" href="{{ url_for('public_updates_page', page=updates_pagination.prev_num) }}">&laquo; Mai Noi</a></li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">&laquo; Mai Noi</span></li>
+                {% endif %}
+                {% for page_num in updates_pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                    {% if page_num %}
+                        {% if updates_pagination.page == page_num %}
+                            <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                        {% else %}
+                            <li class="page-item"><a class="page-link" href="{{ url_for('public_updates_page', page=page_num) }}">{{ page_num }}</a></li>
+                        {% endif %}
+                    {% else %}
+                         {% if loop.previtem is number and loop.nextitem is number %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endif %}
+                {% endfor %}
+                {% if updates_pagination.has_next %}
+                    <li class="page-item"><a class="page-link" href="{{ url_for('public_updates_page', page=updates_pagination.next_num) }}">Mai Vechi &raquo;</a></li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">Mai Vechi &raquo;</span></li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+
+    {% else %}
+    <div class="alert alert-info text-center" role="alert">
+        <i class="fas fa-info-circle me-2"></i> Momentan nu sunt anunțuri sau actualizări publicate.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
