@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">{{ title }}</h2>
+
+    <div class="card">
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('admin_homepage_settings') }}">
+                <div class="mb-3">
+                    <label for="home_page_title" class="form-label">Titlu Pagină Principală:</label>
+                    <input type="text" class="form-control" id="home_page_title" name="home_page_title" value="{{ current_title }}">
+                    <div class="form-text">Acesta este titlul principal afișat pe pagina de start (ex: "UNAP User Panel").</div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="home_page_badge_text" class="form-label">Text Badge:</label>
+                    <input type="text" class="form-control" id="home_page_badge_text" name="home_page_badge_text" value="{{ current_badge_text }}">
+                    <div class="form-text">Textul pentru badge-ul afișat lângă titlu (ex: "Beta v2.5", "Nou", etc.). Lăsați gol pentru a nu afișa badge.</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Salvează Setările</button>
+                <a href="{{ url_for('admin_dashboard_route') }}" class="btn btn-secondary">Anulează</a>
+            </form>
+        </div>
+    </div>
+    <p class="mt-3">
+        <small class="text-muted">Notă: Modificările vor fi vizibile pe pagina principală după salvare.</small>
+    </p>
+</div>
+{% endblock %}
