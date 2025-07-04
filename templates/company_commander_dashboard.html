@@ -27,10 +27,10 @@
     <div class="d-flex justify-content-between align-items-center">
         <h2 class="mb-3">Panou Comandant Compania {{ company_id }}</h2>
         <div class="d-flex align-items-center">
-            <a href="{{ url_for('export_permissions_scoped_word') }}" class="btn btn-sm btn-outline-primary me-2" title="Exportă raportul de permisii active/viitoare pentru companie">
+            <a href="{{ url_for('company_commander_export_permissions_word') }}" class="btn btn-sm btn-outline-primary me-2" title="Exportă raportul de permisii active/viitoare pentru companie">
                 <i class="fas fa-file-word icon-rotate-hover"></i> Export Permisii
             </a>
-            <a href="{{ url_for('export_weekend_leaves_scoped_word') }}" class="btn btn-sm btn-outline-primary me-2" title="Exportă raportul de învoiri de weekend active/viitoare pentru companie">
+            <a href="{{ url_for('company_commander_export_weekend_leaves_word') }}" class="btn btn-sm btn-outline-primary me-2" title="Exportă raportul de învoiri de weekend active/viitoare pentru companie">
                 <i class="fas fa-file-word icon-rotate-hover"></i> Export Învoiri Wk.
             </a>
             <a href="{{ url_for('company_commander_logs') }}" class="btn btn-sm btn-outline-info me-2" title="Vezi jurnalul de acțiuni pentru compania ta">
