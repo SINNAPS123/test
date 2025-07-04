@@ -2537,7 +2537,8 @@ def gradat_page_import_permissions():
     if current_user.role != 'gradat':
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
-    return render_template('gradat_import_permissions_page.html', title="Import Masiv Permisii din Text")
+    # Corrected template filename
+    return render_template('gradat_import_permissions.html', title="Import Masiv Permisii din Text")
 
 @app.route('/gradat/weekend_leaves/import_page', methods=['GET'], endpoint='gradat_page_import_weekend_leaves')
 @login_required
@@ -2545,7 +2546,8 @@ def gradat_page_import_weekend_leaves():
     if current_user.role != 'gradat':
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
-    return render_template('gradat_import_weekend_leaves_page.html', title="Import Masiv Învoiri Weekend din Text")
+    # Corrected template filename
+    return render_template('gradat_import_weekend_leaves.html', title="Import Masiv Învoiri Weekend din Text")
 
 @app.route('/commander/presence_report_data', methods=['GET'])
 @login_required
@@ -2630,6 +2632,24 @@ def admin_change_self_password():
             db.session.commit() 
             return redirect(url_for('admin_change_self_password'))
     return render_template('admin_change_password.html')
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    if current_user.role == 'admin':
+        return redirect(url_for('admin_dashboard_route'))
+    elif current_user.role == 'gradat':
+        # Redirecting to gradat_dashboard_route which renders situatie_pluton.html
+        return redirect(url_for('gradat_dashboard_route'))
+    elif current_user.role == 'comandant_companie':
+        return redirect(url_for('company_commander_dashboard'))
+    elif current_user.role == 'comandant_batalion':
+        return redirect(url_for('battalion_commander_dashboard'))
+    else:
+        # Fallback, though ideally all authenticated users have a role
+        # that directs them to a specific dashboard.
+        flash('Rol utilizator necunoscut sau neconfigurat pentru dashboard.', 'warning')
+        return redirect(url_for('home'))
 
 @app.route('/admin/user/<int:user_id>/set_personal_code', methods=['GET', 'POST'], endpoint='admin_set_user_personal_code')
 @login_required
