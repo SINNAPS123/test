@@ -5527,6 +5527,380 @@ def admin_export_invoiri_text():
     filename = f"invoiri_export_{get_localized_now().strftime('%Y%m%d_%H%M%S')}.txt"
     return send_file(text_file, as_attachment=True, download_name=filename, mimetype='text/plain; charset=utf-8')
 
+# --- Admin Word Export Routes ---
+@app.route('/admin/permissions/export_word', endpoint='admin_export_permissions_word')
+@login_required
+def admin_export_permissions_word():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    now = get_localized_now()
+    permissions_to_export = Permission.query.options(joinedload(Permission.student)).filter(
+        Permission.status == 'Aprobată',
+        Permission.end_datetime >= now  # Active or upcoming
+    ).order_by(Student.nume, Student.prenume, Permission.start_datetime).all()
+
+    if not permissions_to_export:
+        flash('Nicio permisie activă sau viitoare de exportat în sistem.', 'info')
+        return redirect(url_for('admin_dashboard_route'))
+
+    document = Document()
+    document.add_heading('Raport General Permisii (Admin)', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    user_info_text = f"Raport generat de: {current_user.username} (Admin)\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    p_user = document.add_paragraph()
+    p_user.add_run(user_info_text).italic = True
+    p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    document.add_paragraph()
+
+    table = document.add_table(rows=1, cols=8)
+    table.style = 'Table Grid'
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr_cells = table.rows[0].cells
+    column_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Data Început', 'Data Sfârșit', 'Destinația', 'Mijloc Transport', 'Observații/Nr. Auto']
+    for i, title in enumerate(column_titles):
+        hdr_cells[i].text = title
+        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
+        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    for idx, p in enumerate(permissions_to_export):
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(idx + 1)
+        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[1].text = p.student.grad_militar
+        row_cells[2].text = f"{p.student.nume} {p.student.prenume}"
+        row_cells[3].text = p.start_datetime.strftime('%d.%m.%Y %H:%M')
+        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[4].text = p.end_datetime.strftime('%d.%m.%Y %H:%M')
+        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[5].text = p.destination if p.destination else "-"
+        row_cells[6].text = p.transport_mode if p.transport_mode else "-"
+        row_cells[7].text = p.reason if p.reason else "-"
+        row_cells[7].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    widths = {0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8), 3: Inches(1.1), 4: Inches(1.1), 5: Inches(1.5), 6: Inches(1.2), 7: Inches(1.2)}
+    for col_idx, width_val in widths.items():
+        for row in table.rows:
+            if col_idx < len(row.cells): row.cells[col_idx].width = width_val
+
+    style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
+    f = io.BytesIO(); document.save(f); f.seek(0)
+    filename = f"Raport_General_Permisii_Admin_{date.today().strftime('%Y%m%d')}.docx"
+    return send_file(f, download_name=filename, as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+@app.route('/admin/weekend_leaves/export_word', endpoint='admin_export_weekend_leaves_word')
+@login_required
+def admin_export_weekend_leaves_word():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    leaves_to_export = WeekendLeave.query.options(joinedload(WeekendLeave.student)).filter(
+        WeekendLeave.status == 'Aprobată'
+    ).order_by(Student.nume, Student.prenume, WeekendLeave.weekend_start_date).all()
+
+    leaves_to_export = [leave for leave in leaves_to_export if leave.is_overall_active_or_upcoming]
+
+    if not leaves_to_export:
+        flash('Nicio învoire de weekend activă sau viitoare de exportat în sistem.', 'info')
+        return redirect(url_for('admin_dashboard_route'))
+
+    document = Document()
+    document.add_heading('Raport General Învoiri Weekend (Admin)', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    user_info_text = f"Raport generat de: {current_user.username} (Admin)\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True; p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    document.add_paragraph()
+
+    table = document.add_table(rows=1, cols=6)
+    table.style = 'Table Grid'; table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr_cells = table.rows[0].cells
+    col_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Weekend (Vineri)', 'Intervale Selectate', 'Motiv (Biserică)']
+    for i, title in enumerate(col_titles):
+        hdr_cells[i].text = title; hdr_cells[i].paragraphs[0].runs[0].font.bold = True; hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    for idx, leave in enumerate(leaves_to_export):
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(idx + 1); row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[1].text = leave.student.grad_militar
+        row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}"
+        row_cells[3].text = leave.weekend_start_date.strftime('%d.%m.%Y'); row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        intervals_str = [f"{i['day_name']} ({i['start'].strftime('%d.%m')}) {i['start'].strftime('%H:%M')}-{i['end'].strftime('%H:%M')}" for i in leave.get_intervals()]
+        row_cells[4].text = "; ".join(intervals_str) if intervals_str else "N/A"
+
+        reason_text = leave.reason or ""
+        if leave.duminica_biserica and any(d['day_name']=='Duminica' for d in leave.get_intervals()): reason_text = (reason_text + " (Biserică Duminică)").strip()
+        if not reason_text: reason_text = "-"
+        row_cells[5].text = reason_text
+
+    widths = {0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8), 3: Inches(1.0), 4: Inches(2.8), 5: Inches(1.5)}
+    for col_idx, width_val in widths.items():
+        for row in table.rows:
+            if col_idx < len(row.cells): row.cells[col_idx].width = width_val
+
+    style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
+    f = io.BytesIO(); document.save(f); f.seek(0)
+    filename = f"Raport_General_Weekend_Admin_{date.today().strftime('%Y%m%d')}.docx"
+    return send_file(f, download_name=filename, as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+# --- Company Commander Word Export Routes ---
+@app.route('/company_commander/permissions/export_word', endpoint='company_commander_export_permissions_word')
+@login_required
+def company_commander_export_permissions_word():
+    if current_user.role != 'comandant_companie':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    company_id_str = _get_commander_unit_id(current_user.username, "CmdC")
+    if not company_id_str:
+        flash('ID-ul companiei nu a putut fi determinat.', 'warning')
+        return redirect(url_for('company_commander_dashboard'))
+
+    student_ids_in_company = [s.id for s in Student.query.filter_by(companie=company_id_str).with_entities(Student.id).all()]
+    if not student_ids_in_company:
+        flash(f'Niciun student în compania {company_id_str} pentru a exporta permisii.', 'info')
+        return redirect(url_for('company_commander_dashboard'))
+
+    now = get_localized_now()
+    permissions_to_export = Permission.query.options(joinedload(Permission.student)).filter(
+        Permission.student_id.in_(student_ids_in_company),
+        Permission.status == 'Aprobată',
+        Permission.end_datetime >= now
+    ).order_by(Student.nume, Student.prenume, Permission.start_datetime).all()
+
+    if not permissions_to_export:
+        flash(f'Nicio permisie activă sau viitoare de exportat pentru compania {company_id_str}.', 'info')
+        return redirect(url_for('company_commander_dashboard'))
+
+    document = Document()
+    document.add_heading(f'Raport Permisii Compania {company_id_str}', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True; p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    document.add_paragraph()
+
+    table = document.add_table(rows=1, cols=8) # Standard 8 columns
+    table.style = 'Table Grid'; table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr_cells = table.rows[0].cells
+    column_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Data Început', 'Data Sfârșit', 'Destinația', 'Mijloc Transport', 'Observații/Nr. Auto']
+    for i, title in enumerate(column_titles):
+        hdr_cells[i].text = title; hdr_cells[i].paragraphs[0].runs[0].font.bold = True; hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    for idx, p in enumerate(permissions_to_export):
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(idx + 1); row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[1].text = p.student.grad_militar
+        row_cells[2].text = f"{p.student.nume} {p.student.prenume}"
+        row_cells[3].text = p.start_datetime.strftime('%d.%m.%Y %H:%M'); row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[4].text = p.end_datetime.strftime('%d.%m.%Y %H:%M'); row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[5].text = p.destination if p.destination else "-"
+        row_cells[6].text = p.transport_mode if p.transport_mode else "-"
+        row_cells[7].text = p.reason if p.reason else "-"; row_cells[7].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    widths = {0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8), 3: Inches(1.1), 4: Inches(1.1), 5: Inches(1.5), 6: Inches(1.2), 7: Inches(1.2)}
+    for col_idx, width_val in widths.items():
+        for row in table.rows:
+            if col_idx < len(row.cells): row.cells[col_idx].width = width_val
+
+    style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
+    f = io.BytesIO(); document.save(f); f.seek(0)
+    filename = f"Raport_Permisii_Compania_{company_id_str}_{date.today().strftime('%Y%m%d')}.docx"
+    return send_file(f, download_name=filename, as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+@app.route('/company_commander/weekend_leaves/export_word', endpoint='company_commander_export_weekend_leaves_word')
+@login_required
+def company_commander_export_weekend_leaves_word():
+    if current_user.role != 'comandant_companie':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    company_id_str = _get_commander_unit_id(current_user.username, "CmdC")
+    if not company_id_str:
+        flash('ID-ul companiei nu a putut fi determinat.', 'warning')
+        return redirect(url_for('company_commander_dashboard'))
+
+    student_ids_in_company = [s.id for s in Student.query.filter_by(companie=company_id_str).with_entities(Student.id).all()]
+    if not student_ids_in_company:
+        flash(f'Niciun student în compania {company_id_str} pentru a exporta învoiri de weekend.', 'info')
+        return redirect(url_for('company_commander_dashboard'))
+
+    leaves_to_export = WeekendLeave.query.options(joinedload(WeekendLeave.student)).filter(
+        WeekendLeave.student_id.in_(student_ids_in_company),
+        WeekendLeave.status == 'Aprobată'
+    ).order_by(Student.nume, Student.prenume, WeekendLeave.weekend_start_date).all()
+
+    leaves_to_export = [leave for leave in leaves_to_export if leave.is_overall_active_or_upcoming]
+
+    if not leaves_to_export:
+        flash(f'Nicio învoire de weekend activă sau viitoare de exportat pentru compania {company_id_str}.', 'info')
+        return redirect(url_for('company_commander_dashboard'))
+
+    document = Document()
+    document.add_heading(f'Raport Învoiri Weekend Compania {company_id_str}', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True; p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    document.add_paragraph()
+
+    table = document.add_table(rows=1, cols=6)
+    table.style = 'Table Grid'; table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr_cells = table.rows[0].cells
+    col_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Weekend (Vineri)', 'Intervale Selectate', 'Motiv (Biserică)']
+    for i, title in enumerate(col_titles):
+        hdr_cells[i].text = title; hdr_cells[i].paragraphs[0].runs[0].font.bold = True; hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    for idx, leave in enumerate(leaves_to_export):
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(idx + 1); row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[1].text = leave.student.grad_militar
+        row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}"
+        row_cells[3].text = leave.weekend_start_date.strftime('%d.%m.%Y'); row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        intervals_str = [f"{i['day_name']} ({i['start'].strftime('%d.%m')}) {i['start'].strftime('%H:%M')}-{i['end'].strftime('%H:%M')}" for i in leave.get_intervals()]
+        row_cells[4].text = "; ".join(intervals_str) if intervals_str else "N/A"
+
+        reason_text = leave.reason or ""
+        if leave.duminica_biserica and any(d['day_name']=='Duminica' for d in leave.get_intervals()): reason_text = (reason_text + " (Biserică Duminică)").strip()
+        if not reason_text: reason_text = "-"
+        row_cells[5].text = reason_text
+
+    widths = {0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8), 3: Inches(1.0), 4: Inches(2.8), 5: Inches(1.5)}
+    for col_idx, width_val in widths.items():
+        for row in table.rows:
+            if col_idx < len(row.cells): row.cells[col_idx].width = width_val
+
+    style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
+    f = io.BytesIO(); document.save(f); f.seek(0)
+    filename = f"Raport_Weekend_Compania_{company_id_str}_{date.today().strftime('%Y%m%d')}.docx"
+    return send_file(f, download_name=filename, as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+# --- Battalion Commander Word Export Routes ---
+@app.route('/battalion_commander/permissions/export_word', endpoint='battalion_commander_export_permissions_word')
+@login_required
+def battalion_commander_export_permissions_word():
+    if current_user.role != 'comandant_batalion':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    battalion_id_str = _get_commander_unit_id(current_user.username, "CmdB")
+    if not battalion_id_str:
+        flash('ID-ul batalionului nu a putut fi determinat.', 'warning')
+        return redirect(url_for('battalion_commander_dashboard'))
+
+    student_ids_in_battalion = [s.id for s in Student.query.filter_by(batalion=battalion_id_str).with_entities(Student.id).all()]
+    if not student_ids_in_battalion:
+        flash(f'Niciun student în batalionul {battalion_id_str} pentru a exporta permisii.', 'info')
+        return redirect(url_for('battalion_commander_dashboard'))
+
+    now = get_localized_now()
+    permissions_to_export = Permission.query.options(joinedload(Permission.student)).filter(
+        Permission.student_id.in_(student_ids_in_battalion),
+        Permission.status == 'Aprobată',
+        Permission.end_datetime >= now
+    ).order_by(Student.nume, Student.prenume, Permission.start_datetime).all()
+
+    if not permissions_to_export:
+        flash(f'Nicio permisie activă sau viitoare de exportat pentru batalionul {battalion_id_str}.', 'info')
+        return redirect(url_for('battalion_commander_dashboard'))
+
+    document = Document()
+    document.add_heading(f'Raport Permisii Batalionul {battalion_id_str}', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True; p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    document.add_paragraph()
+
+    table = document.add_table(rows=1, cols=8)
+    table.style = 'Table Grid'; table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr_cells = table.rows[0].cells
+    column_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Data Început', 'Data Sfârșit', 'Destinația', 'Mijloc Transport', 'Observații/Nr. Auto']
+    for i, title in enumerate(column_titles):
+        hdr_cells[i].text = title; hdr_cells[i].paragraphs[0].runs[0].font.bold = True; hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    for idx, p in enumerate(permissions_to_export):
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(idx + 1); row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[1].text = p.student.grad_militar
+        row_cells[2].text = f"{p.student.nume} {p.student.prenume}"
+        row_cells[3].text = p.start_datetime.strftime('%d.%m.%Y %H:%M'); row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[4].text = p.end_datetime.strftime('%d.%m.%Y %H:%M'); row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[5].text = p.destination if p.destination else "-"
+        row_cells[6].text = p.transport_mode if p.transport_mode else "-"
+        row_cells[7].text = p.reason if p.reason else "-"; row_cells[7].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    widths = {0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8), 3: Inches(1.1), 4: Inches(1.1), 5: Inches(1.5), 6: Inches(1.2), 7: Inches(1.2)}
+    for col_idx, width_val in widths.items():
+        for row in table.rows:
+            if col_idx < len(row.cells): row.cells[col_idx].width = width_val
+
+    style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
+    f = io.BytesIO(); document.save(f); f.seek(0)
+    filename = f"Raport_Permisii_Batalion_{battalion_id_str}_{date.today().strftime('%Y%m%d')}.docx"
+    return send_file(f, download_name=filename, as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+@app.route('/battalion_commander/weekend_leaves/export_word', endpoint='battalion_commander_export_weekend_leaves_word')
+@login_required
+def battalion_commander_export_weekend_leaves_word():
+    if current_user.role != 'comandant_batalion':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    battalion_id_str = _get_commander_unit_id(current_user.username, "CmdB")
+    if not battalion_id_str:
+        flash('ID-ul batalionului nu a putut fi determinat.', 'warning')
+        return redirect(url_for('battalion_commander_dashboard'))
+
+    student_ids_in_battalion = [s.id for s in Student.query.filter_by(batalion=battalion_id_str).with_entities(Student.id).all()]
+    if not student_ids_in_battalion:
+        flash(f'Niciun student în batalionul {battalion_id_str} pentru a exporta învoiri de weekend.', 'info')
+        return redirect(url_for('battalion_commander_dashboard'))
+
+    leaves_to_export = WeekendLeave.query.options(joinedload(WeekendLeave.student)).filter(
+        WeekendLeave.student_id.in_(student_ids_in_battalion),
+        WeekendLeave.status == 'Aprobată'
+    ).order_by(Student.nume, Student.prenume, WeekendLeave.weekend_start_date).all()
+
+    leaves_to_export = [leave for leave in leaves_to_export if leave.is_overall_active_or_upcoming]
+
+    if not leaves_to_export:
+        flash(f'Nicio învoire de weekend activă sau viitoare de exportat pentru batalionul {battalion_id_str}.', 'info')
+        return redirect(url_for('battalion_commander_dashboard'))
+
+    document = Document()
+    document.add_heading(f'Raport Învoiri Weekend Batalionul {battalion_id_str}', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True; p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    document.add_paragraph()
+
+    table = document.add_table(rows=1, cols=6)
+    table.style = 'Table Grid'; table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr_cells = table.rows[0].cells
+    col_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Weekend (Vineri)', 'Intervale Selectate', 'Motiv (Biserică)']
+    for i, title in enumerate(col_titles):
+        hdr_cells[i].text = title; hdr_cells[i].paragraphs[0].runs[0].font.bold = True; hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    for idx, leave in enumerate(leaves_to_export):
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(idx + 1); row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[1].text = leave.student.grad_militar
+        row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}"
+        row_cells[3].text = leave.weekend_start_date.strftime('%d.%m.%Y'); row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        intervals_str = [f"{i['day_name']} ({i['start'].strftime('%d.%m')}) {i['start'].strftime('%H:%M')}-{i['end'].strftime('%H:%M')}" for i in leave.get_intervals()]
+        row_cells[4].text = "; ".join(intervals_str) if intervals_str else "N/A"
+
+        reason_text = leave.reason or ""
+        if leave.duminica_biserica and any(d['day_name']=='Duminica' for d in leave.get_intervals()): reason_text = (reason_text + " (Biserică Duminică)").strip()
+        if not reason_text: reason_text = "-"
+        row_cells[5].text = reason_text
+
+    widths = {0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8), 3: Inches(1.0), 4: Inches(2.8), 5: Inches(1.5)}
+    for col_idx, width_val in widths.items():
+        for row in table.rows:
+            if col_idx < len(row.cells): row.cells[col_idx].width = width_val
+
+    style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
+    f = io.BytesIO(); document.save(f); f.seek(0)
+    filename = f"Raport_Weekend_Batalion_{battalion_id_str}_{date.today().strftime('%Y%m%d')}.docx"
+    return send_file(f, download_name=filename, as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
 
 # START JULES BLOCK - NEW AND MODIFIED FUNCTIONS (PROBLEMS 2 & 4)
 
@@ -6234,40 +6608,49 @@ def presence_report():
 # Initialize DB (for admin user creation, etc.)
 # init_db() # This also needs app context if called outside a request or app setup
 
-# It's recommended to run the app within an if __name__ == '__main__': block
-# For now, placing app.run at the top level to fix immediate indentation.
-# Consider restructuring this part.
+# It's recommended to run the app within an if __name__ == '__main__': block.
+# The app.run() call is correctly placed within this block below.
 
-# The database initialization and migration logic might be better handled
+# The database initialization and migration logic is best handled
 # by Flask CLI commands (e.g., flask db init, flask db migrate, flask db upgrade)
-# and a separate command to create the initial admin user if needed.
-# For now, I will comment out the interactive migration and init_db() call
-# from this spot to prevent runtime issues outside of app context or during import.
-# These should be run explicitly when setting up the application.
+# and/or a separate script to create the initial admin user if needed.
+# Interactive prompts for these operations during app startup are generally avoided.
+# These actions should be performed explicitly during setup or deployment.
 
 if __name__ == '__main__':
-# Example of how migrations and init_db could be handled,
-# though Flask-Migrate CLI is preferred.
-# You might want to run these manually or via a script one time.
-# For development, you can uncomment and run once.
-#    with app.app_context():
-#        print("--------------------------------------------------------")
-#        user_input = input("Apply database migrations? (yes/no): ")
-#        print("--------------------------------------------------------")
-#        if user_input.lower() == 'yes':
-#            try:
-#                from flask_migrate import upgrade as flask_upgrade # Specific import
-#                print("Attempting to apply database migrations...")
-#                flask_upgrade()
-#                print("DB migrations applied or up-to-date.")
-#            except Exception as e:
-#                print(f"Error during migration: {e}")
-#        else:
-#            print("Skipping DB migrations.")
-#
-#        # Initialize DB (creates tables if not exist, creates admin if not exist)
-#        init_db()
+    # --- Database Initialization and Migration ---
+    # The following section for database migrations and initialization (init_db)
+    # is commented out by default. It is NOT recommended to run these automatically
+    # every time the application starts.
 
+    # For database migrations:
+    # Use Flask-Migrate CLI commands in your terminal:
+    #   flask db migrate -m "description of changes"
+    #   flask db upgrade
+    # These commands should be run manually when database schema changes are made.
+
+    # For initial database setup (creating tables and admin user):
+    # The init_db() function can be called manually, for example, via a custom Flask CLI command
+    # or a separate script. This is typically done once for initial setup or in development.
+    #
+    # Example of how one might run init_db() or migrations once for development (uncomment to use):
+    with app.app_context():
+        # To apply migrations:
+        print("--- Attempting to apply database migrations... ---")
+        try:
+            from flask_migrate import upgrade as flask_upgrade
+            flask_upgrade()
+            print("DB migrations applied or up-to-date.")
+        except Exception as e:
+            print(f"Error during migration: {e}")
+
+        # To initialize the database (create tables, admin user if not exists):
+        print("--- Attempting to initialize database (admin user, etc.)... ---")
+        init_db() # Make sure init_db() is defined and handles its operations correctly.
+        print("DB initialization complete.")
+        # pass # Use 'pass' if all operations above are commented out.
+
+    # Start the Flask development server
     app.run(host='0.0.0.0', port=5001, debug=False)
 
 [end of app.py]
