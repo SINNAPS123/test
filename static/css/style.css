@@ -187,7 +187,52 @@ body.dark-mode .card-header {
     border-bottom: 1px solid var(--border-color);
     color: var(--text-primary); /* Ensure header text is also correct */
 }
+
+/* === START JULES' MODIFICATIONS FOR DARK MODE TABLE STYLING === */
+body.dark-mode .table th,
+body.dark-mode .table td {
+    /* color: var(--text-primary); */ /* This is already set a bit lower, will be inherited or re-asserted */
+    background-color: transparent !important; /* Remove individual cell backgrounds */
+    /* border-color: var(--border-color); */ /* Will be inherited or re-asserted by general table styles */
+}
+
 body.dark-mode .table thead th {
+    background-color: var(--bg-surface-hover) !important; /* Keep header distinct but ensure it's one of the dark theme's neutral colors */
+    /* color: var(--text-primary); */ /* Already set */
+    border-bottom-width: 2px; /* Keep header border distinct */
+}
+
+/* Neutralize specific hover and striped effects if they interfere */
+body.dark-mode .table-striped > tbody > tr:nth-of-type(odd) > * {
+    background-color: transparent !important;
+}
+body.dark-mode .table-hover > tbody > tr:hover > * {
+    background-color: rgba(255, 255, 255, 0.05) !important; /* Very subtle light hover */
+}
+
+/* Neutralize contextual backgrounds like .table-success, .table-warning etc. for ALL tables in dark mode */
+body.dark-mode .table-success > td, body.dark-mode .table-success > th,
+body.dark-mode .table-warning > td, body.dark-mode .table-warning > th,
+body.dark-mode .table-danger > td, body.dark-mode .table-danger > th,
+body.dark-mode .table-info > td, body.dark-mode .table-info > th,
+body.dark-mode .table-active > td, body.dark-mode .table-active > th,
+body.dark-mode .table-secondary > td, body.dark-mode .table-secondary > th,
+body.dark-mode .table-light > td, body.dark-mode .table-light > th,
+body.dark-mode .table-dark > td, body.dark-mode .table-dark > th {
+    background-color: transparent !important;
+    color: var(--text-primary) !important; /* Ensure text remains light */
+}
+
+/* Ensure links within these neutralized tables are also styled for dark mode */
+body.dark-mode .table a {
+    color: var(--link-color); /* Use the dark mode link color */
+}
+body.dark-mode .table a:hover {
+    color: var(--link-hover-color);
+}
+/* === END JULES' MODIFICATIONS FOR DARK MODE TABLE STYLING === */
+
+body.dark-mode .table thead th { /* This rule was already present, ensure it's not conflicting or duplicate if my additions are above */
     background-color: var(--bg-surface-hover);
     border-bottom: 2px solid var(--border-color);
     color: var(--text-primary); /* Ensure table header text is correct */
