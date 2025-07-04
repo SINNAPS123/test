@@ -1894,298 +1894,6 @@ def battalion_commander_dashboard():
                            current_time_for_display=now_localized_b
                            )
 
-# --- Commander Scoped List Views ---
-@app.route('/commander/permissions', endpoint='view_scoped_permissions')
-@login_required
-def view_scoped_permissions():
-    if current_user.role not in ['comandant_companie', 'comandant_batalion']:
-        flash('Acces neautorizat.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    student_ids_in_scope = []
-    unit_id_str = ""
-    report_title_detail = ""
-    return_dashboard_url = 'dashboard'
-
-    if current_user.role == 'comandant_companie':
-        unit_id_str = _get_commander_unit_id(current_user.username, "CmdC")
-        if unit_id_str:
-            students_in_unit = Student.query.filter_by(companie=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
-            report_title_detail = f"Permisii Compania {unit_id_str}"
-            return_dashboard_url = 'company_commander_dashboard'
-        else:
-            flash('ID Companie invalid.', 'danger'); return redirect(url_for('dashboard'))
-    elif current_user.role == 'comandant_batalion':
-        unit_id_str = _get_commander_unit_id(current_user.username, "CmdB")
-        if unit_id_str:
-            students_in_unit = Student.query.filter_by(batalion=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
-            report_title_detail = f"Permisii Batalionul {unit_id_str}"
-            return_dashboard_url = 'battalion_commander_dashboard'
-        else:
-            flash('ID Batalion invalid.', 'danger'); return redirect(url_for('dashboard'))
-
-    from sqlalchemy import false
-    page = request.args.get('page', 1, type=int)
-    per_page = 20
-    query_filter = Permission.student_id.in_(student_ids_in_scope) if student_ids_in_scope else false()
-    query = Permission.query.options(
-        joinedload(Permission.student),
-        joinedload(Permission.creator)
-    ).filter(query_filter)
-
-    search_student_name = request.args.get('search_student_name', '').strip()
-    filter_status = request.args.get('filter_status', '').strip()
-    filter_date_type = request.args.get('filter_date_type', 'active_today').strip()
-
-    if search_student_name:
-        search_pattern = f"%{unidecode(search_student_name.lower())}%"
-        query = query.join(Permission.student).filter(
-            or_(
-                func.lower(unidecode(Student.nume)).like(search_pattern),
-                func.lower(unidecode(Student.prenume)).like(search_pattern)
-            )
-        )
-    if filter_status:
-        query = query.filter(Permission.status == filter_status)
-
-    now_localized = get_localized_now()
-    today_start_naive = datetime.combine(now_localized.date(), time.min)
-    today_end_naive = datetime.combine(now_localized.date(), time.max)
-    now_naive_for_db_compare = now_localized.replace(tzinfo=None)
-
-    if filter_date_type == 'active_today':
-        query = query.filter(Permission.start_datetime <= today_end_naive, Permission.end_datetime >= today_start_naive, Permission.status == 'Aprobată')
-    elif filter_date_type == 'active_now':
-        query = query.filter(Permission.start_datetime <= now_naive_for_db_compare, Permission.end_datetime >= now_naive_for_db_compare, Permission.status == 'Aprobată')
-    elif filter_date_type == 'upcoming':
-        query = query.filter(Permission.start_datetime > now_naive_for_db_compare, Permission.status == 'Aprobată')
-    elif filter_date_type == 'past_week':
-        seven_days_ago_naive = (now_localized.date() - timedelta(days=7))
-        query = query.filter(Permission.end_datetime >= datetime.combine(seven_days_ago_naive, time.min))
-
-    query = query.order_by(Permission.start_datetime.desc())
-    permissions_pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-
-    return render_template('scoped_list_permissions.html',
-                           permissions_pagination=permissions_pagination,
-                           title=report_title_detail,
-                           return_dashboard_url=return_dashboard_url)
-
-@app.route('/commander/daily_leaves', endpoint='view_scoped_daily_leaves')
-@login_required
-def view_scoped_daily_leaves():
-    if current_user.role not in ['comandant_companie', 'comandant_batalion']:
-        flash('Acces neautorizat.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    student_ids_in_scope = []
-    unit_id_str = ""
-    view_title = ""
-    return_dashboard_url = 'dashboard'
-
-    if current_user.role == 'comandant_companie':
-        unit_id_str = _get_commander_unit_id(current_user.username, "CmdC")
-        if unit_id_str:
-            students_in_unit = Student.query.filter_by(companie=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
-            view_title = f"Învoiri Zilnice Compania {unit_id_str}"
-            return_dashboard_url = 'company_commander_dashboard'
-        else:
-            flash('ID Companie invalid.', 'danger'); return redirect(url_for('dashboard'))
-    elif current_user.role == 'comandant_batalion':
-        unit_id_str = _get_commander_unit_id(current_user.username, "CmdB")
-        if unit_id_str:
-            students_in_unit = Student.query.filter_by(batalion=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
-            view_title = f"Învoiri Zilnice Batalionul {unit_id_str}"
-            return_dashboard_url = 'battalion_commander_dashboard'
-        else:
-            flash('ID Batalion invalid.', 'danger'); return redirect(url_for('dashboard'))
-
-    from sqlalchemy import false
-    page = request.args.get('page', 1, type=int)
-    per_page = 20
-    query_filter = DailyLeave.student_id.in_(student_ids_in_scope) if student_ids_in_scope else false()
-    query = DailyLeave.query.options(
-        joinedload(DailyLeave.student),
-        joinedload(DailyLeave.creator)
-    ).filter(query_filter)
-
-    search_student_name = request.args.get('search_student_name', '').strip()
-    filter_status = request.args.get('filter_status', '').strip()
-    filter_date_str = request.args.get('filter_date', '').strip()
-
-    if search_student_name:
-        search_pattern = f"%{unidecode(search_student_name.lower())}%"
-        query = query.join(DailyLeave.student).filter(
-            or_(
-                func.lower(unidecode(Student.nume)).like(search_pattern),
-                func.lower(unidecode(Student.prenume)).like(search_pattern)
-            )
-        )
-    if filter_status:
-        query = query.filter(DailyLeave.status == filter_status)
-    if filter_date_str:
-        try:
-            filter_date_obj = datetime.strptime(filter_date_str, '%Y-%m-%d').date()
-            query = query.filter(DailyLeave.leave_date == filter_date_obj)
-        except ValueError:
-            flash('Format dată invalid pentru filtrare. Folosiți YYYY-MM-DD.', 'warning')
-
-    query = query.order_by(DailyLeave.leave_date.desc(), DailyLeave.start_time.desc())
-    daily_leaves_pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-
-    return render_template('scoped_list_daily_leaves.html',
-                           daily_leaves_pagination=daily_leaves_pagination,
-                           title=view_title,
-                           return_dashboard_url=return_dashboard_url)
-
-@app.route('/commander/weekend_leaves', endpoint='view_scoped_weekend_leaves')
-@login_required
-def view_scoped_weekend_leaves():
-    if current_user.role not in ['comandant_companie', 'comandant_batalion']:
-        flash('Acces neautorizat.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    student_ids_in_scope = []
-    unit_id_str = ""
-    view_title = ""
-    return_dashboard_url = 'dashboard'
-
-    if current_user.role == 'comandant_companie':
-        unit_id_str = _get_commander_unit_id(current_user.username, "CmdC")
-        if unit_id_str:
-            students_in_unit = Student.query.filter_by(companie=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
-            view_title = f"Învoiri Weekend Compania {unit_id_str}"
-            return_dashboard_url = 'company_commander_dashboard'
-        else:
-            flash('ID Companie invalid.', 'danger'); return redirect(url_for('dashboard'))
-    elif current_user.role == 'comandant_batalion':
-        unit_id_str = _get_commander_unit_id(current_user.username, "CmdB")
-        if unit_id_str:
-            students_in_unit = Student.query.filter_by(batalion=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
-            view_title = f"Învoiri Weekend Batalionul {unit_id_str}"
-            return_dashboard_url = 'battalion_commander_dashboard'
-        else:
-            flash('ID Batalion invalid.', 'danger'); return redirect(url_for('dashboard'))
-
-    from sqlalchemy import false
-    page = request.args.get('page', 1, type=int)
-    per_page = 20
-    query_filter = WeekendLeave.student_id.in_(student_ids_in_scope) if student_ids_in_scope else false()
-    query = WeekendLeave.query.options(
-        joinedload(WeekendLeave.student),
-        joinedload(WeekendLeave.creator)
-    ).filter(query_filter)
-
-    search_student_name = request.args.get('search_student_name', '').strip()
-    filter_status = request.args.get('filter_status', '').strip()
-    filter_weekend_start_date_str = request.args.get('filter_weekend_start_date', '').strip()
-
-    if search_student_name:
-        search_pattern = f"%{unidecode(search_student_name.lower())}%"
-        query = query.join(WeekendLeave.student).filter(
-            or_(
-                func.lower(unidecode(Student.nume)).like(search_pattern),
-                func.lower(unidecode(Student.prenume)).like(search_pattern)
-            )
-        )
-    if filter_status:
-        query = query.filter(WeekendLeave.status == filter_status)
-    if filter_weekend_start_date_str:
-        try:
-            filter_date_obj = datetime.strptime(filter_weekend_start_date_str, '%Y-%m-%d').date()
-            query = query.filter(WeekendLeave.weekend_start_date == filter_date_obj)
-        except ValueError:
-            flash('Format dată invalid pentru filtrare (Vineri). Folosiți YYYY-MM-DD.', 'warning')
-
-    query = query.order_by(WeekendLeave.weekend_start_date.desc(), WeekendLeave.student_id)
-    weekend_leaves_pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-
-    return render_template('scoped_list_weekend_leaves.html',
-                           weekend_leaves_pagination=weekend_leaves_pagination,
-                           title=view_title,
-                           return_dashboard_url=return_dashboard_url)
-
-@app.route('/commander/services', endpoint='view_scoped_services')
-@login_required
-def view_scoped_services():
-    if current_user.role not in ['comandant_companie', 'comandant_batalion']:
-        flash('Acces neautorizat.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    student_ids_in_scope = []
-    unit_id_str = ""
-    view_title = ""
-    return_dashboard_url = 'dashboard'
-
-    if current_user.role == 'comandant_companie':
-        unit_id_str = _get_commander_unit_id(current_user.username, "CmdC")
-        if unit_id_str:
-            students_in_unit = Student.query.filter_by(companie=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
-            view_title = f"Servicii Compania {unit_id_str}"
-            return_dashboard_url = 'company_commander_dashboard'
-        else:
-            flash('ID Companie invalid.', 'danger'); return redirect(url_for('dashboard'))
-    elif current_user.role == 'comandant_batalion':
-        unit_id_str = _get_commander_unit_id(current_user.username, "CmdB")
-        if unit_id_str:
-            students_in_unit = Student.query.filter_by(batalion=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
-            view_title = f"Servicii Batalionul {unit_id_str}"
-            return_dashboard_url = 'battalion_commander_dashboard'
-        else:
-            flash('ID Batalion invalid.', 'danger'); return redirect(url_for('dashboard'))
-
-    from sqlalchemy import false
-    page = request.args.get('page', 1, type=int)
-    per_page = 20
-    query_filter = ServiceAssignment.student_id.in_(student_ids_in_scope) if student_ids_in_scope else false()
-    query = ServiceAssignment.query.options(
-        joinedload(ServiceAssignment.student),
-        joinedload(ServiceAssignment.creator)
-    ).filter(query_filter)
-
-    search_student_name = request.args.get('search_student_name', '').strip()
-    filter_service_type = request.args.get('filter_service_type', '').strip()
-    filter_service_date_str = request.args.get('filter_service_date', '').strip()
-
-    if search_student_name:
-        search_pattern = f"%{unidecode(search_student_name.lower())}%"
-        query = query.join(ServiceAssignment.student).filter(
-            or_(
-                func.lower(unidecode(Student.nume)).like(search_pattern),
-                func.lower(unidecode(Student.prenume)).like(search_pattern)
-            )
-        )
-    if filter_service_type:
-        query = query.filter(ServiceAssignment.service_type == filter_service_type)
-    if filter_service_date_str:
-        try:
-            filter_date_obj = datetime.strptime(filter_service_date_str, '%Y-%m-%d').date()
-            query = query.filter(ServiceAssignment.service_date == filter_date_obj)
-        except ValueError:
-            flash('Format dată invalid pentru filtrare. Folosiți YYYY-MM-DD.', 'warning')
-
-    service_types_for_filter = SERVICE_TYPES
-
-    query = query.order_by(ServiceAssignment.start_datetime.desc())
-    services_pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-
-    return render_template('scoped_list_services.html',
-                           services_pagination=services_pagination,
-                           title=view_title,
-                           return_dashboard_url=return_dashboard_url,
-                           service_types_for_filter=service_types_for_filter)
-
-# --- Presence Report Route ---
-@app.route('/reports/presence', methods=['GET', 'POST'])
-@login_required
 def presence_report():
     if current_user.role not in ['gradat', 'admin', 'comandant_companie', 'comandant_batalion']: # Admin/Commanders might also want tosee this for their unit? For now, primarily gradat.
         flash('Acces neautorizat pentru rolul dumneavoastră.', 'danger')
@@ -4865,308 +4573,6 @@ def delete_service_assignment(assignment_id):
 
     return redirect(url_for('list_services'))
 
-@app.route('/reports/export/permissions_scoped', endpoint='export_permissions_scoped_word')
-@login_required
-def export_permissions_scoped_word():
-    now = get_localized_now() # Folosim ora localizată
-    student_ids_in_scope = []
-    report_title_detail = ""
-    # Sanitize username for filename, removing non-alphanumeric characters
-    current_username_for_file = re.sub(r'\W+', '', current_user.username)
-
-    if current_user.role == 'admin':
-        # For admin, get all student IDs. Could also query Student directly if needed for other info.
-        all_students_query = Student.query.with_entities(Student.id).all()
-        student_ids_in_scope = [s[0] for s in all_students_query]
-        report_title_detail = "General Admin"
-        if not student_ids_in_scope:
-            flash('Nu există studenți în sistem pentru a genera raportul de permisii.', 'info')
-            return redirect(url_for('admin_dashboard_route'))
-
-    elif current_user.role == 'comandant_companie':
-        company_id = _get_commander_unit_id(current_user.username, "CmdC")
-        if not company_id:
-            flash('ID-ul companiei nu a putut fi determinat pentru generarea raportului.', 'danger')
-            return redirect(url_for('company_commander_dashboard'))
-        students_in_unit = Student.query.filter_by(companie=company_id).with_entities(Student.id).all()
-        student_ids_in_scope = [s[0] for s in students_in_unit]
-        report_title_detail = f"Compania {company_id}"
-        if not student_ids_in_scope:
-            flash(f'Nu există studenți în compania {company_id} pentru a genera raportul.', 'info')
-            return redirect(url_for('company_commander_dashboard'))
-
-    elif current_user.role == 'comandant_batalion':
-        battalion_id = _get_commander_unit_id(current_user.username, "CmdB")
-        if not battalion_id:
-            flash('ID-ul batalionului nu a putut fi determinat pentru generarea raportului.', 'danger')
-            return redirect(url_for('battalion_commander_dashboard'))
-        students_in_unit = Student.query.filter_by(batalion=battalion_id).with_entities(Student.id).all()
-        student_ids_in_scope = [s[0] for s in students_in_unit]
-        report_title_detail = f"Batalionul {battalion_id}"
-        if not student_ids_in_scope:
-            flash(f'Nu există studenți în batalionul {battalion_id} pentru a genera raportul.', 'info')
-            return redirect(url_for('battalion_commander_dashboard'))
-    else:
-        flash('Rol neautorizat pentru această funcționalitate de export.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    # Base query for permissions
-    permissions_query = Permission.query.join(Permission.student).options(
-        joinedload(Permission.student) # No need for .joinedload(Student.creator) here unless creator is in report
-    ).filter(
-        Permission.student_id.in_(student_ids_in_scope),
-        Permission.status == 'Aprobată',
-        Permission.end_datetime >= now  # Active or upcoming
-    ).order_by(
-        Student.batalion, Student.companie, Student.pluton, Student.nume, Permission.start_datetime
-    )
-
-    permissions_to_export = permissions_query.all()
-
-    if not permissions_to_export:
-        flash(f'Nicio permisie activă sau viitoare de exportat pentru {report_title_detail}.', 'info')
-        if current_user.role == 'admin': return redirect(url_for('admin_dashboard_route'))
-        if current_user.role == 'comandant_companie': return redirect(url_for('company_commander_dashboard'))
-        if current_user.role == 'comandant_batalion': return redirect(url_for('battalion_commander_dashboard'))
-        return redirect(url_for('dashboard')) # Fallback
-
-    document = Document()
-    # Set document margins (optional, but can help fit more)
-    sections = document.sections
-    for section in sections:
-        section.left_margin = Inches(0.75)
-        section.right_margin = Inches(0.75)
-        section.top_margin = Inches(0.75)
-        section.bottom_margin = Inches(0.75)
-
-    document.add_heading(f'Raport Permisii Studenți - {report_title_detail}', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    user_info_text = f"Raport generat de: {current_user.username} ({current_user.role})\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}" # Folosim ora localizată
-    p_user = document.add_paragraph()
-    p_user.add_run(user_info_text).italic = True
-    p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    document.add_paragraph()
-
-    table = document.add_table(rows=1, cols=9)
-    table.style = 'Table Grid'
-    table.autofit = False # Important for custom widths to take effect reliably
-    table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    hdr_cells = table.rows[0].cells
-    column_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Pluton', 'Data Început', 'Data Sfârșit', 'Destinația', 'Mijloc Transport', 'Observații/Nr. Auto']
-    for i, title in enumerate(column_titles):
-        cell = hdr_cells[i]
-        cell.text = title
-        # Apply bold and center alignment to header cells
-        p = cell.paragraphs[0]
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        for run in p.runs:
-            run.font.bold = True
-            run.font.size = Pt(9) # Smaller font for header
-
-    for idx, perm in enumerate(permissions_to_export):
-        row_cells = table.add_row().cells
-        row_cells[0].text = str(idx + 1)
-        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[1].text = perm.student.grad_militar
-        row_cells[2].text = f"{perm.student.nume} {perm.student.prenume}"
-        row_cells[3].text = perm.student.pluton
-        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[4].text = perm.start_datetime.strftime('%d.%m.%y %H:%M') # Shorter year
-        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[5].text = perm.end_datetime.strftime('%d.%m.%y %H:%M') # Shorter year
-        row_cells[5].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[6].text = perm.destination if perm.destination else "-"
-        row_cells[7].text = perm.transport_mode if perm.transport_mode else "-"
-        row_cells[8].text = perm.reason if perm.reason else "-"
-
-        # Set font size for data cells
-        for cell in row_cells:
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs:
-                    run.font.size = Pt(9)
-
-
-    widths_config = { # Inches
-        0: 0.3, 1: 0.6, 2: 1.5, 3: 0.5,
-        4: 0.9, 5: 0.9, 6: 1.5, 7: 1.0, 8: 1.3
-    } # Approx total 8.5 inches for A4 Portrait with 0.75" margins
-      # A4 width is 8.27 inches. Max table width should be ~6.77 inches (8.27 - 0.75*2).
-
-    # Recalculate widths for a max of ~6.7 inches
-    widths_config = {
-        0: Inches(0.3), 1: Inches(0.5), 2: Inches(1.2), 3: Inches(0.5),
-        4: Inches(0.8), 5: Inches(0.8), 6: Inches(1.1), 7: Inches(0.8), 8: Inches(0.7)
-    } # Sum = 6.7
-
-    for col_idx, width_val in widths_config.items():
-        for row in table.rows: # Apply to all rows including header
-            if col_idx < len(row.cells):
-                 row.cells[col_idx].width = width_val
-            else: # Should not happen if table has 9 columns
-                 app.logger.warning(f"Attempted to set width for non-existent column {col_idx} in permissions export.")
-
-    # Set overall document font (optional, but good for consistency)
-    style = document.styles['Normal']
-    font = style.font
-    font.name = 'Calibri' # Or Times New Roman
-    font.size = Pt(9) # Set default data font size for the document
-
-    f_io = io.BytesIO()
-    document.save(f_io)
-    f_io.seek(0)
-
-    clean_report_title = re.sub(r'\W+', '_', report_title_detail)
-    filename = f"Raport_Permisii_{clean_report_title}_{current_username_for_file}_{get_localized_now().date().strftime('%Y%m%d')}.docx" # Folosim data localizată
-
-    return send_file(f_io,
-                     download_name=filename,
-                     as_attachment=True,
-                     mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-
-@app.route('/reports/export/weekend_leaves_scoped', endpoint='export_weekend_leaves_scoped_word')
-@login_required
-def export_weekend_leaves_scoped_word():
-    # now = get_localized_now() # 'now' nu este folosit direct în această funcție după modificări
-    student_ids_in_scope = []
-    report_title_detail = ""
-    current_username_for_file = re.sub(r'\W+', '', current_user.username)
-
-    if current_user.role == 'admin':
-        all_students_query = Student.query.with_entities(Student.id).all()
-        student_ids_in_scope = [s[0] for s in all_students_query]
-        report_title_detail = "General Admin"
-        if not student_ids_in_scope:
-            flash('Nu există studenți în sistem pentru a genera raportul de învoiri weekend.', 'info')
-            return redirect(url_for('admin_dashboard_route'))
-
-    elif current_user.role == 'comandant_companie':
-        company_id = _get_commander_unit_id(current_user.username, "CmdC")
-        if not company_id:
-            flash('ID-ul companiei nu a putut fi determinat.', 'danger')
-            return redirect(url_for('company_commander_dashboard'))
-        students_in_unit = Student.query.filter_by(companie=company_id).with_entities(Student.id).all()
-        student_ids_in_scope = [s[0] for s in students_in_unit]
-        report_title_detail = f"Compania {company_id}"
-        if not student_ids_in_scope:
-            flash(f'Nu există studenți în compania {company_id} pentru a genera raportul.', 'info')
-            return redirect(url_for('company_commander_dashboard'))
-
-    elif current_user.role == 'comandant_batalion':
-        battalion_id = _get_commander_unit_id(current_user.username, "CmdB")
-        if not battalion_id:
-            flash('ID-ul batalionului nu a putut fi determinat.', 'danger')
-            return redirect(url_for('battalion_commander_dashboard'))
-        students_in_unit = Student.query.filter_by(batalion=battalion_id).with_entities(Student.id).all()
-        student_ids_in_scope = [s[0] for s in students_in_unit]
-        report_title_detail = f"Batalionul {battalion_id}"
-        if not student_ids_in_scope:
-            flash(f'Nu există studenți în batalionul {battalion_id} pentru a genera raportul.', 'info')
-            return redirect(url_for('battalion_commander_dashboard'))
-    else:
-        flash('Rol neautorizat pentru această funcționalitate de export.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    # Query for weekend leaves, similar to permissions
-    weekend_leaves_query = WeekendLeave.query.join(WeekendLeave.student).options(
-        joinedload(WeekendLeave.student)
-    ).filter(
-        WeekendLeave.student_id.in_(student_ids_in_scope),
-        WeekendLeave.status == 'Aprobată'
-        # We need to filter by is_overall_active_or_upcoming, which is a property.
-        # This requires fetching all and then filtering in Python, or replicating logic in SQL.
-        # For simplicity, fetch all approved and filter in Python.
-    ).order_by(
-        Student.batalion, Student.companie, Student.pluton, Student.nume, WeekendLeave.weekend_start_date
-    )
-
-    all_approved_leaves = weekend_leaves_query.all()
-    # Filter for active or upcoming ones
-    leaves_to_export = [leave for leave in all_approved_leaves if leave.is_overall_active_or_upcoming]
-
-
-    if not leaves_to_export:
-        flash(f'Nicio învoire de weekend activă sau viitoare de exportat pentru {report_title_detail}.', 'info')
-        if current_user.role == 'admin': return redirect(url_for('admin_dashboard_route'))
-        if current_user.role == 'comandant_companie': return redirect(url_for('company_commander_dashboard'))
-        if current_user.role == 'comandant_batalion': return redirect(url_for('battalion_commander_dashboard'))
-        return redirect(url_for('dashboard'))
-
-    document = Document()
-    sections = document.sections
-    for section in sections:
-        section.left_margin = Inches(0.75); section.right_margin = Inches(0.75)
-        section.top_margin = Inches(0.75); section.bottom_margin = Inches(0.75)
-
-    document.add_heading(f'Raport Învoiri Weekend - {report_title_detail}', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
-    user_info_text = f"Raport generat de: {current_user.username} ({current_user.role})\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}" # Folosim ora localizată
-    p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True
-    p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    document.add_paragraph()
-
-    table = document.add_table(rows=1, cols=7) # NrCrt, Grad, Nume, Pluton, Weekend(Vineri), Intervale, Obs/Biserica
-    table.style = 'Table Grid'
-    table.autofit = False
-    table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    hdr_cells = table.rows[0].cells
-    column_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Pluton', 'Weekend (Vineri)', 'Intervale Selectate', 'Observații (Biserică)']
-    for i, title in enumerate(column_titles):
-        cell = hdr_cells[i]; cell.text = title
-        p = cell.paragraphs[0]; p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        for run in p.runs: run.font.bold = True; run.font.size = Pt(9)
-
-    for idx, leave in enumerate(leaves_to_export):
-        row_cells = table.add_row().cells
-        row_cells[0].text = str(idx + 1)
-        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[1].text = leave.student.grad_militar
-        row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}"
-        row_cells[3].text = leave.student.pluton
-        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[4].text = leave.weekend_start_date.strftime('%d.%m.%y') # Shorter year
-        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        intervals_str = []
-        for interval in leave.get_intervals():
-            intervals_str.append(f"{interval['day_name']} ({interval['start'].strftime('%d.%m')}) {interval['start'].strftime('%H:%M')}-{interval['end'].strftime('%H:%M')}")
-        row_cells[5].text = "; ".join(intervals_str) if intervals_str else "N/A"
-
-        reason_text = leave.reason or ""
-        if leave.duminica_biserica and any(day['day_name'] == 'Duminica' for day in leave.get_intervals()):
-            reason_text = (reason_text + " (Biserică Duminică)").strip()
-        if not reason_text: reason_text = "-"
-        row_cells[6].text = reason_text
-
-        for cell in row_cells:
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs: run.font.size = Pt(9)
-
-    # Widths: NrCrt(0.3), Grad(0.5), Nume(1.2), Pluton(0.5), Vineri(0.7), Intervale(2.5), Obs(1.0) -> Total 6.7
-    widths_config = {
-        0: Inches(0.3), 1: Inches(0.5), 2: Inches(1.2), 3: Inches(0.5),
-        4: Inches(0.7), 5: Inches(2.5), 6: Inches(1.0)
-    }
-    for col_idx, width_val in widths_config.items():
-        for row in table.rows:
-            if col_idx < len(row.cells): row.cells[col_idx].width = width_val
-
-    style = document.styles['Normal']
-    font = style.font; font.name = 'Calibri'; font.size = Pt(9)
-
-    f_io = io.BytesIO()
-    document.save(f_io)
-    f_io.seek(0)
-
-    clean_report_title = re.sub(r'\W+', '_', report_title_detail)
-    filename = f"Raport_Invoiri_Weekend_{clean_report_title}_{current_username_for_file}_{get_localized_now().date().strftime('%Y%m%d')}.docx" # Folosim data localizată
-
-    return send_file(f_io,
-                     download_name=filename,
-                     as_attachment=True,
-                     mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-
-
 # --- Rapoarte ---
 @app.route('/company_commander/report/text', methods=['GET'])
 @login_required
@@ -6942,23 +6348,157 @@ def gradat_page_import_weekend_leaves():
 # --- Presence Report Route ---
 @app.route('/reports/presence', methods=['GET', 'POST'])
 @login_required
+def presence_report():
+    if current_user.role not in ['gradat', 'admin', 'comandant_companie', 'comandant_batalion']:
+        flash('Acces neautorizat pentru rolul dumneavoastră.', 'danger')
+        return redirect(url_for('dashboard'))
 
-        print("--------------------------------------------------------")
-        user_input = input("Do you want to attempt to apply database migrations? (yes/no): ")
-        print("--------------------------------------------------------")
+    current_dt_str_for_form = get_localized_now().strftime('%Y-%m-%dT%H:%M')
+    report_data_to_render = None
 
-        if user_input.lower() == 'yes':
+    if request.method == 'POST':
+        report_type = request.form.get('report_type')
+        custom_datetime_str = request.form.get('custom_datetime')
+        datetime_to_check = None
+        report_title_detail = ""
+
+        if report_type == 'current':
+            datetime_to_check = get_localized_now()
+            report_title_detail = "Prezență Curentă"
+        elif report_type == 'evening_roll_call':
+            naive_dt = get_standard_roll_call_datetime()
+            datetime_to_check = EUROPE_BUCHAREST.localize(naive_dt)
+            report_title_detail = f"Apel de Seară ({datetime_to_check.strftime('%H:%M')})"
+        elif report_type == 'company_report':
+            naive_dt = datetime.combine(get_localized_now().date(), time(14, 20))
+            datetime_to_check = EUROPE_BUCHAREST.localize(naive_dt)
+            report_title_detail = "Raport Companie (14:20)"
+        elif report_type == 'morning_check':
+            target_d = get_localized_now().date()
+            if custom_datetime_str:
+                try:
+                    target_d = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M').date()
+                except (ValueError, TypeError):
+                    flash('Data custom specificată era invalidă, s-a folosit data curentă pentru raportul de dimineață.', 'warning')
+            naive_dt = datetime.combine(target_d, time(7, 0))
+            datetime_to_check = EUROPE_BUCHAREST.localize(naive_dt)
+            report_title_detail = f"Prezență Dimineață ({target_d.strftime('%d.%m.%Y')} 07:00)"
+        elif report_type == 'custom':
             try:
-                print("Attempting to apply database migrations...")
-                upgrade()
-                print("Database migrations applied successfully or no new migrations were found.")
-            except Exception as e:
-                print(f"Error applying database migrations: {e}")
+                naive_dt = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M')
+                datetime_to_check = EUROPE_BUCHAREST.localize(naive_dt)
+                report_title_detail = f"Dată Specifică ({datetime_to_check.strftime('%d.%m.%Y %H:%M')})"
+            except (ValueError, TypeError):
+                flash('Format dată și oră custom invalid. Folosiți formatul corect.', 'danger')
+                return render_template('presence_report.html', current_datetime_str=current_dt_str_for_form, report_data=None)
         else:
-            print("Skipping database migrations.")
+            flash('Tip de raport invalid selectat.', 'danger')
+            return render_template('presence_report.html', current_datetime_str=current_dt_str_for_form, report_data=None)
 
-        # Initialize DB (for admin user creation, etc.)
-        init_db()
+        students_for_report = []
+        report_base_title = "Raport Prezență"
+
+        if current_user.role == 'gradat':
+            students_for_report = Student.query.filter_by(created_by_user_id=current_user.id).all()
+            gradat_pluton = students_for_report[0].pluton if students_for_report else "N/A"
+            report_base_title = f"Raport Prezență Plutonul {gradat_pluton}"
+        elif current_user.role == 'comandant_companie':
+            company_id = _get_commander_unit_id(current_user.username, "CmdC")
+            if company_id:
+                students_for_report = Student.query.filter_by(companie=company_id).all()
+                report_base_title = f"Raport Prezență Compania {company_id}"
+            else:
+                flash("Nu s-a putut determina ID-ul companiei.", "danger")
+        elif current_user.role == 'comandant_batalion':
+            battalion_id = _get_commander_unit_id(current_user.username, "CmdB")
+            if battalion_id:
+                students_for_report = Student.query.filter_by(batalion=battalion_id).all()
+                report_base_title = f"Raport Prezență Batalionul {battalion_id}"
+            else:
+                flash("Nu s-a putut determina ID-ul batalionului.", "danger")
+        elif current_user.role == 'admin': # Admin can also generate reports
+            # For admin, maybe they select a unit or see all?
+            # For now, let's assume admin sees all students if they access this.
+            # This part can be refined with a selection UI for admin.
+            students_for_report = Student.query.all()
+            report_base_title = "Raport Prezență General (Admin)"
+
+
+        if not students_for_report and current_user.role == 'gradat':
+             flash('Nu aveți studenți în evidență pentru a genera raportul.', 'info')
+
+        if students_for_report:
+            report_data_calculated = _calculate_presence_data(students_for_report, datetime_to_check)
+            report_data_to_render = {
+                **report_data_calculated,
+                "title": f"{report_base_title} - {report_title_detail}",
+                "datetime_checked": datetime_to_check.strftime('%d %B %Y, %H:%M:%S')
+            }
+        elif not students_for_report and current_user.role != 'gradat' and not request.form.get('suppress_no_students_flash'):
+            flash(f"Niciun student găsit pentru {current_user.role} {current_user.username} pentru a genera raportul.", "info")
+
+    return render_template('presence_report.html',
+                           current_datetime_str=current_dt_str_for_form,
+                           report_data=report_data_to_render)
+
+
+# This block seems to be intended for main execution,
+# but was previously mis-indented.
+# It should ideally be within an `if __name__ == '__main__':` block.
+
+# print("--------------------------------------------------------")
+# user_input = input("Do you want to attempt to apply database migrations? (yes/no): ")
+# print("--------------------------------------------------------")
+
+# if user_input.lower() == 'yes':
+#     try:
+#         print("Attempting to apply database migrations...")
+#         # Assuming 'upgrade' comes from Flask-Migrate, it needs app context
+#         # from flask_migrate import upgrade # Ensure this import is at the top if used here
+#         # with app.app_context(): # Migrations need app context
+#         #     upgrade()
+#         print("Database migrations applied successfully or no new migrations were found.")
+#     except Exception as e:
+#         print(f"Error applying database migrations: {e}")
+# else:
+#     print("Skipping database migrations.")
+
+# Initialize DB (for admin user creation, etc.)
+# init_db() # This also needs app context if called outside a request or app setup
+
+# It's recommended to run the app within an if __name__ == '__main__': block
+# For now, placing app.run at the top level to fix immediate indentation.
+# Consider restructuring this part.
+
+# The database initialization and migration logic might be better handled
+# by Flask CLI commands (e.g., flask db init, flask db migrate, flask db upgrade)
+# and a separate command to create the initial admin user if needed.
+# For now, I will comment out the interactive migration and init_db() call
+# from this spot to prevent runtime issues outside of app context or during import.
+# These should be run explicitly when setting up the application.
+
+if __name__ == '__main__':
+    # Example of how migrations and init_db could be handled,
+    # though Flask-Migrate CLI is preferred.
+    # You might want to run these manually or via a script one time.
+    # For development, you can uncomment and run once.
+    # with app.app_context():
+    #     print("--------------------------------------------------------")
+    #     user_input = input("Apply database migrations? (yes/no): ")
+    #     print("--------------------------------------------------------")
+    #     if user_input.lower() == 'yes':
+    #         try:
+    #             from flask_migrate import upgrade as flask_upgrade # Specific import
+    #             print("Attempting to apply database migrations...")
+    #             flask_upgrade()
+    #             print("DB migrations applied or up-to-date.")
+    #         except Exception as e:
+    #             print(f"Error during migration: {e}")
+    #     else:
+    #         print("Skipping DB migrations.")
+
+    #     # Initialize DB (creates tables if not exist, creates admin if not exist)
+    #     init_db()
 
     app.run(host='0.0.0.0', port=5001, debug=False)
 
