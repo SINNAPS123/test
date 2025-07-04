@@ -424,7 +424,7 @@ a:hover {
 
 /* Navbar */
 .navbar-brand img.logo-img {
-    height: 40px; /* Înălțimea logo-ului mărită */
+    height: 50px; /* Înălțimea logo-ului mărirită - Jules: changed from 40px to 50px */
     width: auto;
     margin-right: 5px; /* Spațiu între logo și textul Beta (dacă există) */
 }
