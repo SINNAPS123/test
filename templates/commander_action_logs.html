@@ -147,10 +147,10 @@
                     {% else %}
                         <li class="page-item"><a class="page-link" href="{{ url_for(request.endpoint, page=page_num, **request.args) }}">{{ page_num }}</a></li>
                     {% endif %}
-                {% elif loop.index0 == 0 or loop.index0 == list(logs_pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=3))|length -1 %}
-                    {# Converted iter_pages to list before applying length filter to fix TypeError - Jules #}
                 {% else %}
-                     <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% if loop.previtem is number and loop.nextitem is number %} {# More robust ellipsis check #}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
                 {% endif %}
             {% endfor %}
 

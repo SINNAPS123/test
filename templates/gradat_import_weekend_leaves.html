@@ -30,7 +30,7 @@ Cap. Ionescu Ana, 02.08.2024 18:00-22:00</code></pre>
 
             <hr class="my-4">
 
-            <form method="POST" action="{{ url_for('gradat_page_import_weekend_leaves') }}">
+            <form method="POST" action="{{ url_for('gradat_process_weekend_leaves_text') }}">
                 <div class="mb-3">
                     <label for="weekend_leave_bulk_data" class="form-label">Date Învoiri Weekend (copiați textul aici):</label>
                     <textarea class="form-control" id="weekend_leave_bulk_data" name="weekend_leave_bulk_data" rows="15" required placeholder="Introduceți datele conform formatului de mai sus..."></textarea>
