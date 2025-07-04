@@ -188,112 +188,66 @@ body.dark-mode .card-header {
     color: var(--text-primary); /* Ensure header text is also correct */
 }
 
-/* === ÎNCEPUT MODIFICĂRI PENTRU TABELE ÎNTUNECATE === */
-
-/* 1. Stiluri generale pentru celule tabel în dark mode */
+/* === START JULES' MODIFICATIONS FOR DARK MODE TABLE STYLING === */
 body.dark-mode .table th,
 body.dark-mode .table td {
-    color: var(--text-primary); /* Text principal deschis */
-    border-color: var(--border-color); /* Margini definite de tema întunecată */
+    /* color: var(--text-primary); */ /* This is already set a bit lower, will be inherited or re-asserted */
+    background-color: transparent !important; /* Remove individual cell backgrounds */
+    /* border-color: var(--border-color); */ /* Will be inherited or re-asserted by general table styles */
 }
 
 body.dark-mode .table thead th {
-    background-color: var(--bg-surface-hover) !important; /* Fundal puțin mai deschis pentru header */
-    color: var(--text-primary);
-    border-bottom-width: 2px;
-    border-bottom-color: var(--border-color);
+    background-color: var(--bg-surface-hover) !important; /* Keep header distinct but ensure it's one of the dark theme's neutral colors */
+    /* color: var(--text-primary); */ /* Already set */
+    border-bottom-width: 2px; /* Keep header border distinct */
 }
 
-/* 2. Ajustare table-striped și table-hover */
+/* Neutralize specific hover and striped effects if they interfere */
 body.dark-mode .table-striped > tbody > tr:nth-of-type(odd) > * {
-    background-color: rgba(255, 255, 255, 0.03) !important; /* Foarte subtil alb transparent pentru dungi */
+    background-color: transparent !important;
 }
 body.dark-mode .table-hover > tbody > tr:hover > * {
-    background-color: rgba(255, 255, 255, 0.07) !important; /* Puțin mai vizibil alb transparent pentru hover */
+    background-color: rgba(255, 255, 255, 0.05) !important; /* Very subtle light hover */
 }
 
-/* 3. Stiluri pentru tabele contextuale (.table-success, .table-warning etc.) */
-/* Fundaluri subtile, text principal deschis. */
-
-body.dark-mode .table-success > td,
-body.dark-mode .table-success > th {
-    background-color: rgba(40, 167, 69, 0.15) !important; /* Verde subtil */
-    color: var(--text-primary) !important;
+/* Neutralize contextual backgrounds like .table-success, .table-warning etc. for ALL tables in dark mode */
+body.dark-mode .table-success > td, body.dark-mode .table-success > th,
+body.dark-mode .table-warning > td, body.dark-mode .table-warning > th,
+body.dark-mode .table-danger > td, body.dark-mode .table-danger > th,
+body.dark-mode .table-info > td, body.dark-mode .table-info > th,
+body.dark-mode .table-active > td, body.dark-mode .table-active > th,
+body.dark-mode .table-secondary > td, body.dark-mode .table-secondary > th,
+body.dark-mode .table-light > td, body.dark-mode .table-light > th,
+body.dark-mode .table-dark > td, body.dark-mode .table-dark > th {
+    background-color: transparent !important;
+    color: var(--text-primary) !important; /* Ensure text remains light */
 }
 
-body.dark-mode .table-warning > td,
-body.dark-mode .table-warning > th {
-    background-color: rgba(255, 193, 7, 0.15) !important; /* Galben subtil */
-    color: var(--text-primary) !important; /* Text principal deschis, nu galben pe galben */
-}
-
-body.dark-mode .table-danger > td,
-body.dark-mode .table-danger > th {
-    background-color: rgba(220, 53, 69, 0.15) !important; /* Roșu subtil */
-    color: var(--text-primary) !important;
-}
-
-body.dark-mode .table-info > td,
-body.dark-mode .table-info > th {
-    background-color: rgba(23, 162, 184, 0.15) !important; /* Info subtil */
-    color: var(--text-primary) !important;
-}
-
-body.dark-mode .table-secondary > td,
-body.dark-mode .table-secondary > th {
-    background-color: rgba(108, 117, 125, 0.15) !important; /* Gri secundar subtil */
-    color: var(--text-primary) !important;
-}
-
-/* Pentru .table-light și .table-dark, în tema întunecată, le facem similare cu celelalte sau neutre */
-body.dark-mode .table-light > td,
-body.dark-mode .table-light > th {
-    background-color: rgba(255, 255, 255, 0.05) !important; /* Foarte deschis, aproape de hover */
-    color: var(--text-primary) !important;
-}
-
-body.dark-mode .table-dark > td, /* .table-dark pe tema întunecată ar trebui să fie lizibil */
-body.dark-mode .table-dark > th {
-    background-color: var(--bg-surface-hover) !important; /* Un gri mai închis distinct */
-    color: var(--text-primary) !important;
-}
-
-/* 4. Asigurarea vizibilității link-urilor în tabele contextuale */
+/* Ensure links within these neutralized tables are also styled for dark mode */
 body.dark-mode .table a {
-    color: var(--link-color); /* Folosește culoarea de link a temei întunecate */
-    /* text-decoration: underline; */ /* Opțional, pentru a le face mai evidente */
+    color: var(--link-color); /* Use the dark mode link color */
 }
 body.dark-mode .table a:hover {
     color: var(--link-hover-color);
 }
+/* === END JULES' MODIFICATIONS FOR DARK MODE TABLE STYLING === */
 
-/* 5. Ajustare Badge-uri în tema întunecată (general și în tabele) */
-
-/* Asigură că textul din badge-urile .text-dark este într-adevăr întunecat și vizibil pe fundalul badge-ului */
-body.dark-mode .badge.text-dark {
-    color: #1a1a1a !important; /* Un negru/gri foarte închis pentru text */
-}
-/* Regula specifică Bootstrap pentru .badge.bg-info (care are text închis by default) este ok. */
-/* Regula specifică Bootstrap pentru .badge.bg-warning (care are text închis by default) este ok. */
-/* Regula specifică Bootstrap pentru .badge.bg-light (care are text închis by default) este ok. */
-
-/* === SFÂRȘIT MODIFICĂRI PENTRU TABELE ÎNTUNECATE === */
-
-/* Stilurile pentru .modal și .table thead th de mai jos sunt păstrate, deoarece nu intră în conflict direct */
-
-body.dark-mode .table thead th {
+body.dark-mode .table thead th { /* This rule was already present, ensure it's not conflicting or duplicate if my additions are above */
     background-color: var(--bg-surface-hover);
     border-bottom: 2px solid var(--border-color);
-    color: var(--text-primary);
+    color: var(--text-primary); /* Ensure table header text is correct */
 }
 
 /* General Modal Styling (ensure visibility) */
 .modal {
-    display: none;
+    display: none; /* Handled by Bootstrap JS */
+    /* Ensure z-index is high enough if other elements are interfering */
+    /* z-index: 1050; Bootstrap default, usually fine */
 }
 .modal.show .modal-dialog {
-    transform: none;
-    opacity: 1;
+    /* Ensure modal dialog itself is not positioned off-screen or transparent */
+    transform: none; /* Override any accidental transforms */
+    opacity: 1; /* Ensure not transparent */
 }
 
 /* Dark Mode Modals */
@@ -303,16 +257,17 @@ body.dark-mode .modal-content {
     border: 1px solid var(--border-color);
 }
 body.dark-mode .modal-header {
-    background-color: var(--bg-surface-hover);
+    background-color: var(--bg-surface-hover); /* Slightly different background for header */
     color: var(--text-primary);
     border-bottom: 1px solid var(--border-color);
 }
 body.dark-mode .modal-header .btn-close {
-    filter: invert(1) grayscale(100%) brightness(200%);
+    filter: invert(1) grayscale(100%) brightness(200%); /* Make the 'X' button white */
 }
 body.dark-mode .modal-body {
     color: var(--text-primary);
 }
+/* Ensure form elements inside modals are also styled correctly for dark mode */
 body.dark-mode .modal-body .form-label {
     color: var(--text-primary);
 }
@@ -332,12 +287,13 @@ body.dark-mode .modal-body .form-select {
 
 
 body.dark-mode .modal-footer {
-    background-color: var(--bg-surface-hover);
+    background-color: var(--bg-surface-hover); /* Slightly different background for footer */
     border-top: 1px solid var(--border-color);
 }
+/* Ensure buttons in modal footer are styled correctly if they are e.g. btn-secondary */
 body.dark-mode .modal-footer .btn-secondary {
-    color: var(--text-on-accent);
-    background-color: var(--accent-secondary);
+    color: var(--text-on-accent); /* Or var(--text-primary) if background is light enough */
+    background-color: var(--accent-secondary); /* Or a darker variant if needed */
     border-color: var(--accent-secondary);
 }
 body.dark-mode .modal-footer .btn-secondary:hover {
@@ -346,18 +302,65 @@ body.dark-mode .modal-footer .btn-secondary:hover {
 }
 
 
-/* Regulile originale pentru .table-success, .table-warning, .table-secondary .badge etc.
-   care sunt mai jos în fișier vor fi eliminate manual în pasul următor,
-   deoarece acum sunt acoperite de noul bloc de mai sus.
-*/
+/* Asigură contrast pentru rândurile de tabel colorate în dark mode */
+body.dark-mode .table-success,
+body.dark-mode .table-success > th,
+body.dark-mode .table-success > td {
+    background-color: rgba(40, 167, 69, 0.2) !important; /* Verde mai transparent și mai puțin intens */
+    color: var(--text-primary) !important; /* Text primar din dark-mode (ex. #f0f0f0) pentru contrast maxim */
+}
+body.dark-mode .table-success .badge {
+    color: #000 !important; /* Text negru pentru badge-uri pe fundal verde deschis, pentru contrast */
+    background-color: rgba(40, 167, 69, 0.5) !important; /* Fundal badge mai opac */
+}
+body.dark-mode .table-success a {
+    color: #b3ffc6 !important; /* Linkuri mai vizibile - acestea pot rămâne așa sau ajustate dacă este necesar */
+    /* Dacă linkurile trebuie să fie și ele var(--text-primary), atunci se modifică aici. Momentan le las. */
+    /* O alternativă pentru linkuri, dacă se dorește aceeași culoare ca textul normal: */
+    /* color: var(--text-primary) !important; */
+    /* text-decoration: underline; */ /* Poate fi adăugat dacă se dorește subliniere explicită */
+}
+
+
+body.dark-mode .table-warning,
+body.dark-mode .table-warning > th,
+body.dark-mode .table-warning > td {
+    background-color: rgba(255, 193, 7, 0.2) !important; /* Galben mai transparent */
+    color: #ffeeba !important; /* Text galben deschis, lizibil pe fundal închis */
+}
+body.dark-mode .table-warning .badge.bg-info.text-dark {
+    color: #000 !important;
+    background-color: rgba(13, 202, 240, 0.5) !important;
+}
+body.dark-mode .table-warning a {
+    color: #ffeca0 !important;
+}
+
+
+body.dark-mode .table-secondary,
+body.dark-mode .table-secondary > th,
+body.dark-mode .table-secondary > td {
+    background-color: rgba(108, 117, 125, 0.2) !important; /* Gri mai transparent */
+    color: #e2e3e5 !important; /* Text gri deschis, lizibil pe fundal închis */
+}
+body.dark-mode .table-secondary a {
+    color: #cdd2d6 !important;
+}
+
 
 /* Badge-uri specifice pentru vizibilitate în dark mode */
 body.dark-mode .badge.bg-dark {
-    background-color: #495057 !important;
+    background-color: #495057 !important; /* Un gri mai deschis decât fundalul general */
     color: var(--text-primary) !important;
 }
 
-body.dark-mode .badge.bg-info.text-dark {
+body.dark-mode .badge.bg-info {
+    /* bg-info este un cyan. Textul default Bootstrap pentru .badge.bg-info este #000. */
+    /* Dacă se dorește text alb: color: var(--text-on-accent) !important; */
+    /* Dar pentru lizibilitate pe cyan, textul închis este de obicei mai bun. */
+    /* Bootstrap 5 .badge.bg-info are deja text închis. */
+}
+body.dark-mode .badge.bg-info.text-dark { /* Asigurare că text-dark e aplicat */
     color: #000 !important;
 }
 
@@ -421,7 +424,7 @@ a:hover {
 
 /* Navbar */
 .navbar-brand img.logo-img {
-    height: 35px; /* Adjusted logo height to be smaller */
+    height: 40px; /* Înălțimea logo-ului mărită */
     width: auto;
     margin-right: 5px; /* Spațiu între logo și textul Beta (dacă există) */
 }
@@ -453,7 +456,7 @@ a:hover {
     font-weight: 400; /* Redus font-weight linkuri */
     padding-top: 0.02rem; /* Și mai mic padding linkuri */
     padding-bottom: 0.02rem; /* Și mai mic padding linkuri */
-    font-size: 0.8rem; /* Adjusted navbar link font size for readability */
+    font-size: 0.75rem; /* Și mai mic font-size linkuri */
     line-height: 1.1; /* Și mai strâns line-height linkuri */
 }
 .navbar .nav-link:hover, .navbar .nav-link.active {
@@ -774,7 +777,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
     border-top: 1px solid var(--border-color);
     color: var(--text-secondary);
     text-align: center;
-    font-size: 0.75em; /* Adjusted footer font size for readability */
+    font-size: 0.65em; /* Și mai mic font-size footer */
     line-height: 1.1; /* Și mai strâns line-height footer */
 }
 

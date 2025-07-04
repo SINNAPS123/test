@@ -114,34 +114,6 @@
                         <i class="fas fa-file-alt icon-rotate-hover"></i> Export Învoiri (Text)
                     </a>
 
-                    <hr class="my-3">
-                    <h6 class="text-danger">Resetare Date Globale (PERICOL!)</h6>
-                    <p class="small text-danger"><strong>Atenție:</strong> Aceste acțiuni sunt ireversibile și vor șterge toate datele din categoriile respective pentru TOȚI utilizatorii!</p>
-                    <div class="row">
-                        <div class="col-md-4 mb-2">
-                            <form method="POST" action="{{ url_for('admin_reset_permissions') }}" onsubmit="return confirm('Sunteți absolut sigur că doriți să ștergeți TOATE permisiile din sistem? Această acțiune este ireversibilă!');">
-                                <button type="submit" class="btn btn-danger w-100 btn-sm">
-                                    <i class="fas fa-exclamation-triangle me-1"></i> Resetează Toate Permisiile
-                                </button>
-                            </form>
-                        </div>
-                        <div class="col-md-4 mb-2">
-                            <form method="POST" action="{{ url_for('admin_reset_daily_leaves') }}" onsubmit="return confirm('Sunteți absolut sigur că doriți să ștergeți TOATE învoirile zilnice din sistem? Această acțiune este ireversibilă!');">
-                                <button type="submit" class="btn btn-danger w-100 btn-sm">
-                                    <i class="fas fa-exclamation-triangle me-1"></i> Resetează Învoirile Zilnice
-                                </button>
-                            </form>
-                        </div>
-                        <div class="col-md-4 mb-2">
-                            <form method="POST" action="{{ url_for('admin_reset_weekend_leaves') }}" onsubmit="return confirm('Sunteți absolut sigur că doriți să ștergeți TOATE învoirile de weekend din sistem? Această acțiune este ireversibilă!');">
-                                <button type="submit" class="btn btn-danger w-100 btn-sm">
-                                    <i class="fas fa-exclamation-triangle me-1"></i> Resetează Învoirile Weekend
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                    <p class="small text-muted mt-2">Notă: Alte date (studenți, utilizatori, servicii, anunțuri, etc.) NU sunt afectate de aceste butoane. Doar înregistrările de permisii și învoiri sunt șterse.</p>
-
                 </div>
             </div>
         </div>

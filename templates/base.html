@@ -127,13 +127,7 @@
         </div>
     </nav>
 
-    <div class="container mt-4 text-center"> <!-- Added text-center for the new logo -->
-        {% if request.endpoint == 'home' or request.endpoint == 'user_login' or request.endpoint == 'admin_login' %}
-        <div class="page-header-logo mb-3"> <!-- Container for the main page logo -->
-            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="UNAP Main Logo" style="max-width: 150px; height: auto;">
-        </div>
-        {% endif %}
-
+    <div class="container mt-4">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
