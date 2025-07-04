@@ -2442,149 +2442,148 @@ def edit_student(student_id):
 
     return render_template('add_edit_student.html', form_title=f"Editare Student: {s_edit.grad_militar} {s_edit.nume} {s_edit.prenume}", student=s_edit, genders=GENDERS, form_data=s_edit)
 
-@app.route('/gradat/students/bulk_import', methods=['POST'], endpoint='gradat_bulk_import_students')
+@app.route('/gradat/students/bulk_import_page', methods=['GET', 'POST'], endpoint='gradat_page_bulk_import_students')
 @login_required
-def bulk_import_students():
+def gradat_page_bulk_import_students_func():
     if current_user.role != 'gradat':
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('list_students'))
 
-    student_bulk_data = request.form.get('student_bulk_data', '').strip()
-    if not student_bulk_data:
-        flash('Nu au fost furnizate date pentru import.', 'warning')
-        return redirect(url_for('list_students'))
+    form_data_to_repopulate = None # Used to repopulate textarea on error
+    error_details_list_for_template = []
+    processed_added_count = 0
+    processed_error_count = 0
 
-    lines = student_bulk_data.splitlines()
-    added_count = 0
-    error_count = 0
-    error_details = []
+    if request.method == 'POST':
+        student_bulk_data = request.form.get('student_bulk_data', '').strip()
+        form_data_to_repopulate = request.form # Save form data for repopulation
 
-    for i, line in enumerate(lines):
-        line = line.strip()
-        if not line:
-            continue
+        if not student_bulk_data:
+            flash('Nu au fost furnizate date pentru import.', 'warning')
+            return render_template('gradat_bulk_import_students_page.html',
+                                   form_data=form_data_to_repopulate,
+                                   error_details_list=None,
+                                   added_count=0, error_count=0)
 
-        parts = line.split()
-        if len(parts) < 7: # Grad Nume Prenume Gen Pluton Companie Batalion
-            error_details.append(f"Linia {i+1} ('{line}'): Format incorect - prea puține câmpuri.")
-            error_count += 1
-            continue
+        lines = student_bulk_data.splitlines()
 
-        # Assuming format: Grad Nume Prenume Gen Pluton Companie Batalion
-        # Grad could be one or more words
-        # Nume is one word
-        # Prenume is one word (or more, but this simple split won't handle it well without more complex parsing)
-        # For simplicity, let's assume Nume and Prenume are single words for now,
-        # and Grad takes up the initial part.
-        # A more robust parser would be needed for multi-word names/ranks.
-
-        # Tentative parsing:
-        # Batalion is the last part
-        # Companie is the second to last
-        # Pluton is the third to last
-        # Gen is the fourth to last
-        # This leaves Grad, Nume, Prenume for the rest.
-        # Let's assume Nume is parts[-5] and Prenume is parts[-6] if they exist,
-        # and Grad is everything before that.
-
-        try:
-            batalion = parts[-1]
-            companie = parts[-2]
-            pluton = parts[-3]
-            gender_input_original = parts[-4]
-            gender_input_upper = gender_input_original.upper()
-
-            gender_db_val = None
-            if gender_input_upper == "M":
-                gender_db_val = "M"
-            elif gender_input_upper == "F":
-                gender_db_val = "F"
-            # Check against GENDERS list, comparing uppercase input with uppercase GENDERS values
-            # This handles "Nespecificat", "nespecificat", "NESPECIFICAT" etc.
-            elif gender_input_upper in [g.upper() for g in GENDERS]:
-                # Find the original casing from GENDERS to store in DB
-                gender_db_val = next(g_val for g_val in GENDERS if g_val.upper() == gender_input_upper)
-            else:
-                error_details.append(f"Linia {i+1} ('{line}'): Gen '{gender_input_original}' invalid. Folosiți M, F sau Nespecificat.")
-                error_count += 1
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if not line:
                 continue
 
-            # The remaining parts are for Grad, Nume, Prenume
-            # Example: "Mm V Renț Francisc" -> parts_for_name_rank = ["Mm", "V", "Renț", "Francisc"]
-            # Assume Prenume is the second to last of these, Nume is before Prenume.
-            # This is a simplification.
-            name_rank_parts = parts[:-4]
-            if len(name_rank_parts) < 3: # Need at least Grad, Nume, Prenume
-                error_details.append(f"Linia {i+1} ('{line}'): Format insuficient pentru Grad, Nume, Prenume.")
-                error_count += 1
+            parts = line.split()
+            if len(parts) < 7: # Grad Nume Prenume Gen Pluton Companie Batalion
+                error_details_list_for_template.append(f"Linia {i+1} ('{line[:50]}...'): Format incorect - prea puține câmpuri.")
+                processed_error_count += 1
                 continue
 
-            prenume = name_rank_parts[-1]
-            nume = name_rank_parts[-2]
-            grad_militar = " ".join(name_rank_parts[:-2])
+            try:
+                batalion = parts[-1]
+                companie = parts[-2]
+                pluton = parts[-3]
+                gender_input_original = parts[-4]
+                gender_input_upper = gender_input_original.upper()
 
-            if not all([grad_militar, nume, prenume, pluton, companie, batalion]):
-                error_details.append(f"Linia {i+1} ('{line}'): Unul sau mai multe câmpuri obligatorii lipsesc după parsare.")
-                error_count += 1
+                gender_db_val = None
+                if gender_input_upper == "M": gender_db_val = "M"
+                elif gender_input_upper == "F": gender_db_val = "F"
+                elif gender_input_upper in [g.upper() for g in GENDERS]:
+                    gender_db_val = next(g_val for g_val in GENDERS if g_val.upper() == gender_input_upper)
+                else:
+                    error_details_list_for_template.append(f"Linia {i+1} ('{line[:50]}...'): Gen '{gender_input_original}' invalid. Folosiți M, F sau Nespecificat.")
+                    processed_error_count += 1
+                    continue
+
+                name_rank_parts = parts[:-4]
+                if len(name_rank_parts) < 3: # Need at least Grad, Nume, Prenume
+                    error_details_list_for_template.append(f"Linia {i+1} ('{line[:50]}...'): Format insuficient pentru Grad, Nume, Prenume.")
+                    processed_error_count += 1
+                    continue
+
+                prenume = name_rank_parts[-1]
+                nume = name_rank_parts[-2]
+                grad_militar = " ".join(name_rank_parts[:-2])
+
+                if not all([grad_militar, nume, prenume, pluton, companie, batalion]):
+                    error_details_list_for_template.append(f"Linia {i+1} ('{line[:50]}...'): Unul sau mai multe câmpuri obligatorii lipsesc după parsare.")
+                    processed_error_count += 1
+                    continue
+
+                existing_student_check = Student.query.filter_by(
+                    nume=nume, prenume=prenume, grad_militar=grad_militar,
+                    pluton=pluton, companie=companie, batalion=batalion,
+                    created_by_user_id=current_user.id
+                ).first()
+
+                if existing_student_check:
+                    error_details_list_for_template.append(f"Linia {i+1} ('{line[:50]}...'): Student similar există deja.")
+                    processed_error_count += 1
+                    continue
+
+                new_student = Student(
+                    grad_militar=grad_militar, nume=nume, prenume=prenume, gender=gender_db_val,
+                    pluton=pluton, companie=companie, batalion=batalion,
+                    created_by_user_id=current_user.id, is_platoon_graded_duty=False
+                )
+                db.session.add(new_student)
+                processed_added_count += 1
+
+            except IndexError:
+                error_details_list_for_template.append(f"Linia {i+1} ('{line[:50]}...'): Format incorect - eroare la extragerea câmpurilor.")
+                processed_error_count += 1
+                continue
+            except Exception as e:
+                error_details_list_for_template.append(f"Linia {i+1} ('{line[:50]}...'): Eroare neașteptată - {str(e)}.")
+                processed_error_count += 1
+                db.session.rollback()
                 continue
 
-            # Basic check for existing student (by name and platoon/company) to avoid simple duplicates by this import
-            # A more robust check might use id_unic_student if provided and unique
-            existing_student_check = Student.query.filter_by(
-                nume=nume, prenume=prenume, grad_militar=grad_militar,
-                pluton=pluton, companie=companie, batalion=batalion,
-                created_by_user_id=current_user.id
-            ).first()
+        if processed_added_count > 0:
+            try:
+                db.session.commit()
+                flash(f'{processed_added_count} studenți importați cu succes.', 'success')
+                # Log action for successful part
+                log_action("BULK_STUDENT_IMPORT_PAGE_PARTIAL_SUCCESS",
+                           description=f"User {current_user.username} bulk imported {processed_added_count} students. Errors: {processed_error_count}.",
+                           details_after_dict={"added": processed_added_count, "errors": processed_error_count})
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Eroare la salvarea studenților în baza de date: {str(e)}', 'danger')
+                processed_error_count += processed_added_count
+                processed_added_count = 0
+                # Log action for DB failure
+                log_action("BULK_STUDENT_IMPORT_PAGE_DB_FAIL",
+                           description=f"User {current_user.username} bulk student import DB commit failed. Error: {str(e)}.",
+                           details_after_dict={"attempted_add": processed_added_count, "initial_errors": processed_error_count, "db_error": str(e)})
+                db.session.commit()
 
-            if existing_student_check:
-                error_details.append(f"Linia {i+1} ('{line}'): Student similar există deja (verificare nume, grad, unitate).")
-                error_count += 1
-                continue
 
+        if processed_error_count > 0:
+            # Don't flash individual errors here if we are re-rendering the page with error_details_list
+            # flash(f'{processed_error_count} linii nu au putut fi procesate. Verificați detaliile.', 'warning')
+            # The template will display error_details_list
+            return render_template('gradat_bulk_import_students_page.html',
+                                   form_data=form_data_to_repopulate,
+                                   error_details_list=error_details_list_for_template,
+                                   added_count=processed_added_count, # Show how many were added before errors
+                                   error_count=processed_error_count)
 
-            new_student = Student(
-                grad_militar=grad_militar,
-                nume=nume,
-                prenume=prenume,
-                gender=gender_db_val,
-                pluton=pluton,
-                companie=companie,
-                batalion=batalion,
-                created_by_user_id=current_user.id,
-                is_platoon_graded_duty=False # Default, can be edited later
-            )
-            db.session.add(new_student)
-            added_count += 1
+        # If no errors and some were added, redirect to list_students
+        if processed_added_count > 0 and processed_error_count == 0:
+            return redirect(url_for('list_students'))
+        elif processed_added_count == 0 and processed_error_count == 0 and student_bulk_data: # No data processed, no errors, but data was submitted
+            flash('Nicio linie validă de importat nu a fost găsită în datele furnizate.', 'info')
+            # Fall through to render the page again, possibly with empty form_data if it was cleared
 
-        except IndexError:
-            error_details.append(f"Linia {i+1} ('{line}'): Format incorect - eroare la extragerea câmpurilor.")
-            error_count += 1
-            continue
-        except Exception as e:
-            error_details.append(f"Linia {i+1} ('{line}'): Eroare neașteptată la procesare - {str(e)}.")
-            error_count += 1
-            db.session.rollback() # Rollback for this specific error if it occurred mid-student-creation
-            continue
+    # GET request or if POST had issues and needs re-render without specific error list for template
+    return render_template('gradat_bulk_import_students_page.html',
+                           form_data=form_data_to_repopulate, # None for GET, or form data if POST failed early
+                           error_details_list=error_details_list_for_template if processed_error_count > 0 else None,
+                           added_count=processed_added_count,
+                           error_count=processed_error_count)
 
-    if added_count > 0:
-        try:
-            db.session.commit()
-            flash(f'{added_count} studenți au fost adăugați cu succes.', 'success')
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Eroare la salvarea studenților în baza de date: {str(e)}', 'danger')
-            error_count += added_count # Consider them errors if commit failed
-            added_count = 0
-
-    if error_count > 0:
-        flash(f'{error_count} linii nu au putut fi procesate sau au generat erori.', 'danger')
-        if error_details:
-            flash_detail_msg = "Detalii erori:<br>" + "<br>".join(error_details)
-            if len(flash_detail_msg) > 500: # Limit flash message length
-                flash_detail_msg = flash_detail_msg[:497] + "..."
-            flash(flash_detail_msg, 'warning')
-
-    return redirect(url_for('list_students'))
 
 # Funcționalitatea 'Gradat Companie' a fost eliminată. Am șters ruta și funcția admin_toggle_company_grader_status.
 
@@ -6632,54 +6631,6 @@ def presence_report():
 # else:
 #     print("Skipping database migrations.")
 
-# Initialize DB (for admin user creation, etc.)
-# init_db() # This also needs app context if called outside a request or app setup
-
-# It's recommended to run the app within an if __name__ == '__main__': block.
-# The app.run() call is correctly placed within this block below.
-
-# The database initialization and migration logic is best handled
-# by Flask CLI commands (e.g., flask db init, flask db migrate, flask db upgrade)
-# and/or a separate script to create the initial admin user if needed.
-# Interactive prompts for these operations during app startup are generally avoided.
-# These actions should be performed explicitly during setup or deployment.
-
-if __name__ == '__main__':
-    # --- Database Initialization and Migration ---
-    # The following section for database migrations and initialization (init_db)
-    # is commented out by default. It is NOT recommended to run these automatically
-    # every time the application starts.
-
-    # For database migrations:
-    # Use Flask-Migrate CLI commands in your terminal:
-    #   flask db migrate -m "description of changes"
-    #   flask db upgrade
-    # These commands should be run manually when database schema changes are made.
-
-    # For initial database setup (creating tables and admin user):
-    # The init_db() function can be called manually, for example, via a custom Flask CLI command
-    # or a separate script. This is typically done once for initial setup or in development.
-    #
-    # Example of how one might run init_db() or migrations once for development (uncomment to use):
-    with app.app_context():
-        # To apply migrations:
-        print("--- Attempting to apply database migrations... ---")
-        try:
-            from flask_migrate import upgrade as flask_upgrade
-            flask_upgrade()
-            print("DB migrations applied or up-to-date.")
-        except Exception as e:
-            print(f"Error during migration: {e}")
-
-        # To initialize the database (create tables, admin user if not exists):
-        print("--- Attempting to initialize database (admin user, etc.)... ---")
-        init_db() # Make sure init_db() is defined and handles its operations correctly.
-        print("DB initialization complete.")
-        # pass # Use 'pass' if all operations above are commented out.
-
-    # Start the Flask development server
-    app.run(host='0.0.0.0', port=5001, debug=True)
-
 # START JULES - ADMIN HOME PAGE SETTINGS
 @app.route('/admin/settings/homepage', methods=['GET', 'POST'], endpoint='admin_homepage_settings')
 @login_required
@@ -6736,3 +6687,51 @@ def admin_homepage_settings():
                            current_title=current_title,
                            current_badge_text=current_badge_text)
 # END JULES - ADMIN HOME PAGE SETTINGS
+
+# Initialize DB (for admin user creation, etc.)
+# init_db() # This also needs app context if called outside a request or app setup
+
+# It's recommended to run the app within an if __name__ == '__main__': block.
+# The app.run() call is correctly placed within this block below.
+
+# The database initialization and migration logic is best handled
+# by Flask CLI commands (e.g., flask db init, flask db migrate, flask db upgrade)
+# and/or a separate script to create the initial admin user if needed.
+# Interactive prompts for these operations during app startup are generally avoided.
+# These actions should be performed explicitly during setup or deployment.
+
+if __name__ == '__main__':
+    # --- Database Initialization and Migration ---
+    # The following section for database migrations and initialization (init_db)
+    # is commented out by default. It is NOT recommended to run these automatically
+    # every time the application starts.
+
+    # For database migrations:
+    # Use Flask-Migrate CLI commands in your terminal:
+    #   flask db migrate -m "description of changes"
+    #   flask db upgrade
+    # These commands should be run manually when database schema changes are made.
+
+    # For initial database setup (creating tables and admin user):
+    # The init_db() function can be called manually, for example, via a custom Flask CLI command
+    # or a separate script. This is typically done once for initial setup or in development.
+    #
+    # Example of how one might run init_db() or migrations once for development (uncomment to use):
+    with app.app_context():
+        # To apply migrations:
+        print("--- Attempting to apply database migrations... ---")
+        try:
+            from flask_migrate import upgrade as flask_upgrade
+            flask_upgrade()
+            print("DB migrations applied or up-to-date.")
+        except Exception as e:
+            print(f"Error during migration: {e}")
+
+        # To initialize the database (create tables, admin user if not exists):
+        print("--- Attempting to initialize database (admin user, etc.)... ---")
+        init_db() # Make sure init_db() is defined and handles its operations correctly.
+        print("DB initialization complete.")
+        # pass # Use 'pass' if all operations above are commented out.
+
+    # Start the Flask development server
+    app.run(host='0.0.0.0', port=5001, debug=True)

@@ -9,7 +9,7 @@
         <div class="card">
             <div class="card-body">
                 <p class="card-text text-muted">Introduceți codul unic (dacă este prima autentificare) sau codul personal.</p>
-                <form method="POST" action="{{ url_for('login') }}">
+                <form method="POST" action="{{ url_for('user_login') }}">
                     <div class="mb-3">
                         <label for="login_code" class="form-label">Cod de Autentificare:</label>
                         <input type="password" class="form-control" id="login_code" name="login_code" placeholder="Introduceți codul unic sau personal" required autofocus>

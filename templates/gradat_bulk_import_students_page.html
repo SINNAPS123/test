@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Import Studenți în Masă{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Import Studenți în Masă</h2>
+        <a href="{{ url_for('list_students') }}" class="btn btn-outline-secondary btn-sm">&laquo; Înapoi la Lista Studenți</a>
+    </div>
+    <hr>
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <p class="card-text">Introduceți datele studenților, fiecare student pe un rând nou, în formatul specificat mai jos. Asigurați-vă că datele sunt corecte pentru a evita erorile la import.</p>
+            <div class="alert alert-info">
+                <strong>Format per linie:</strong> <code>Grad Nume Prenume Gen Pluton Companie Batalion</code><br>
+                <strong>Exemplu:</strong> <code>Sdt. Popescu Ion M 1 1 1</code><br>
+                <strong>Gen:</strong> Folosiți <strong>M</strong> pentru Masculin, <strong>F</strong> pentru Feminin, sau <strong>Nespecificat</strong>.
+            </div>
+
+            {% if error_details_list %}
+                <div class="alert alert-danger mt-3">
+                    <h6 class="alert-heading">Erori la ultima încercare de import:</h6>
+                    <ul class="mb-0" style="font-size: 0.9em;">
+                    {% for err_detail in error_details_list %}
+                        <li>{{ err_detail }}</li>
+                    {% endfor %}
+                    </ul>
+                    {% if added_count > 0 %}
+                        <hr><p class="mb-0">{{ added_count }} studenți au fost adăugați înainte de erori.</p>
+                    {% endif %}
+                </div>
+            {% elif request.method == 'POST' and not error_details_list and error_count > 0 %}
+                 <div class="alert alert-warning mt-3">
+                    {{ error_count }} linii nu au putut fi procesate. Verificați formatul.
+                 </div>
+            {% endif %}
+
+            {# This message will be shown if the redirect happens with flash, not if re-rendering page #}
+            {# {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        {% if category == 'success' and 'studenți au fost adăugați' in message %}
+                        <div class="alert alert-success mt-3">{{ message }}</div>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+            {% endwith %} #}
+
+
+            <form method="POST" action="{{ url_for('gradat_page_bulk_import_students') }}">
+                <div class="mb-3">
+                    <label for="student_bulk_data" class="form-label"><strong>Date Studenți (copiați textul aici):</strong></label>
+                    <textarea class="form-control" id="student_bulk_data" name="student_bulk_data" rows="15" required placeholder="M.m.IV Renț Francisc M 1 1 1&#10;Sdt. Ionescu Maria F 2 1 1">{{ form_data.student_bulk_data if form_data and form_data.student_bulk_data is defined else '' }}</textarea>
+                </div>
+                <div class="d-flex justify-content-end">
+                    <a href="{{ url_for('list_students') }}" class="btn btn-secondary me-2">Anulează</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload"></i> Importă Studenți
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -26,3 +26,24 @@
     </div>
 </div>
 {% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const loginCodeField = document.getElementById('login_code');
+        if (loginCodeField) {
+            // Explicitly ensure the field is not disabled or readonly
+            loginCodeField.disabled = false;
+            loginCodeField.readOnly = false;
+
+            // Attempt to focus the field.
+            // Using a small timeout can sometimes help if other scripts or browser autofill are interfering.
+            setTimeout(function() {
+                if (document.activeElement !== loginCodeField) { // Focus only if not already focused
+                    loginCodeField.focus();
+                }
+            }, 100); // 100ms delay
+        }
+    });
+</script>
+{% endblock %}
