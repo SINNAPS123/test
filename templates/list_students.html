@@ -19,13 +19,13 @@
         <div class="d-flex align-items-center">
             {# Butonul de adăugare student este vizibil pentru Gradat. Adminul poate adăuga prin altă interfață dacă e necesar, sau se poate adăuga aici #}
             {% if not is_admin_view %}
-            <button type="button" class="btn btn-info btn-sm me-2" data-bs-toggle="modal" data-bs-target="#bulkImportModal">
+            <a href="{{ url_for('gradat_page_bulk_import_students') }}" class="btn btn-info btn-sm me-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-upload me-1 icon-rotate-hover" viewBox="0 0 16 16">
                     <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
                     <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
                 </svg>
-                Import Studenți
-            </button>
+                Import Studenți (Pagină Nouă)
+            </a>
             <a href="{{ url_for('add_student') }}" class="btn btn-success btn-sm me-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-circle-fill me-1 icon-rotate-hover" viewBox="0 0 16 16">
                     <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8.5 4.5a.5.5 0 0 0-1 0v3h-3a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0v-3h3a.5.5 0 0 0 0-1h-3v-3z"/>
@@ -234,34 +234,5 @@
     {% endif %}
 </div>
 
-<!-- Modal pentru Bulk Import -->
-{% if not is_admin_view %}
-<div class="modal fade" id="bulkImportModal" tabindex="-1" aria-labelledby="bulkImportModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <form action="{{ url_for('gradat_bulk_import_students') }}" method="POST">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="bulkImportModalLabel">Import Studenți în Masă</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Introduceți datele studenților, fiecare student pe un rând nou, în formatul:
-                        <br><code>Grad Nume Prenume Gen Pluton Companie Batalion</code>
-                        <br>Exemplu: <code>Sdt. Popescu Ion M 1 1 1</code>
-                    </p>
-                    <p>Gen: <strong>M</strong> (Masculin), <strong>F</strong> (Feminin), <strong>Nespecificat</strong>.</p>
-                    <div class="mb-3">
-                        <label for="student_bulk_data" class="form-label">Date Studenți:</label>
-                        <textarea class="form-control" id="student_bulk_data" name="student_bulk_data" rows="10" required placeholder="M.m.IV Renț Francisc M 1 1 1&#10;Sdt. Ionescu Maria F 2 1 1"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anulează</button>
-                    <button type="submit" class="btn btn-primary">Importă Studenți</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-{% endif %}
+<!-- Modal pentru Bulk Import a fost eliminat. Funcționalitatea este pe o pagină separată. -->
 {% endblock %}

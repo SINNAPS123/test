@@ -4,13 +4,20 @@
 
 {% block content %}
 <div class="px-4 py-5 my-5 text-center">
-    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="UNAP Logo" class="mb-4" style="max-height: 100px;">
+    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="UNAP Logo" class="main-page-logo">
     <h2 class="fw-bold">
         {{ home_page_title | default("UNAP User Panel") }}
         {% if home_page_badge_text and home_page_badge_text.strip() and home_page_badge_text.lower() != 'none' %}
             <span class="badge bg-info ms-2">{{ home_page_badge_text }}</span>
         {% endif %}
     </h2>
+    {% if current_user.is_authenticated and current_user.role == 'admin' %}
+        <div class="mt-2 mb-3"> {# Added mb-3 for spacing before the stats cards #}
+            <a href="{{ url_for('admin_homepage_settings') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-pencil-alt me-1"></i> Editează Titlu/Badge Pagină
+            </a>
+        </div>
+    {% endif %}
     <div class="col-lg-6 mx-auto">
         {# Textul "Panou centralizat..." a fost eliminat conform cerinței #}
 

@@ -388,6 +388,18 @@ body.dark-mode .alert-secondary {
     border-color: var(--border-color);
 }
 
+/* Ensure .alert-info has good contrast in dark mode */
+body.dark-mode .alert-info {
+    color: var(--text-primary); /* Light text */
+    background-color: var(--bg-surface-hover); /* Darker background, consistent with alert-secondary */
+    border-color: var(--border-color); /* Consistent border */
+}
+body.dark-mode .alert-info a,
+body.dark-mode .alert-info .alert-link {
+    color: var(--link-color); /* Use the general dark mode link color for good contrast */
+}
+
+
 /* Stil pentru listele de studenți din presence_report.html */
 body.dark-mode .list-group-item {
     background-color: var(--bg-surface); /* Fundalul cardului */
@@ -424,9 +436,16 @@ a:hover {
 
 /* Navbar */
 .navbar-brand img.logo-img {
-    height: 50px; /* Înălțimea logo-ului mărită */
+    height: 70px; /* Increased from 50px */
     width: auto;
     margin-right: 5px; /* Spațiu între logo și textul Beta (dacă există) */
+}
+
+/* Logo for the main page (home.html) */
+.main-page-logo {
+    max-height: 120px;
+    width: auto;
+    margin-bottom: 1rem; /* Bootstrap's mb-4 is 1.5rem, this is mb-3 equivalent */
 }
 
 .navbar {
