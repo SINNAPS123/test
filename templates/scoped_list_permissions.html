@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Listă Permisii - {{ current_user.username }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">Listă Permisii</h2> <!-- mb-0 for alignment -->
+        <div class="d-flex align-items-center">
+            <a href="{{ url_for('gradat_page_import_permissions') }}" class="btn btn-info btn-sm me-2" title="Importă mai multe permisii dintr-un text copiat">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-upload me-1 icon-rotate-hover" viewBox="0 0 16 16">
+                    <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                    <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
+                </svg>
+                Importă Permisii (Pagină Nouă)
+            </a>
+            <a href="{{ url_for('gradat_export_permissions_word') }}" class="btn btn-outline-primary btn-sm me-2" title="Exportă permisiile active/viitoare în format Word">
+                <i class="fas fa-file-word icon-rotate-hover"></i> Exportă (Word)
+            </a>
+            <a href="{{ url_for('add_edit_permission') }}" class="btn btn-success btn-sm me-2" title="Adaugă o permisie individuală">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-calendar-plus-fill me-1 icon-rotate-hover" viewBox="0 0 16 16">
+                    <path d="M4 .5a.5.5 0 0 0-1 0V1H2a2 2 0 0 0-2 2v1h16V3a2 2 0 0 0-2-2h-1V.5a.5.5 0 0 0-1 0V1H4V.5zM16 14V5H0v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2zM8.5 8.5V10H10a.5.5 0 0 1 0 1H8.5v1.5a.5.5 0 0 1-1 0V11H6a.5.5 0 0 1 0-1h1.5V8.5a.5.5 0 0 1 1 0z"/>
+                </svg>
+                Adaugă Nouă
+            </a>
+            <a href="{{ url_for('gradat_bulk_add_permission') }}" class="btn btn-warning btn-sm me-2" title="Adaugă aceeași permisie pentru mai mulți studenți simultan">
+                <i class="fas fa-users-cog icon-rotate-hover"></i> Adaugă Multiplu
+            </a>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Panou Gradat</a>
+        </div>
+    </div>
+
+    {% macro render_permissions_table(permissions, table_title, table_id) %}
+        {% if permissions %}
+        <h4 class="mt-4">{{ table_title }} ({{ permissions|length }})</h4>
+        <div class="table-responsive shadow-sm"> <!-- Added shadow-sm -->
+            <table class="table table-striped table-hover table-sm">
+                <thead> <!-- Am eliminat clasa table-dark -->
+                    <tr>
+                        <th>Student</th>
+                        <th>Grad</th>
+                        <th>De la</th>
+                        <th>Până la</th>
+                        <th>Destinație</th>
+                        <th>Transport</th>
+                        <th>Motiv/Obs.</th>
+                        <th>Status</th>
+                        <th>Acțiuni</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in permissions %}
+                    <tr class="{{ 'table-success' if p.is_active else ('table-warning' if p.is_upcoming else 'table-secondary') }}">
+                        <td>{{ p.student.nume }} {{ p.student.prenume }}</td>
+                        <td>{{ p.student.grad_militar }}</td>
+                        <td>{{ p.start_datetime|localdatetime('%d-%m-%Y %H:%M') }}</td>
+                        <td>{{ p.end_datetime|localdatetime('%d-%m-%Y %H:%M') }}</td>
+                        <td>{{ p.destination if p.destination else '-' }}</td>
+                        <td>{{ p.transport_mode if p.transport_mode else '-' }}</td>
+                        <td>{{ p.reason if p.reason else '-' }}</td>
+                        <td>
+                            {% if p.status == 'Aprobată' %}
+                                {% if p.is_active %}
+                                    <span class="badge bg-success">Activă</span>
+                                {% elif p.is_upcoming %}
+                                    <span class="badge bg-warning text-dark">Urmează</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Expirată</span>
+                                {% endif %}
+                            {% elif p.status == 'Anulată' %}
+                                <span class="badge bg-danger">Anulată</span>
+                            {% else %}
+                                <span class="badge bg-light text-dark">{{ p.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('add_edit_permission', permission_id=p.id) }}" class="btn btn-sm btn-warning me-1 py-0 px-1" title="Editare Permisie">
+                                <i class="fas fa-edit icon-rotate-hover"></i>
+                            </a>
+                            {% if p.status == 'Aprobată' and (p.is_active or p.is_upcoming) %}
+                            <form method="POST" action="{{ url_for('cancel_permission', permission_id=p.id) }}" class="d-inline" onsubmit="return confirm('Ești sigur că vrei să anulezi această permisie?');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="Anulează Permisia">
+                                    <i class="fas fa-times-circle icon-rotate-hover"></i>
+                                </button>
+                            </form>
+                            {% elif p.status != 'Anulată' and p.is_past %}
+                                <span class="text-muted fst-italic small">Expirată</span>
+                            {% elif p.status == 'Anulată' %}
+                                <span class="text-muted fst-italic small">Anulată</span>
+                            {% endif %}
+                            {# Buton de ștergere permanentă, vizibil mereu, dar poate condiționat de rol dacă e necesar #}
+                            <form method="POST" action="{{ url_for('delete_permission', permission_id=p.id) }}" class="d-inline" onsubmit="return confirm('Ești sigur că vrei să ȘTERGI PERMANENT această permisie? Această acțiune nu poate fi anulată.');">
+                                <button type="submit" class="btn btn-sm btn-danger py-0 px-1 ms-1" title="Șterge Permisia Permanent">
+                                    <i class="fas fa-trash-alt icon-rotate-hover"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {# Am eliminat clauza else pentru a gestiona mesajul global #}
+        {% endif %}
+    {% endmacro %}
+
+    {% if active_permissions or upcoming_permissions or past_permissions %}
+        {{ render_permissions_table(active_permissions, 'Permisii Active Acum', 'active-permissions') }}
+        {{ render_permissions_table(upcoming_permissions, 'Permisii Viitoare', 'upcoming-permissions') }}
+        {{ render_permissions_table(past_permissions, 'Permisii Trecute/Anulate', 'past-permissions') }}
+    {% else %}
+        <div class="alert alert-info mt-4" role="alert">
+            Nu există permisii de afișat. Puteți adăuga o <a href="{{ url_for('add_edit_permission') }}" class="alert-link">permisie nouă aici</a>.
+        </div>
+    {% endif %}
+
+    <p class="mt-4">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
+            &laquo; Înapoi la Panoul Gradat
+        </a>
+    </p>
+</div>
+
+{# Modalul pentru Bulk Import Permisii a fost eliminat. Funcționalitatea este acum pe o pagină separată. #}
+{# Se poate șterge acest comentariu și tot conținutul modalului dacă nu mai este necesar ca referință. #}
+
+{% endblock %}
