@@ -1894,96 +1894,6 @@ def battalion_commander_dashboard():
                            current_time_for_display=now_localized_b
                            )
 
-def presence_report():
-    if current_user.role not in ['gradat', 'admin', 'comandant_companie', 'comandant_batalion']: # Admin/Commanders might also want tosee this for their unit? For now, primarily gradat.
-        flash('Acces neautorizat pentru rolul dumneavoastră.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    current_dt_str_for_form = get_localized_now().strftime('%Y-%m-%dT%H:%M') # Folosim ora localizată pentru valoarea default a formularului
-    report_data_to_render = None
-
-    if request.method == 'POST':
-        report_type = request.form.get('report_type')
-        custom_datetime_str = request.form.get('custom_datetime')
-        datetime_to_check = None # Acesta va fi un datetime naive, dar bazat pe inputuri locale
-        report_title_detail = ""
-
-        if report_type == 'current':
-            datetime_to_check = get_localized_now() # Acesta este deja timezone-aware
-            report_title_detail = "Prezență Curentă"
-        elif report_type == 'evening_roll_call':
-            naive_dt = get_standard_roll_call_datetime() # returnează un datetime naive în ora locală
-            datetime_to_check = EUROPE_BUCHAREST.localize(naive_dt)
-            report_title_detail = f"Apel de Seară ({datetime_to_check.strftime('%H:%M')})"
-        elif report_type == 'company_report':
-            naive_dt = datetime.combine(get_localized_now().date(), time(14, 20)) # Construim un datetime naive
-            datetime_to_check = EUROPE_BUCHAREST.localize(naive_dt)
-            report_title_detail = "Raport Companie (14:20)"
-        elif report_type == 'morning_check':
-            target_d = get_localized_now().date() # Default to today (localized)
-            if custom_datetime_str:
-                try:
-                    # Parse the date from the custom_datetime_str if provided for morning_check
-                    target_d = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M').date()
-                except (ValueError, TypeError):
-                    flash('Data custom specificată era invalidă, s-a folosit data curentă pentru raportul de dimineață.', 'warning')
-            naive_dt = datetime.combine(target_d, time(7, 0)) # Naive, ora locală
-            datetime_to_check = EUROPE_BUCHAREST.localize(naive_dt)
-            report_title_detail = f"Prezență Dimineață ({target_d.strftime('%d.%m.%Y')} 07:00)"
-        elif report_type == 'custom':
-            try:
-                naive_dt = datetime.strptime(custom_datetime_str, '%Y-%m-%dT%H:%M') # Naive, ora locală
-                datetime_to_check = EUROPE_BUCHAREST.localize(naive_dt)
-                report_title_detail = f"Dată Specifică ({datetime_to_check.strftime('%d.%m.%Y %H:%M')})"
-            except (ValueError, TypeError):
-                flash('Format dată și oră custom invalid. Folosiți formatul corect.', 'danger')
-                return render_template('presence_report.html', current_datetime_str=current_dt_str_for_form, report_data=None)
-        else:
-            flash('Tip de raport invalid selectat.', 'danger')
-            return render_template('presence_report.html', current_datetime_str=current_dt_str_for_form, report_data=None)
-
-        # Determine student list based on role
-        students_for_report = []
-        report_base_title = "Raport Prezență"
-
-        if current_user.role == 'gradat':
-            students_for_report = Student.query.filter_by(created_by_user_id=current_user.id).all()
-            gradat_pluton = students_for_report[0].pluton if students_for_report else "N/A" # Assuming gradat manages one platoon
-            report_base_title = f"Raport Prezență Plutonul {gradat_pluton}"
-        elif current_user.role == 'comandant_companie':
-            company_id = _get_commander_unit_id(current_user.username, "CmdC")
-            if company_id:
-                students_for_report = Student.query.filter_by(companie=company_id).all()
-                report_base_title = f"Raport Prezență Compania {company_id}"
-            else:
-                flash("Nu s-a putut determina ID-ul companiei.", "danger")
-        elif current_user.role == 'comandant_batalion':
-            battalion_id = _get_commander_unit_id(current_user.username, "CmdB")
-            if battalion_id:
-                students_for_report = Student.query.filter_by(batalion=battalion_id).all()
-                report_base_title = f"Raport Prezență Batalionul {battalion_id}"
-            else:
-                flash("Nu s-a putut determina ID-ul batalionului.", "danger")
-        # Admin might see all students or have a selection UI - for now, admin not generating this specific report via this UI
-
-        if not students_for_report and current_user.role == 'gradat': # Only flash if gradat has no students
-             flash('Nu aveți studenți în evidență pentru a genera raportul.', 'info')
-
-        if students_for_report:
-            report_data_calculated = _calculate_presence_data(students_for_report, datetime_to_check)
-            report_data_to_render = {
-                **report_data_calculated, # Spread the calculated data
-                "title": f"{report_base_title} - {report_title_detail}",
-                "datetime_checked": datetime_to_check.strftime('%d %B %Y, %H:%M:%S')
-            }
-        elif not students_for_report and current_user.role != 'gradat' and not request.form.get('suppress_no_students_flash'): # Avoid flash if no students for commanders unless explicitly generating
-            flash(f"Niciun student găsit pentru {current_user.role} {current_user.username} pentru a genera raportul.", "info")
-
-
-    return render_template('presence_report.html',
-                           current_datetime_str=current_dt_str_for_form,
-                           report_data=report_data_to_render)
-
 # --- Volunteer Module ---
 @app.route('/volunteer', methods=['GET', 'POST'])
 @login_required
@@ -6200,148 +6110,6 @@ def gradat_page_import_weekend_leaves():
 
         return redirect(url_for('list_weekend_leaves'))
 
-    return render_template('gradat_import_weekend_leaves.html', weekend_leave_bulk_data='', error_details=None)
-
-
-@app.route('/gradat/import/weekend_leaves', methods=['GET', 'POST'], endpoint='gradat_page_import_weekend_leaves')
-@login_required
-def gradat_page_import_weekend_leaves():
-    if current_user.role != 'gradat':
-        flash('Acces neautorizat.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    if request.method == 'POST':
-        leave_list_text = request.form.get('weekend_leave_bulk_data', '').strip()
-        if not leave_list_text:
-            flash('Lista de învoiri este goală.', 'warning')
-            return render_template('gradat_import_weekend_leaves.html', weekend_leave_bulk_data=leave_list_text)
-
-        lines = leave_list_text.strip().splitlines()
-        processed_count = 0
-        error_count = 0
-        error_details_list = []
-        success_details_list = []
-
-        for line_raw in lines:
-            line_content = line_raw.strip()
-            if not line_content:
-                continue
-
-            student_name_str, parsed_intervals, is_biserica_req, error_msg = parse_weekend_leave_line(line_content)
-
-            if error_msg and student_name_str is None and not parsed_intervals :
-                continue
-            if error_msg:
-                error_details_list.append({"line": line_content, "error": error_msg})
-                error_count += 1
-                continue
-            if not parsed_intervals:
-                error_details_list.append({"line": line_content, "error": "Niciun interval valid de procesat."})
-                error_count +=1
-                continue
-
-            student_obj, student_error = find_student_for_bulk_import(student_name_str, current_user.id)
-            if student_error:
-                error_details_list.append({"line": line_content, "error": f"Student '{student_name_str}': {student_error}"})
-                error_count += 1
-                continue
-
-            first_interval_date = parsed_intervals[0]['date_obj']
-            weekend_start_date_obj = first_interval_date - timedelta(days=first_interval_date.weekday()) + timedelta(days=4)
-
-            current_weekend_leave_data = {
-                "day1_date": None, "day1_start_time": None, "day1_end_time": None, "day1_selected": None,
-                "day2_date": None, "day2_start_time": None, "day2_end_time": None, "day2_selected": None,
-                "day3_date": None, "day3_start_time": None, "day3_end_time": None, "day3_selected": None,
-                "intervals_for_conflict_check": []
-            }
-            distinct_days_processed = set()
-
-            valid_intervals_for_this_student = True
-            for interval in parsed_intervals:
-                interval_date = interval['date_obj']
-                delta_days = (interval_date - weekend_start_date_obj).days
-                day_slot_key = None; day_name_ro = None
-
-                if delta_days == 0 and interval_date.weekday() == 4: day_slot_key, day_name_ro = "day1", "Vineri"
-                elif delta_days == 1 and interval_date.weekday() == 5: day_slot_key, day_name_ro = "day2", "Sambata"
-                elif delta_days == 2 and interval_date.weekday() == 6: day_slot_key, day_name_ro = "day3", "Duminica"
-                else:
-                    error_details_list.append({"line": line_content, "student": student_obj.nume, "error": f"Data {interval_date.strftime('%d.%m.%Y')} nu corespunde weekendului."})
-                    error_count += 1; valid_intervals_for_this_student = False; break
-
-                if day_slot_key in distinct_days_processed :
-                     error_details_list.append({"line": line_content, "student": student_obj.nume, "error": f"Intervale multiple pentru {day_name_ro}."})
-                     valid_intervals_for_this_student = False; break # Consider this an error for now
-                distinct_days_processed.add(day_slot_key)
-
-                current_weekend_leave_data[f"{day_slot_key}_date"] = interval_date
-                current_weekend_leave_data[f"{day_slot_key}_start_time"] = interval['start_time_obj']
-                current_weekend_leave_data[f"{day_slot_key}_end_time"] = interval['end_time_obj']
-                current_weekend_leave_data[f"{day_slot_key}_selected"] = day_name_ro
-
-                start_dt = datetime.combine(interval_date, interval['start_time_obj'])
-                effective_end_date = interval_date
-                if interval['end_time_obj'] < interval['start_time_obj']: effective_end_date += timedelta(days=1)
-                end_dt = datetime.combine(effective_end_date, interval['end_time_obj'])
-                current_weekend_leave_data["intervals_for_conflict_check"].append({'start': start_dt, 'end': end_dt, 'day_name': day_name_ro})
-
-            if not valid_intervals_for_this_student: continue
-            if not distinct_days_processed:
-                error_details_list.append({"line": line_content, "student": student_obj.nume, "error": "Niciun interval valid mapat."})
-                error_count += 1; continue
-
-            conflict_found_for_student = False
-            for interval_to_check in current_weekend_leave_data["intervals_for_conflict_check"]:
-                conflict = check_leave_conflict(student_obj.id, interval_to_check['start'], interval_to_check['end'], leave_type='weekend_leave')
-                if conflict:
-                    error_details_list.append({"line": line_content, "student": student_obj.nume, "error": f"Conflict {interval_to_check['day_name']}: {conflict}."})
-                    error_count += 1; conflict_found_for_student = True; break
-            if conflict_found_for_student: continue
-
-            new_wl = WeekendLeave(
-                student_id=student_obj.id, weekend_start_date=weekend_start_date_obj,
-                day1_selected=current_weekend_leave_data['day1_selected'], day1_date=current_weekend_leave_data['day1_date'],
-                day1_start_time=current_weekend_leave_data['day1_start_time'], day1_end_time=current_weekend_leave_data['day1_end_time'],
-                day2_selected=current_weekend_leave_data['day2_selected'], day2_date=current_weekend_leave_data['day2_date'],
-                day2_start_time=current_weekend_leave_data['day2_start_time'], day2_end_time=current_weekend_leave_data['day2_end_time'],
-                day3_selected=current_weekend_leave_data['day3_selected'], day3_date=current_weekend_leave_data['day3_date'],
-                day3_start_time=current_weekend_leave_data['day3_start_time'], day3_end_time=current_weekend_leave_data['day3_end_time'],
-                duminica_biserica=(is_biserica_req and current_weekend_leave_data['day3_selected'] == "Duminica"),
-                status='Aprobată', created_by_user_id=current_user.id, reason=f"Import text: {line_content[:100]}"
-            )
-            db.session.add(new_wl)
-            processed_count += 1
-            success_details_list.append(f"Învoire weekend pentru {student_obj.nume} {student_obj.prenume} ({weekend_start_date_obj.strftime('%d.%m')}) adăugată.")
-
-        if processed_count > 0:
-            try:
-                db.session.commit()
-                flash(f'{processed_count} învoiri de weekend procesate și adăugate.', 'success')
-                for detail in success_details_list: flash(detail, 'info')
-                log_action("BULK_IMPORT_WEEKEND_LEAVES_SUCCESS_PAGE",
-                           description=f"User {current_user.username} bulk imported {processed_count} weekend leaves via page.",
-                           details_after_dict={"added_count": processed_count, "success_details": success_details_list[:5]})
-                db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                flash(f'Eroare la salvarea învoirilor de weekend: {str(e)}', 'danger')
-                app.logger.error(f"Bulk Weekend Leave Page Import: DB commit error: {str(e)}")
-                error_count += processed_count; processed_count = 0
-                log_action("BULK_IMPORT_WEEKEND_LEAVES_FAIL_DB_PAGE",
-                           description=f"User {current_user.username} bulk weekend leave (page) DB commit failed. Error: {str(e)}",
-                           details_after_dict={"attempted_add_count": processed_count, "error_count_at_fail": error_count})
-                db.session.commit()
-
-        if error_count > 0:
-            flash(f'{error_count} linii/intrări nu au putut fi procesate sau au generat erori.', 'danger')
-            return render_template('gradat_import_weekend_leaves.html', weekend_leave_bulk_data=leave_list_text, error_details=error_details_list)
-
-        if processed_count == 0 and error_count == 0 and leave_list_text:
-            flash('Nicio învoire validă de importat. Verificați formatul.', 'info')
-
-        return redirect(url_for('list_weekend_leaves'))
-
     return render_template('gradat_import_weekend_leaves.html', weekend_leave_bulk_data='')
 
 
@@ -6478,27 +6246,27 @@ def presence_report():
 # These should be run explicitly when setting up the application.
 
 if __name__ == '__main__':
-    # Example of how migrations and init_db could be handled,
-    # though Flask-Migrate CLI is preferred.
-    # You might want to run these manually or via a script one time.
-    # For development, you can uncomment and run once.
-    # with app.app_context():
-    #     print("--------------------------------------------------------")
-    #     user_input = input("Apply database migrations? (yes/no): ")
-    #     print("--------------------------------------------------------")
-    #     if user_input.lower() == 'yes':
-    #         try:
-    #             from flask_migrate import upgrade as flask_upgrade # Specific import
-    #             print("Attempting to apply database migrations...")
-    #             flask_upgrade()
-    #             print("DB migrations applied or up-to-date.")
-    #         except Exception as e:
-    #             print(f"Error during migration: {e}")
-    #     else:
-    #         print("Skipping DB migrations.")
-
-    #     # Initialize DB (creates tables if not exist, creates admin if not exist)
-    #     init_db()
+# Example of how migrations and init_db could be handled,
+# though Flask-Migrate CLI is preferred.
+# You might want to run these manually or via a script one time.
+# For development, you can uncomment and run once.
+#    with app.app_context():
+#        print("--------------------------------------------------------")
+#        user_input = input("Apply database migrations? (yes/no): ")
+#        print("--------------------------------------------------------")
+#        if user_input.lower() == 'yes':
+#            try:
+#                from flask_migrate import upgrade as flask_upgrade # Specific import
+#                print("Attempting to apply database migrations...")
+#                flask_upgrade()
+#                print("DB migrations applied or up-to-date.")
+#            except Exception as e:
+#                print(f"Error during migration: {e}")
+#        else:
+#            print("Skipping DB migrations.")
+#
+#        # Initialize DB (creates tables if not exist, creates admin if not exist)
+#        init_db()
 
     app.run(host='0.0.0.0', port=5001, debug=False)
 
