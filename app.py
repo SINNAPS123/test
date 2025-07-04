@@ -3068,7 +3068,7 @@ def export_permissions_word():
         Permission.student_id.in_(student_ids_managed_by_gradat),
         Permission.status == 'Aprobată',
         Permission.end_datetime >= now # Active or upcoming
-    ).order_by(Permission.student.has(Student.nume), Permission.start_datetime).all()
+    ).join(Student).order_by(Student.nume, Student.prenume, Permission.start_datetime).all()
 
     if not permissions_to_export:
         flash('Nicio permisie activă sau viitoare de exportat.', 'info')
@@ -4039,7 +4039,7 @@ def export_weekend_leaves_word():
         # Further filter by is_overall_active_or_upcoming if only current/future are needed
         # For a general report, all approved might be fine, or sort them.
         # Let's fetch all approved and sort them, then decide if we only show active/upcoming ones.
-    ).order_by(WeekendLeave.student.has(Student.nume), WeekendLeave.weekend_start_date).all()
+    ).join(Student).order_by(Student.nume, Student.prenume, WeekendLeave.weekend_start_date).all()
 
     # Filter for only active or upcoming ones for the report
     leaves_to_export = [leave for leave in leaves_to_export if leave.is_overall_active_or_upcoming]
@@ -5536,7 +5536,7 @@ def admin_export_permissions_word():
         return redirect(url_for('dashboard'))
 
     now = get_localized_now()
-    permissions_to_export = Permission.query.options(joinedload(Permission.student)).filter(
+    permissions_to_export = Permission.query.options(joinedload(Permission.student)).join(Student, Permission.student_id == Student.id).filter(
         Permission.status == 'Aprobată',
         Permission.end_datetime >= now  # Active or upcoming
     ).order_by(Student.nume, Student.prenume, Permission.start_datetime).all()
@@ -5595,7 +5595,7 @@ def admin_export_weekend_leaves_word():
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
 
-    leaves_to_export = WeekendLeave.query.options(joinedload(WeekendLeave.student)).filter(
+    leaves_to_export = WeekendLeave.query.options(joinedload(WeekendLeave.student)).join(Student, WeekendLeave.student_id == Student.id).filter(
         WeekendLeave.status == 'Aprobată'
     ).order_by(Student.nume, Student.prenume, WeekendLeave.weekend_start_date).all()
 
@@ -5662,7 +5662,7 @@ def company_commander_export_permissions_word():
         return redirect(url_for('company_commander_dashboard'))
 
     now = get_localized_now()
-    permissions_to_export = Permission.query.options(joinedload(Permission.student)).filter(
+    permissions_to_export = Permission.query.options(joinedload(Permission.student)).join(Student, Permission.student_id == Student.id).filter(
         Permission.student_id.in_(student_ids_in_company),
         Permission.status == 'Aprobată',
         Permission.end_datetime >= now
@@ -5723,7 +5723,7 @@ def company_commander_export_weekend_leaves_word():
         flash(f'Niciun student în compania {company_id_str} pentru a exporta învoiri de weekend.', 'info')
         return redirect(url_for('company_commander_dashboard'))
 
-    leaves_to_export = WeekendLeave.query.options(joinedload(WeekendLeave.student)).filter(
+    leaves_to_export = WeekendLeave.query.options(joinedload(WeekendLeave.student)).join(Student, WeekendLeave.student_id == Student.id).filter(
         WeekendLeave.student_id.in_(student_ids_in_company),
         WeekendLeave.status == 'Aprobată'
     ).order_by(Student.nume, Student.prenume, WeekendLeave.weekend_start_date).all()
@@ -5791,7 +5791,7 @@ def battalion_commander_export_permissions_word():
         return redirect(url_for('battalion_commander_dashboard'))
 
     now = get_localized_now()
-    permissions_to_export = Permission.query.options(joinedload(Permission.student)).filter(
+    permissions_to_export = Permission.query.options(joinedload(Permission.student)).join(Student, Permission.student_id == Student.id).filter(
         Permission.student_id.in_(student_ids_in_battalion),
         Permission.status == 'Aprobată',
         Permission.end_datetime >= now
@@ -5852,7 +5852,7 @@ def battalion_commander_export_weekend_leaves_word():
         flash(f'Niciun student în batalionul {battalion_id_str} pentru a exporta învoiri de weekend.', 'info')
         return redirect(url_for('battalion_commander_dashboard'))
 
-    leaves_to_export = WeekendLeave.query.options(joinedload(WeekendLeave.student)).filter(
+    leaves_to_export = WeekendLeave.query.options(joinedload(WeekendLeave.student)).join(Student, WeekendLeave.student_id == Student.id).filter(
         WeekendLeave.student_id.in_(student_ids_in_battalion),
         WeekendLeave.status == 'Aprobată'
     ).order_by(Student.nume, Student.prenume, WeekendLeave.weekend_start_date).all()
