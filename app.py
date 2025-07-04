@@ -6681,7 +6681,7 @@ if __name__ == '__main__':
 
 
 # --- Admin Data Reset Routes ---
-@app.route('/admin/reset/permissions', methods=['POST'])
+@app.route('/admin/reset/permissions', methods=['POST'], endpoint='admin_reset_permissions')
 @login_required
 def admin_reset_permissions():
     if current_user.role != 'admin':

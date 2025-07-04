@@ -421,7 +421,7 @@ a:hover {
 
 /* Navbar */
 .navbar-brand img.logo-img {
-    height: 50px; /* Înălțimea logo-ului mărirită - Jules: changed from 40px to 50px */
+    height: 35px; /* Adjusted logo height to be smaller */
     width: auto;
     margin-right: 5px; /* Spațiu între logo și textul Beta (dacă există) */
 }
@@ -453,7 +453,7 @@ a:hover {
     font-weight: 400; /* Redus font-weight linkuri */
     padding-top: 0.02rem; /* Și mai mic padding linkuri */
     padding-bottom: 0.02rem; /* Și mai mic padding linkuri */
-    font-size: 0.75rem; /* Și mai mic font-size linkuri */
+    font-size: 0.8rem; /* Adjusted navbar link font size for readability */
     line-height: 1.1; /* Și mai strâns line-height linkuri */
 }
 .navbar .nav-link:hover, .navbar .nav-link.active {
@@ -774,7 +774,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
     border-top: 1px solid var(--border-color);
     color: var(--text-secondary);
     text-align: center;
-    font-size: 0.65em; /* Și mai mic font-size footer */
+    font-size: 0.75em; /* Adjusted footer font size for readability */
     line-height: 1.1; /* Și mai strâns line-height footer */
 }
 
