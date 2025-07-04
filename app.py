@@ -351,6 +351,14 @@ class UpdateTopic(db.Model):
     def __repr__(self):
         return f'<UpdateTopic {self.id}: {self.title[:50]}>'
 
+class SiteSetting(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(50), unique=True, nullable=False) # e.g., 'home_page_title', 'home_page_badge_text'
+    value = db.Column(db.Text, nullable=True)
+
+    def __repr__(self):
+        return f'<SiteSetting {self.key}: {self.value[:20] if self.value else "None"}>'
+
 @login_manager.user_loader
 def load_user(user_id): return db.session.get(User, int(user_id))
 
@@ -588,7 +596,26 @@ def home():
         total_users = User.query.filter(User.role != 'admin').count()
         total_volunteer_activities = VolunteerActivity.query.count()
     except Exception as e: pass
-    return render_template('home.html', total_students=total_students, total_users=total_users, total_volunteer_activities=total_volunteer_activities)
+
+    # Fetch homepage settings
+    default_title = "UNAP User Panel"
+    default_badge_text = "Beta v2.5" # Original badge text
+
+    title_setting = SiteSetting.query.filter_by(key='home_page_title').first()
+    badge_setting = SiteSetting.query.filter_by(key='home_page_badge_text').first()
+
+    display_title = title_setting.value if title_setting and title_setting.value else default_title
+    display_badge_text = badge_setting.value if badge_setting and badge_setting.value else default_badge_text
+
+    # If badge text is explicitly set to "None" or empty string by admin, don't show badge.
+    # The template will handle the logic of not rendering the span if display_badge_text is empty.
+
+    return render_template('home.html',
+                           total_students=total_students,
+                           total_users=total_users,
+                           total_volunteer_activities=total_volunteer_activities,
+                           home_page_title=display_title,
+                           home_page_badge_text=display_badge_text)
 
 @app.route('/updates')
 @login_required # Sau eliminați @login_required dacă pagina este publică
@@ -6652,3 +6679,60 @@ if __name__ == '__main__':
 
     # Start the Flask development server
     app.run(host='0.0.0.0', port=5001, debug=True)
+
+# START JULES - ADMIN HOME PAGE SETTINGS
+@app.route('/admin/settings/homepage', methods=['GET', 'POST'], endpoint='admin_homepage_settings')
+@login_required
+def admin_homepage_settings():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    default_title = "UNAP User Panel"
+    default_badge_text = "Beta v2.5" # Original badge text
+
+    if request.method == 'POST':
+        new_title = request.form.get('home_page_title', default_title).strip()
+        new_badge_text = request.form.get('home_page_badge_text', default_badge_text).strip()
+
+        title_setting = SiteSetting.query.filter_by(key='home_page_title').first()
+        if not title_setting:
+            title_setting = SiteSetting(key='home_page_title', value=new_title)
+            db.session.add(title_setting)
+        else:
+            title_setting.value = new_title
+
+        badge_setting = SiteSetting.query.filter_by(key='home_page_badge_text').first()
+        if not badge_setting:
+            badge_setting = SiteSetting(key='home_page_badge_text', value=new_badge_text)
+            db.session.add(badge_setting)
+        else:
+            badge_setting.value = new_badge_text
+
+        try:
+            db.session.commit()
+            flash('Setările pentru pagina principală au fost actualizate.', 'success')
+            log_action("ADMIN_UPDATE_HOMEPAGE_SETTINGS", target_model_name="SiteSetting",
+                       description=f"Admin {current_user.username} updated homepage settings. Title: '{new_title}', Badge: '{new_badge_text}'.")
+            db.session.commit() # Commit log
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Eroare la salvarea setărilor: {str(e)}', 'danger')
+            log_action("ADMIN_UPDATE_HOMEPAGE_SETTINGS_FAIL", target_model_name="SiteSetting",
+                       description=f"Admin {current_user.username} failed to update homepage settings. Error: {str(e)}")
+            db.session.commit() # Commit log
+
+        return redirect(url_for('admin_homepage_settings'))
+
+    # GET request
+    current_title_setting = SiteSetting.query.filter_by(key='home_page_title').first()
+    current_badge_setting = SiteSetting.query.filter_by(key='home_page_badge_text').first()
+
+    current_title = current_title_setting.value if current_title_setting else default_title
+    current_badge_text = current_badge_setting.value if current_badge_setting else default_badge_text
+
+    return render_template('admin_homepage_settings.html',
+                           title="Setări Pagină Principală",
+                           current_title=current_title,
+                           current_badge_text=current_badge_text)
+# END JULES - ADMIN HOME PAGE SETTINGS

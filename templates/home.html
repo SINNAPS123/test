@@ -4,9 +4,15 @@
 
 {% block content %}
 <div class="px-4 py-5 my-5 text-center">
-    <h1 class="display-5 fw-bold">UNAP User Panel <span class="badge bg-info">Beta</span> v2.5</h1>
+    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="UNAP Logo" class="mb-4" style="max-height: 100px;">
+    <h2 class="fw-bold">
+        {{ home_page_title | default("UNAP User Panel") }}
+        {% if home_page_badge_text and home_page_badge_text.strip() and home_page_badge_text.lower() != 'none' %}
+            <span class="badge bg-info ms-2">{{ home_page_badge_text }}</span>
+        {% endif %}
+    </h2>
     <div class="col-lg-6 mx-auto">
-        <p class="lead mb-4">Panou centralizat pentru gestiunea studenților și a activităților academice.</p>
+        {# Textul "Panou centralizat..." a fost eliminat conform cerinței #}
 
         <div class="row justify-content-center mb-4">
             <div class="col-auto">

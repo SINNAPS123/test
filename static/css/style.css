@@ -424,7 +424,7 @@ a:hover {
 
 /* Navbar */
 .navbar-brand img.logo-img {
-    height: 40px; /* Înălțimea logo-ului mărită */
+    height: 50px; /* Înălțimea logo-ului mărită */
     width: auto;
     margin-right: 5px; /* Spațiu între logo și textul Beta (dacă există) */
 }
@@ -799,7 +799,10 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
 /* Responsive adjustments */
 @media (max-width: 768px) {
     body {
-        font-size: 0.95rem; /* Ajustează fontul de bază pentru ecrane mici */
+        font-size: 0.9rem; /* Ajustează fontul de bază pentru ecrane medii/mici */
+    }
+    .table-responsive { /* Ensure all responsive tables can scroll if needed */
+        overflow-x: auto;
     }
     .container, .container-fluid {
         padding-left: 1rem;
@@ -822,8 +825,8 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
         font-size: 0.9rem;
     }
     .table th, .table td {
-        padding: 0.4rem; /* Padding și mai mic pentru celule tabel pe ecrane foarte mici */
-        font-size: 0.85rem; /* Font și mai mic în tabele pe ecrane foarte mici */
+        padding: 0.25rem; /* Padding și mai mic pentru celule tabel pe ecrane foarte mici */
+        font-size: 0.8rem; /* Font și mai mic în tabele pe ecrane foarte mici */
     }
     /* Asigură că butoanele de acțiune din tabele au suficient spațiu sau trec pe rând nou */
     .table td .btn {
