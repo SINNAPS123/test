@@ -5219,47 +5219,61 @@ def gradat_invoiri_istoric():
     data_start_custom_str = request.args.get('data_start_custom')
     data_sfarsit_custom_str = request.args.get('data_sfarsit_custom')
 
-    end_date = get_localized_now().date() # Data de sfârșit a intervalului implicit
+    today_date = get_localized_now().date()
+    end_date = today_date
     start_date = None
 
     if perioada == 'ieri':
-        start_date = end_date - timedelta(days=1)
-        end_date = start_date # Pentru 'ieri', intervalul este o singură zi
+        start_date = today_date - timedelta(days=1)
+        end_date = start_date
     elif perioada == 'ultimele_2_zile':
-        start_date = end_date - timedelta(days=1) # Ultimele 2 zile înseamnă ieri și azi
+        start_date = today_date - timedelta(days=1)
+        # end_date remains today_date
     elif perioada == 'ultimele_7_zile':
-        start_date = end_date - timedelta(days=6)
+        start_date = today_date - timedelta(days=6)
+        # end_date remains today_date
+    elif perioada == 'luna_curenta':
+        start_date = today_date.replace(day=1)
+        # end_date remains today_date (or could be end of month)
+        # For simplicity, filtering up to 'today' within the current month is fine.
     elif perioada == 'custom' and data_start_custom_str and data_sfarsit_custom_str:
         try:
             start_date = datetime.strptime(data_start_custom_str, '%Y-%m-%d').date()
             end_date = datetime.strptime(data_sfarsit_custom_str, '%Y-%m-%d').date()
             if start_date > end_date:
                 flash('Data de început custom nu poate fi după data de sfârșit.', 'warning')
-                start_date = end_date # Sau resetează la un default valid
+                start_date = end_date
         except ValueError:
             flash('Format dată custom invalid. Se afișează ultimele 7 zile.', 'warning')
-            perioada = 'ultimele_7_zile' # Revert la default
-            start_date = get_localized_now().date() - timedelta(days=6)
-            end_date = get_localized_now().date()
+            perioada = 'ultimele_7_zile'
+            start_date = today_date - timedelta(days=6)
+            end_date = today_date
     elif perioada == 'toate':
-        start_date = None # Fără filtru de start
-        end_date = None   # Fără filtru de end
+        start_date = None
+        end_date = None
     else: # Default la ultimele 7 zile dacă perioada e invalidă
-        start_date = get_localized_now().date() - timedelta(days=6)
-        end_date = get_localized_now().date()
-
+        perioada = 'ultimele_7_zile'
+        start_date = today_date - timedelta(days=6)
+        end_date = today_date
 
     leaves_history = []
 
+    # Define filter_start_dt_naive and filter_end_dt_naive for date range filtering
+    # These represent the full day for comparison with datetime fields
+    filter_start_dt_for_overlap = datetime.combine(start_date, time.min) if start_date else None
+    filter_end_dt_for_overlap = datetime.combine(end_date, time.max) if end_date else None
+
+
     # Procesare Daily Leaves
     daily_leaves_query = DailyLeave.query.options(joinedload(DailyLeave.student)).filter(DailyLeave.student_id.in_(student_ids))
-    if start_date and end_date : # Aplică filtru de dată doar dacă nu e "toate"
+    if start_date and end_date :
         daily_leaves_query = daily_leaves_query.filter(DailyLeave.leave_date >= start_date, DailyLeave.leave_date <= end_date)
 
     for dl in daily_leaves_query.order_by(DailyLeave.leave_date.desc(), DailyLeave.start_time.desc()).all():
         leaves_history.append({
             "student_name": f"{dl.student.grad_militar} {dl.student.nume} {dl.student.prenume}",
             "tip": "Zilnică",
+            "data_start_obj": dl.start_datetime, # Store actual datetime for sorting
             "data_start": dl.leave_date,
             "ora_start": dl.start_time,
             "ora_sfarsit": dl.end_time,
@@ -5270,53 +5284,65 @@ def gradat_invoiri_istoric():
 
     # Procesare Weekend Leaves
     weekend_leaves_query = WeekendLeave.query.options(joinedload(WeekendLeave.student)).filter(WeekendLeave.student_id.in_(student_ids))
-    # Pentru weekend leaves, filtrul de dată e mai complex.
-    # Vom prelua toate și vom filtra în Python dacă e necesar, sau adaptăm query-ul.
-    # Deocamdată, preluăm toate și filtrăm manual dacă nu e 'toate'.
-
     all_wl_gradat = weekend_leaves_query.order_by(WeekendLeave.weekend_start_date.desc()).all()
 
     for wl in all_wl_gradat:
-        # Verificăm dacă vreun interval din învoirea de weekend se încadrează în perioada filtrată
         relevant_for_period = False
-        if perioada == 'toate':
-            relevant_for_period = True
-        else: # start_date și end_date sunt definite
-            for interval in wl.get_intervals(): # get_intervals returnează datetimes aware
-                # Convertim start_date/end_date (naive date) la datetime naive pentru comparație corectă cu datele intervalelor
-                filter_start_dt_naive = datetime.combine(start_date, time.min)
-                filter_end_dt_naive = datetime.combine(end_date, time.max)
+        first_interval_start_for_sort = None
+        intervals_display_list = []
 
-                # Convertim interval.start/end (aware) la naive în același fus orar (presupunând că sunt Europe/Bucharest)
-                interval_start_naive = interval['start'].astimezone(EUROPE_BUCHAREST).replace(tzinfo=None)
-                interval_end_naive = interval['end'].astimezone(EUROPE_BUCHAREST).replace(tzinfo=None)
+        for interval_idx, interval in enumerate(wl.get_intervals()):
+            interval_start_naive = interval['start'].astimezone(EUROPE_BUCHAREST).replace(tzinfo=None)
+            interval_end_naive = interval['end'].astimezone(EUROPE_BUCHAREST).replace(tzinfo=None)
 
-                # Verificare intersecție intervale: (StartA <= EndB) and (EndA >= StartB)
-                if interval_start_naive <= filter_end_dt_naive and interval_end_naive >= filter_start_dt_naive:
-                    relevant_for_period = True
-                    break
+            if interval_idx == 0: # For sorting, use the start of the first interval
+                first_interval_start_for_sort = interval_start_naive
+
+            if perioada == 'toate' or (filter_start_dt_for_overlap and filter_end_dt_for_overlap and \
+               interval_start_naive <= filter_end_dt_for_overlap and interval_end_naive >= filter_start_dt_for_overlap):
+                relevant_for_period = True
+
+            intervals_display_list.append(
+                f"{interval['day_name']} ({interval['start'].strftime('%d.%m')}) "
+                f"{interval['start'].strftime('%H:%M')}-{interval['end'].strftime('%H:%M')}"
+            )
 
         if relevant_for_period:
-            intervals_display = []
-            for interval_data in wl.get_intervals():
-                intervals_display.append(
-                    f"{interval_data['day_name']} ({interval_data['start'].strftime('%d.%m')}) "
-                    f"{interval_data['start'].strftime('%H:%M')}-{interval_data['end'].strftime('%H:%M')}"
-                )
-
             leaves_history.append({
                 "student_name": f"{wl.student.grad_militar} {wl.student.nume} {wl.student.prenume}",
                 "tip": "Weekend",
-                "data_start": wl.weekend_start_date, # Data de vineri a weekendului
-                "ora_start": None, # Nu e direct aplicabil, detaliile sunt în 'detalii'
+                "data_start_obj": first_interval_start_for_sort if first_interval_start_for_sort else datetime.combine(wl.weekend_start_date, time.min), # Fallback for sorting
+                "data_start": wl.weekend_start_date,
+                "ora_start": None,
                 "ora_sfarsit": None,
-                "detalii": "; ".join(intervals_display) + (f", Biserica Duminică" if wl.duminica_biserica and any(d['day_name']=='Duminica' for d in wl.get_intervals()) else ""),
+                "detalii": "; ".join(intervals_display_list) + (f", Biserica Duminică" if wl.duminica_biserica and any(d['day_name']=='Duminica' for d in wl.get_intervals()) else ""),
                 "motiv": wl.reason or "-",
                 "status": wl.status
             })
 
-    # Sortare finală a listei combinate după data de început (descendent)
-    leaves_history.sort(key=lambda x: x['data_start'], reverse=True)
+    # Procesare Permisii
+    permissions_query = Permission.query.options(joinedload(Permission.student)).filter(Permission.student_id.in_(student_ids))
+    if perioada != 'toate' and filter_start_dt_for_overlap and filter_end_dt_for_overlap:
+        permissions_query = permissions_query.filter(
+            Permission.start_datetime <= filter_end_dt_for_overlap,
+            Permission.end_datetime >= filter_start_dt_for_overlap
+        )
+
+    for p in permissions_query.order_by(Permission.start_datetime.desc()).all():
+        leaves_history.append({
+            "student_name": f"{p.student.grad_militar} {p.student.nume} {p.student.prenume}",
+            "tip": "Permisie",
+            "data_start_obj": p.start_datetime, # Store actual datetime for sorting
+            "data_start": p.start_datetime.date(),
+            "ora_start": p.start_datetime.time(),
+            "ora_sfarsit": p.end_datetime.time(),
+            "detalii": p.destination or "N/A",
+            "motiv": p.reason or "-",
+            "status": p.status
+        })
+
+    # Sortare finală a listei combinate după data_start_obj (descendent)
+    leaves_history.sort(key=lambda x: x['data_start_obj'], reverse=True)
 
     # Paginare manuală simplă (dacă se dorește) sau se poate folosi paginate() pe query-uri separate și apoi combina
     # Pentru simplitate, momentan fără paginare complexă pe lista combinată.
@@ -6652,5 +6678,70 @@ if __name__ == '__main__':
 
     # Start the Flask development server
     app.run(host='0.0.0.0', port=5001, debug=False)
+
+
+# --- Admin Data Reset Routes ---
+@app.route('/admin/reset/permissions', methods=['POST'])
+@login_required
+def admin_reset_permissions():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('admin_dashboard_route'))
+
+    try:
+        num_deleted = db.session.query(Permission).delete()
+        log_action("ADMIN_RESET_DATA_SUCCESS", target_model_name="Permission",
+                   description=f"Admin {current_user.username} reset all permissions. {num_deleted} records deleted.")
+        db.session.commit()
+        flash(f'Toate permisiile ({num_deleted} înregistrări) au fost șterse cu succes!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la resetarea permisiilor: {str(e)}', 'danger')
+        log_action("ADMIN_RESET_DATA_FAIL", target_model_name="Permission",
+                   description=f"Admin {current_user.username} failed to reset permissions. Error: {str(e)}")
+        db.session.commit()
+    return redirect(url_for('admin_dashboard_route'))
+
+@app.route('/admin/reset/daily_leaves', methods=['POST'])
+@login_required
+def admin_reset_daily_leaves():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('admin_dashboard_route'))
+
+    try:
+        num_deleted = db.session.query(DailyLeave).delete()
+        log_action("ADMIN_RESET_DATA_SUCCESS", target_model_name="DailyLeave",
+                   description=f"Admin {current_user.username} reset all daily leaves. {num_deleted} records deleted.")
+        db.session.commit()
+        flash(f'Toate învoirile zilnice ({num_deleted} înregistrări) au fost șterse cu succes!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la resetarea învoirilor zilnice: {str(e)}', 'danger')
+        log_action("ADMIN_RESET_DATA_FAIL", target_model_name="DailyLeave",
+                   description=f"Admin {current_user.username} failed to reset daily leaves. Error: {str(e)}")
+        db.session.commit()
+    return redirect(url_for('admin_dashboard_route'))
+
+@app.route('/admin/reset/weekend_leaves', methods=['POST'])
+@login_required
+def admin_reset_weekend_leaves():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('admin_dashboard_route'))
+
+    try:
+        num_deleted = db.session.query(WeekendLeave).delete()
+        log_action("ADMIN_RESET_DATA_SUCCESS", target_model_name="WeekendLeave",
+                   description=f"Admin {current_user.username} reset all weekend leaves. {num_deleted} records deleted.")
+        db.session.commit()
+        flash(f'Toate învoirile de weekend ({num_deleted} înregistrări) au fost șterse cu succes!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la resetarea învoirilor de weekend: {str(e)}', 'danger')
+        log_action("ADMIN_RESET_DATA_FAIL", target_model_name="WeekendLeave",
+                   description=f"Admin {current_user.username} failed to reset weekend leaves. Error: {str(e)}")
+        db.session.commit()
+    return redirect(url_for('admin_dashboard_route'))
 
 [end of app.py]
