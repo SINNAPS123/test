@@ -1752,13 +1752,48 @@ def company_commander_logs():
     else: # În caz că nu există condiții (deși e improbabil aici)
         final_query = base_query.order_by(ActionLog.timestamp.desc()) # Sau returnează o listă goală direct
 
+    # Filters
+    filter_action_type = request.args.get('action_type_filter_val', '').strip()
+    filter_target_model = request.args.get('target_model_filter_val', '').strip()
+    filter_performed_by_user_id_str = request.args.get('performed_by_user_filter_val', '').strip()
+    filter_date_from_str = request.args.get('filter_date_from', '').strip()
+    filter_date_to_str = request.args.get('filter_date_to', '').strip()
+
+    if filter_action_type:
+        final_query = final_query.filter(ActionLog.action_type.ilike(f"%{filter_action_type}%"))
+    if filter_target_model:
+        final_query = final_query.filter(ActionLog.target_model.ilike(f"%{filter_target_model}%"))
+    if filter_performed_by_user_id_str:
+        try:
+            user_id_val = int(filter_performed_by_user_id_str)
+            final_query = final_query.filter(ActionLog.user_id == user_id_val)
+        except ValueError:
+            flash("ID Utilizator (efectuat de) invalid pentru filtrare.", "warning")
+    if filter_date_from_str:
+        try:
+            date_from = datetime.strptime(filter_date_from_str, '%Y-%m-%d').date()
+            final_query = final_query.filter(ActionLog.timestamp >= datetime.combine(date_from, time.min).replace(tzinfo=pytz.UTC))
+        except ValueError:
+            flash("Format dată 'De la' invalid.", "warning")
+    if filter_date_to_str:
+        try:
+            date_to = datetime.strptime(filter_date_to_str, '%Y-%m-%d').date()
+            final_query = final_query.filter(ActionLog.timestamp <= datetime.combine(date_to, time.max).replace(tzinfo=pytz.UTC))
+        except ValueError:
+            flash("Format dată 'Până la' invalid.", "warning")
+
     logs_pagination = final_query.paginate(page=page, per_page=per_page, error_out=False)
 
     return render_template('commander_action_logs.html',
                            logs_pagination=logs_pagination,
                            title=f"Jurnal Acțiuni Compania {company_id_str}",
                            unit_id=company_id_str,
-                           unit_type="Compania")
+                           unit_type="Compania",
+                           action_type_filter_val=filter_action_type,
+                           target_model_filter_val=filter_target_model,
+                           performed_by_user_filter_val=filter_performed_by_user_id_str,
+                           filter_date_from=filter_date_from_str,
+                           filter_date_to=filter_date_to_str)
 
 @app.route('/battalion_commander/logs', endpoint='battalion_commander_logs')
 @login_required
@@ -1799,13 +1834,48 @@ def battalion_commander_logs():
     else:
         final_query_battalion = base_query_battalion.order_by(ActionLog.timestamp.desc())
 
+    # Filters
+    filter_action_type = request.args.get('action_type_filter_val', '').strip()
+    filter_target_model = request.args.get('target_model_filter_val', '').strip()
+    filter_performed_by_user_id_str = request.args.get('performed_by_user_filter_val', '').strip()
+    filter_date_from_str = request.args.get('filter_date_from', '').strip()
+    filter_date_to_str = request.args.get('filter_date_to', '').strip()
+
+    if filter_action_type:
+        final_query_battalion = final_query_battalion.filter(ActionLog.action_type.ilike(f"%{filter_action_type}%"))
+    if filter_target_model:
+        final_query_battalion = final_query_battalion.filter(ActionLog.target_model.ilike(f"%{filter_target_model}%"))
+    if filter_performed_by_user_id_str:
+        try:
+            user_id_val = int(filter_performed_by_user_id_str)
+            final_query_battalion = final_query_battalion.filter(ActionLog.user_id == user_id_val)
+        except ValueError:
+            flash("ID Utilizator (efectuat de) invalid pentru filtrare.", "warning")
+    if filter_date_from_str:
+        try:
+            date_from = datetime.strptime(filter_date_from_str, '%Y-%m-%d').date()
+            final_query_battalion = final_query_battalion.filter(ActionLog.timestamp >= datetime.combine(date_from, time.min).replace(tzinfo=pytz.UTC))
+        except ValueError:
+            flash("Format dată 'De la' invalid.", "warning")
+    if filter_date_to_str:
+        try:
+            date_to = datetime.strptime(filter_date_to_str, '%Y-%m-%d').date()
+            final_query_battalion = final_query_battalion.filter(ActionLog.timestamp <= datetime.combine(date_to, time.max).replace(tzinfo=pytz.UTC))
+        except ValueError:
+            flash("Format dată 'Până la' invalid.", "warning")
+
     logs_pagination = final_query_battalion.paginate(page=page, per_page=per_page, error_out=False)
 
     return render_template('commander_action_logs.html',
                            logs_pagination=logs_pagination,
                            title=f"Jurnal Acțiuni Batalionul {battalion_id_str}",
                            unit_id=battalion_id_str,
-                           unit_type="Batalionul")
+                           unit_type="Batalionul",
+                           action_type_filter_val=filter_action_type,
+                           target_model_filter_val=filter_target_model,
+                           performed_by_user_filter_val=filter_performed_by_user_id_str,
+                           filter_date_from=filter_date_from_str,
+                           filter_date_to=filter_date_to_str)
 
 
 @app.route('/dashboard/battalion')
@@ -4659,24 +4729,60 @@ def admin_action_logs():
     # filter_action_type = request.args.get('action_type')
     # filter_target_model = request.args.get('target_model')
     # filter_date_from = request.args.get('date_from')
-    # filter_date_to = request.args.get('date_to')
+    filter_user_id_str = request.args.get('user_id_filter_val', '').strip()
+    filter_action_type = request.args.get('action_type_filter_val', '').strip()
+    filter_target_model = request.args.get('target_model_filter_val', '').strip()
+    filter_date_from_str = request.args.get('filter_date_from', '').strip()
+    filter_date_to_str = request.args.get('filter_date_to', '').strip()
 
-    # if filter_user_id:
-    #     logs_query = logs_query.filter(ActionLog.user_id == filter_user_id)
-    # if filter_action_type:
-    #     logs_query = logs_query.filter(ActionLog.action_type.ilike(f"%{filter_action_type}%"))
-    # # ... etc. for other filters ...
+    if filter_user_id_str:
+        try:
+            filter_user_id = int(filter_user_id_str)
+            logs_query = logs_query.filter(ActionLog.user_id == filter_user_id)
+        except ValueError:
+            flash("ID Utilizator invalid pentru filtrare.", "warning")
+
+    if filter_action_type:
+        logs_query = logs_query.filter(ActionLog.action_type.ilike(f"%{filter_action_type}%"))
+
+    if filter_target_model:
+        logs_query = logs_query.filter(ActionLog.target_model.ilike(f"%{filter_target_model}%"))
+
+    if filter_date_from_str:
+        try:
+            date_from = datetime.strptime(filter_date_from_str, '%Y-%m-%d')
+            # logs_query = logs_query.filter(ActionLog.timestamp >= date_from)
+            # To handle timestamp comparison correctly, especially if timestamp is timezone-aware (UTC)
+            # and date_from is naive, it's better to define date_from as start of day in UTC.
+            # However, ActionLog.timestamp is default=datetime.utcnow, so it's already UTC.
+            # We can make date_from timezone-aware UTC or ensure comparison handles this.
+            # For simplicity, if timestamps are stored UTC, compare with UTC datetimes.
+            # If date_from is just a date, it implies start of that day.
+            logs_query = logs_query.filter(ActionLog.timestamp >= datetime.combine(date_from, time.min).replace(tzinfo=pytz.UTC))
+        except ValueError:
+            flash("Format dată 'De la' invalid. Folosiți YYYY-MM-DD.", "warning")
+
+    if filter_date_to_str:
+        try:
+            date_to = datetime.strptime(filter_date_to_str, '%Y-%m-%d')
+            # To include the whole day, filter up to end of day.
+            # logs_query = logs_query.filter(ActionLog.timestamp <= datetime.combine(date_to, time.max))
+            # Similar to date_from, ensure timezone consistency.
+            logs_query = logs_query.filter(ActionLog.timestamp <= datetime.combine(date_to, time.max).replace(tzinfo=pytz.UTC))
+        except ValueError:
+            flash("Format dată 'Până la' invalid. Folosiți YYYY-MM-DD.", "warning")
 
     logs_pagination = logs_query.paginate(page=page, per_page=per_page, error_out=False)
 
-    # For filter dropdowns (optional, can be added later)
-    # users_for_filter = User.query.order_by(User.username).all()
-    # action_types_for_filter = db.session.query(ActionLog.action_type).distinct().order_by(ActionLog.action_type).all()
-    # target_models_for_filter = db.session.query(ActionLog.target_model).distinct().order_by(ActionLog.target_model).all()
-
     return render_template('admin_action_logs.html',
                            logs_pagination=logs_pagination,
-                           title="Jurnal Acțiuni Sistem")
+                           title="Jurnal Acțiuni Sistem",
+                           # Pass filter values back to template
+                           user_id_filter_val=filter_user_id_str,
+                           action_type_filter_val=filter_action_type,
+                           target_model_filter_val=filter_target_model,
+                           filter_date_from=filter_date_from_str,
+                           filter_date_to=filter_date_to_str)
 
 @app.route('/admin/profile/change_password', methods=['GET', 'POST'], endpoint='admin_change_self_password')
 @login_required

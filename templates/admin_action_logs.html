@@ -9,25 +9,31 @@
         <a href="{{ url_for('admin_dashboard_route') }}" class="btn btn-outline-secondary btn-sm">&laquo; Admin Dashboard</a>
     </div>
 
-    <!-- TODO: Add Full Filter Form here later -->
-    <form method="GET" action="{{ url_for('admin_action_logs') }}" class="mb-4 p-3 border rounded bg-light visually-hidden">
-        {# This form is hidden for now, will be enabled when filters are fully implemented in backend #}
+    <form method="GET" action="{{ url_for('admin_action_logs') }}" class="mb-4 p-3 border rounded bg-light">
         <div class="row g-3">
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="user_id_filter" class="form-label">Utilizator (ID)</label>
-                <input type="text" name="user_id_filter_val" id="user_id_filter" class="form-control form-control-sm" placeholder="ID Utilizator" value="{{ request.args.get('user_id_filter_val', '') }}">
+                <input type="text" name="user_id_filter_val" id="user_id_filter" class="form-control form-control-sm" placeholder="ID Utilizator" value="{{ user_id_filter_val }}">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="action_type_filter" class="form-label">Tip Acțiune</label>
-                <input type="text" name="action_type_filter_val" id="action_type_filter" class="form-control form-control-sm" placeholder="ex: USER_LOGIN" value="{{ request.args.get('action_type_filter_val', '') }}">
+                <input type="text" name="action_type_filter_val" id="action_type_filter" class="form-control form-control-sm" placeholder="ex: USER_LOGIN" value="{{ action_type_filter_val }}">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="target_model_filter" class="form-label">Model Țintă</label>
-                <input type="text" name="target_model_filter_val" id="target_model_filter" class="form-control form-control-sm" placeholder="ex: Student" value="{{ request.args.get('target_model_filter_val', '') }}">
+                <input type="text" name="target_model_filter_val" id="target_model_filter" class="form-control form-control-sm" placeholder="ex: Student" value="{{ target_model_filter_val }}">
             </div>
-            <div class="col-md-3 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary btn-sm">Filtrează</button>
-                 <a href="{{ url_for('admin_action_logs') }}" class="btn btn-outline-secondary btn-sm ms-2">Resetează Filtre</a>
+            <div class="col-md-2">
+                <label for="filter_date_from" class="form-label">De la Data</label>
+                <input type="date" name="filter_date_from" id="filter_date_from" class="form-control form-control-sm" value="{{ filter_date_from }}">
+            </div>
+            <div class="col-md-2">
+                <label for="filter_date_to" class="form-label">Până la Data</label>
+                <input type="date" name="filter_date_to" id="filter_date_to" class="form-control form-control-sm" value="{{ filter_date_to }}">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary btn-sm w-100">Filtrează</button>
+                <a href="{{ url_for('admin_action_logs') }}" class="btn btn-outline-secondary btn-sm ms-2" title="Resetează Filtre"><i class="fas fa-times"></i></a>
             </div>
         </div>
     </form>
@@ -144,7 +150,7 @@
                     {% else %}
                         <li class="page-item"><a class="page-link" href="{{ url_for('admin_action_logs', page=page_num, **request.args) }}">{{ page_num }}</a></li>
                     {% endif %}
-                {% elif loop.index0 == 0 or loop.index0 == list(logs_pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=3))|length -1 %}
+                {% elif loop.index0 == 0 or loop.index0 == logs_pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=3)|length -1 %}
                     {# Ellipsis only if not at the very start/end of all possible iter_pages items #}
                 {% else %}
                      <li class="page-item disabled"><span class="page-link">...</span></li>
