@@ -3205,14 +3205,63 @@ def export_permissions_word():
         Permission.student_id.in_(student_ids_managed_by_gradat),
         Permission.status == 'Aprobată',
         Permission.end_datetime >= now # Active or upcoming
-    ).join(Student).order_by(Student.nume, Student.prenume, Permission.start_datetime).all()
+    ).join(Student).order_by(Permission.start_datetime, Student.nume, Student.prenume).all() # Initial sort by start_datetime
 
     if not permissions_to_export:
         flash('Nicio permisie activă sau viitoare de exportat.', 'info')
         return redirect(url_for('list_permissions'))
 
+    # Group permissions by period (start_datetime, end_datetime)
+    # Using naive datetime for grouping keys as they come from DB
+    grouped_permissions = {}
+    for p in permissions_to_export:
+        period_key = (p.start_datetime, p.end_datetime)
+        if period_key not in grouped_permissions:
+            grouped_permissions[period_key] = []
+        grouped_permissions[period_key].append(p)
+
+    # Helper function to get day name in Romanian
+    def get_day_name_ro(date_obj):
+        days = ["Luni", "Marți", "Miercuri", "Joi", "Vineri", "Sâmbătă", "Duminică"]
+        return days[date_obj.weekday()]
+
+    # Custom sorting for periods
+    def get_period_sort_key(period_item):
+        period_key, _ = period_item # period_key is (start_dt, end_dt)
+        start_dt = period_key[0]
+        end_dt = period_key[1]
+
+        # Make datetimes timezone-aware for correct weekday calculation if they are naive
+        # Assuming EUROPE_BUCHAREST as the reference timezone
+        start_dt_aware = EUROPE_BUCHAREST.localize(start_dt) if start_dt.tzinfo is None else start_dt.astimezone(EUROPE_BUCHAREST)
+        end_dt_aware = EUROPE_BUCHAREST.localize(end_dt) if end_dt.tzinfo is None else end_dt.astimezone(EUROPE_BUCHAREST)
+
+        start_day_ro = get_day_name_ro(start_dt_aware) # Luni, Marti, ..., Duminica
+        end_day_ro = get_day_name_ro(end_dt_aware)
+
+        # Define sort order values
+        # Lower value means earlier in sort
+        # Joi (Thursday) = 3, Vineri (Friday) = 4
+        # Duminica (Sunday) = 6, Luni (Monday) = 0 (in weekday())
+
+        # Priority 1: Thursday starts
+        if start_day_ro == "Joi":
+            if end_day_ro == "Duminică": return (1, start_dt) # Joi - Duminica
+            if end_day_ro == "Luni": return (2, start_dt)     # Joi - Luni
+            return (3, start_dt) # Other Joi starts (fallback)
+        # Priority 2: Friday starts
+        elif start_day_ro == "Vineri":
+            if end_day_ro == "Duminică": return (4, start_dt) # Vineri - Duminica
+            if end_day_ro == "Luni": return (5, start_dt)     # Vineri - Luni
+            return (6, start_dt) # Other Vineri starts (fallback)
+        # Fallback for other start days (sort by start_datetime)
+        return (7, start_dt)
+
+    sorted_grouped_permissions = sorted(grouped_permissions.items(), key=get_period_sort_key)
+
     document = Document()
-    document.add_heading('Raport Permisii Studenți', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    # General document heading (optional, could be removed if each table has a full title)
+    # document.add_heading('Raport Permisii Studenți', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     # User and date info
     user_info_text = f"Raport generat de: {current_user.username}\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}"
