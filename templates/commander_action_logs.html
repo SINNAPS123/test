@@ -13,29 +13,34 @@
         {% endif %}
     </div>
 
-    <!-- TODO: Add Specific Filters for Commander Logs if needed -->
-    {#
     <form method="GET" action="{{ url_for(request.endpoint) }}" class="mb-4 p-3 border rounded bg-light">
         <div class="row g-3">
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="action_type_filter" class="form-label">Tip Acțiune</label>
-                <input type="text" name="action_type_filter_val" id="action_type_filter" class="form-control form-control-sm" placeholder="ex: CREATE_STUDENT" value="{{ request.args.get('action_type_filter_val', '') }}">
+                <input type="text" name="action_type_filter_val" id="action_type_filter" class="form-control form-control-sm" placeholder="ex: CREATE_STUDENT" value="{{ action_type_filter_val }}">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="target_model_filter" class="form-label">Model Țintă</label>
-                <input type="text" name="target_model_filter_val" id="target_model_filter" class="form-control form-control-sm" placeholder="ex: Student" value="{{ request.args.get('target_model_filter_val', '') }}">
+                <input type="text" name="target_model_filter_val" id="target_model_filter" class="form-control form-control-sm" placeholder="ex: Student" value="{{ target_model_filter_val }}">
             </div>
-             <div class="col-md-3">
-                <label for="performed_by_user_filter" class="form-label">Efectuat de User (ID)</label>
-                <input type="text" name="performed_by_user_filter_val" id="performed_by_user_filter" class="form-control form-control-sm" placeholder="ID Utilizator" value="{{ request.args.get('performed_by_user_filter_val', '') }}">
+             <div class="col-md-2">
+                <label for="performed_by_user_filter" class="form-label">Efectuat de (ID)</label>
+                <input type="text" name="performed_by_user_filter_val" id="performed_by_user_filter" class="form-control form-control-sm" placeholder="ID Utilizator" value="{{ performed_by_user_filter_val }}">
             </div>
-            <div class="col-md-3 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary btn-sm">Filtrează</button>
-                 <a href="{{ url_for(request.endpoint) }}" class="btn btn-outline-secondary btn-sm ms-2">Resetează Filtre</a>
+            <div class="col-md-2">
+                <label for="filter_date_from" class="form-label">De la Data</label>
+                <input type="date" name="filter_date_from" id="filter_date_from" class="form-control form-control-sm" value="{{ filter_date_from }}">
+            </div>
+            <div class="col-md-2">
+                <label for="filter_date_to" class="form-label">Până la Data</label>
+                <input type="date" name="filter_date_to" id="filter_date_to" class="form-control form-control-sm" value="{{ filter_date_to }}">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary btn-sm w-100">Filtrează</button>
+                 <a href="{{ url_for(request.endpoint) }}" class="btn btn-outline-secondary btn-sm ms-2" title="Resetează Filtre"><i class="fas fa-times"></i></a>
             </div>
         </div>
     </form>
-    #}
 
     <div class="table-responsive shadow-sm"> <!-- Added shadow-sm -->
         <table class="table table-striped table-hover table-sm caption-top">
@@ -147,7 +152,7 @@
                     {% else %}
                         <li class="page-item"><a class="page-link" href="{{ url_for(request.endpoint, page=page_num, **request.args) }}">{{ page_num }}</a></li>
                     {% endif %}
-                {% elif loop.index0 == 0 or loop.index0 == list(logs_pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=3))|length -1 %}
+                {% elif loop.index0 == 0 or loop.index0 == logs_pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=3)|length -1 %}
                 {% else %}
                      <li class="page-item disabled"><span class="page-link">...</span></li>
                 {% endif %}
