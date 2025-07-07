@@ -113,10 +113,12 @@
                     <th>Batalion</th>
                     <th>Gen</th>
                     <th>Puncte Vol.</th>
+                    <th>SMT</th>
+                    <th>Alte Scutiri</th>
+                    <th>Gradat Pl. Propriu</th>
+                    <th>Gradat la Pl.</th>
                     {% if is_admin_view %}
                         <th>Creat De</th>
-                        <th>Gradat Activ</th>
-                        <th>Pl. Gradat</th>
                     {% endif %}
                     <th>Acțiuni</th>
                 </tr>
@@ -140,6 +142,30 @@
                     <td>{{ student.batalion }}</td>
                     <td>{{ student.gender }}</td>
                     <td>{{ student.volunteer_points }}</td>
+                    <td>
+                        {% if student.is_smt %}
+                            <span class="badge bg-danger">SMT</span>
+                        {% else %}
+                            <span class="badge bg-light text-dark">Nu</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if student.exemption_details %}
+                            <span class="badge bg-warning text-dark" title="{{ student.exemption_details }}">{{ student.exemption_details[:20] }}{% if student.exemption_details|length > 20 %}...{% endif %}</span>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if student.is_platoon_graded_duty %}
+                            <span class="badge bg-success">Da</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Nu</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ student.assigned_graded_platoon if student.assigned_graded_platoon else '-' }}
+                    </td>
                     {% if is_admin_view %}
                     <td>
                         {% if student.creator %}
@@ -149,17 +175,7 @@
                             <small class="text-muted">N/A</small>
                         {% endif %}
                     </td>
-                    <td>
-                        {% if student.este_gradat_activ %}
-                            <span class="badge bg-success">Da</span>
-                        {% else %}
-                            <span class="badge bg-secondary">Nu</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {{ student.pluton_gradat_la if student.pluton_gradat_la else '-' }}
-                    </td>
-                    {% endif %} {# end is_admin_view for extra columns #}
+                    {% endif %} {# end is_admin_view for creator column #}
                     <td>
                         {% if is_admin_view %}
                         <a href="{{ url_for('admin_edit_student', student_id=student.id) }}" class="btn btn-info btn-sm py-0 px-1 me-1" title="Editează detaliile acestui student (mod Admin)">
