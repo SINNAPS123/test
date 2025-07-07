@@ -1642,6 +1642,25 @@ def _calculate_presence_data(student_list_for_platoon_view, check_datetime):
         elif s.id in active_daily_leaves_map_all:
             dl_info = active_daily_leaves_map_all[s.id]
             absent_list_details.append(f"{student_display_name} - Învoire Zilnică ({dl_info.leave_type_display})")
+        elif s.id in active_weekend_leaves_map_all: # Check for weekend leave AFTER daily, as daily might be more specific for a given moment
+            wl_data = active_weekend_leaves_map_all[s.id] # This contains {'leave': wl_object, 'interval': interval_dict}
+            wl_object = wl_data['leave']
+            active_interval = wl_data['interval'] # This is the interval active at 'now'
+
+            # Check for church attendance specifically
+            # now is check_datetime, which is aware
+            # active_interval['start'] and active_interval['end'] are aware
+            is_sunday = now.weekday() == 6  # Sunday
+            church_start_time = time(9, 0)
+            church_end_time = time(11, 0)
+
+            if wl_object.duminica_biserica and \
+               active_interval['day_name'] == 'Duminica' and \
+               is_sunday and \
+               church_start_time <= now.time() < church_end_time: # Check if 'now' is within 09:00-11:00 on that Sunday
+                absent_list_details.append(f"{student_display_name} - La Biserică (Învoire Weekend)")
+            else:
+                absent_list_details.append(f"{student_display_name} - Învoire Weekend ({active_interval['day_name']})")
         else:
             # If none of the above and not a present leader, they are in formation.
             in_formation_list_details.append(student_display_name)
@@ -4822,6 +4841,59 @@ def export_weekend_leaves_word():
             if col_idx < len(row.cells):
                  row.cells[col_idx].width = width_val
 
+    document.add_paragraph() # Spacer
+
+    # --- Separate table for church attendees ---
+    church_attendees = []
+    for leave in leaves_to_export:
+        if leave.duminica_biserica:
+            # Check if Sunday is one of the selected days and has the church slot
+            # The duminica_biserica flag implies the 09:00-11:00 slot if Duminica is selected.
+            is_sunday_selected_for_leave = False
+            for interval in leave.get_intervals(): # get_intervals ensures valid day/time
+                if interval['day_name'] == 'Duminica':
+                    # Further check if this interval matches the church time if needed,
+                    # but duminica_biserica flag should be the primary indicator if Sunday is active.
+                    # For simplicity, if duminica_biserica is true and Sunday is *any* part of the leave,
+                    # we list them. The specific time is implied by the "Participă la Biserică (Duminică 09:00-11:00)" title.
+                    is_sunday_selected_for_leave = True
+                    break
+            if is_sunday_selected_for_leave:
+                church_attendees.append(leave.student)
+
+    if church_attendees:
+        document.add_heading('Studenți care participă la Biserică (Duminică 09:00-11:00)', level=2).alignment = WD_ALIGN_PARAGRAPH.CENTER
+        church_table = document.add_table(rows=1, cols=4) # Nr.crt, Grad, Nume și Prenume, Pluton
+        church_table.style = 'Table Grid'
+        church_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        church_hdr_cells = church_table.rows[0].cells
+        church_col_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)']
+        for i, title in enumerate(church_col_titles):
+            church_hdr_cells[i].text = title
+            church_hdr_cells[i].paragraphs[0].runs[0].font.bold = True
+            church_hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # Sort attendees by name for the separate table
+        church_attendees.sort(key=lambda s: (s.nume, s.prenume))
+
+        for idx, student in enumerate(church_attendees):
+            row_cells = church_table.add_row().cells
+            row_cells[0].text = str(idx + 1)
+            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            row_cells[1].text = student.grad_militar
+            row_cells[2].text = f"{student.nume} {student.prenume}"
+            row_cells[3].text = student.pluton
+            row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        church_table_widths = {0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.5), 3: Inches(1.0)}
+        for col_idx, width_val in church_table_widths.items():
+            for row in church_table.rows:
+                if col_idx < len(row.cells):
+                    row.cells[col_idx].width = width_val
+        document.add_paragraph()
+
+
     style = document.styles['Normal']
     font = style.font
     font.name = 'Calibri'
@@ -6361,6 +6433,51 @@ def admin_export_permissions_word():
             if col_idx < len(row.cells):
                  row.cells[col_idx].width = width_val
 
+    document.add_paragraph() # Spacer
+
+    # --- Separate table for church attendees (Admin view) ---
+    church_attendees_admin = []
+    for leave in leaves_to_export: # leaves_to_export is already filtered for active/upcoming
+        if leave.duminica_biserica:
+            is_sunday_selected_for_leave = False
+            for interval in leave.get_intervals():
+                if interval['day_name'] == 'Duminica':
+                    is_sunday_selected_for_leave = True
+                    break
+            if is_sunday_selected_for_leave:
+                church_attendees_admin.append(leave.student)
+
+    if church_attendees_admin:
+        document.add_heading('Studenți care participă la Biserică (Duminică 09:00-11:00)', level=2).alignment = WD_ALIGN_PARAGRAPH.CENTER
+        church_table_admin = document.add_table(rows=1, cols=4) # Nr.crt, Grad, Nume și Prenume, Pluton
+        church_table_admin.style = 'Table Grid'
+        church_table_admin.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        church_hdr_cells_admin = church_table_admin.rows[0].cells
+        church_col_titles_admin = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)']
+        for i, title in enumerate(church_col_titles_admin):
+            church_hdr_cells_admin[i].text = title
+            church_hdr_cells_admin[i].paragraphs[0].runs[0].font.bold = True
+            church_hdr_cells_admin[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        church_attendees_admin.sort(key=lambda s: (s.batalion, s.companie, s.pluton, s.nume, s.prenume)) # Sort for admin view
+
+        for idx, student in enumerate(church_attendees_admin):
+            row_cells_admin = church_table_admin.add_row().cells
+            row_cells_admin[0].text = str(idx + 1)
+            row_cells_admin[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            row_cells_admin[1].text = student.grad_militar
+            row_cells_admin[2].text = f"{student.nume} {student.prenume}"
+            row_cells_admin[3].text = student.pluton # Admin might want to see Company/Battalion too, but Pluton is consistent
+            row_cells_admin[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        church_table_widths_admin = {0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.5), 3: Inches(1.0)}
+        for col_idx, width_val in church_table_widths_admin.items():
+            for row in church_table_admin.rows:
+                if col_idx < len(row.cells):
+                    row.cells[col_idx].width = width_val
+        document.add_paragraph()
+
     style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
     f = io.BytesIO(); document.save(f); f.seek(0)
     filename = f"Raport_General_Permisii_Admin_{date.today().strftime('%Y%m%d')}.docx"
@@ -6586,6 +6703,51 @@ def company_commander_export_weekend_leaves_word():
             if col_idx < len(row.cells):
                  row.cells[col_idx].width = width_val
 
+    document.add_paragraph() # Spacer
+
+    # --- Separate table for church attendees (Company Commander view) ---
+    church_attendees_company = []
+    for leave in leaves_to_export: # leaves_to_export is already filtered for this company and active/upcoming
+        if leave.duminica_biserica:
+            is_sunday_selected_for_leave = False
+            for interval in leave.get_intervals():
+                if interval['day_name'] == 'Duminica':
+                    is_sunday_selected_for_leave = True
+                    break
+            if is_sunday_selected_for_leave:
+                church_attendees_company.append(leave.student)
+
+    if church_attendees_company:
+        document.add_heading('Studenți care participă la Biserică (Duminică 09:00-11:00)', level=2).alignment = WD_ALIGN_PARAGRAPH.CENTER
+        church_table_company = document.add_table(rows=1, cols=4) # Nr.crt, Grad, Nume și Prenume, Pluton
+        church_table_company.style = 'Table Grid'
+        church_table_company.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        church_hdr_cells_company = church_table_company.rows[0].cells
+        church_col_titles_company = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)']
+        for i, title in enumerate(church_col_titles_company):
+            church_hdr_cells_company[i].text = title
+            church_hdr_cells_company[i].paragraphs[0].runs[0].font.bold = True
+            church_hdr_cells_company[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        church_attendees_company.sort(key=lambda s: (s.pluton, s.nume, s.prenume)) # Sort for company view
+
+        for idx, student in enumerate(church_attendees_company):
+            row_cells_company = church_table_company.add_row().cells
+            row_cells_company[0].text = str(idx + 1)
+            row_cells_company[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            row_cells_company[1].text = student.grad_militar
+            row_cells_company[2].text = f"{student.nume} {student.prenume}"
+            row_cells_company[3].text = student.pluton
+            row_cells_company[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        church_table_widths_company = {0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.5), 3: Inches(1.0)}
+        for col_idx, width_val in church_table_widths_company.items():
+            for row in church_table_company.rows:
+                if col_idx < len(row.cells):
+                    row.cells[col_idx].width = width_val
+        document.add_paragraph()
+
     style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
     f = io.BytesIO(); document.save(f); f.seek(0)
     filename = f"Raport_Weekend_Compania_{company_id_str}_{date.today().strftime('%Y%m%d')}.docx"
@@ -6744,6 +6906,62 @@ def battalion_commander_export_weekend_leaves_word():
         for row in table.rows:
             if col_idx < len(row.cells):
                  row.cells[col_idx].width = width_val
+
+    document.add_paragraph() # Spacer
+
+    # --- Separate table for church attendees (Battalion Commander view) ---
+    church_attendees_battalion = []
+    # leaves_to_export is already filtered for this battalion and active/upcoming
+    for leave in leaves_to_export:
+        if leave.duminica_biserica:
+            is_sunday_selected_for_leave = False
+            for interval in leave.get_intervals():
+                if interval['day_name'] == 'Duminica':
+                    is_sunday_selected_for_leave = True
+                    break
+            if is_sunday_selected_for_leave:
+                church_attendees_battalion.append(leave.student)
+
+    if church_attendees_battalion:
+        document.add_heading('Studenți care participă la Biserică (Duminică 09:00-11:00)', level=2).alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # For Battalion, we might want to include Company and Platoon
+        church_table_battalion = document.add_table(rows=1, cols=5) # Nr.crt, Grad, Nume și Prenume, Compania, Plutonul
+        church_table_battalion.style = 'Table Grid'
+        church_table_battalion.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        church_hdr_cells_battalion = church_table_battalion.rows[0].cells
+        church_col_titles_battalion = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Compania', 'Plutonul']
+        for i, title in enumerate(church_col_titles_battalion):
+            church_hdr_cells_battalion[i].text = title
+            church_hdr_cells_battalion[i].paragraphs[0].runs[0].font.bold = True
+            church_hdr_cells_battalion[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # Sort for battalion view: by Company, then Platoon, then Name
+        church_attendees_battalion.sort(key=lambda s: (s.companie, s.pluton, s.nume, s.prenume))
+
+        for idx, student in enumerate(church_attendees_battalion):
+            row_cells_battalion = church_table_battalion.add_row().cells
+            row_cells_battalion[0].text = str(idx + 1)
+            row_cells_battalion[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            row_cells_battalion[1].text = student.grad_militar
+            row_cells_battalion[2].text = f"{student.nume} {student.prenume}"
+            row_cells_battalion[3].text = student.companie
+            row_cells_battalion[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            row_cells_battalion[4].text = student.pluton
+            row_cells_battalion[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+
+        # Adjusted widths for 5 columns: Nr(0.4), Grad(0.7), Nume(2.0), Comp(0.8), Plut(0.8) = 4.7 (can expand Nume)
+        # Let's try: Nr(0.4), Grad(0.7), Nume(2.2), Comp(0.8), Plut(0.8) = 4.9
+        church_table_widths_battalion = {
+            0: Inches(0.4), 1: Inches(0.7), 2: Inches(2.2),
+            3: Inches(0.8), 4: Inches(0.8)
+        }
+        for col_idx, width_val in church_table_widths_battalion.items():
+            for row in church_table_battalion.rows:
+                if col_idx < len(row.cells):
+                    row.cells[col_idx].width = width_val
+        document.add_paragraph()
 
     style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
     f = io.BytesIO(); document.save(f); f.seek(0)
