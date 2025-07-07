@@ -129,10 +129,12 @@ class Student(db.Model):
     created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     creator = db.relationship('User', backref=db.backref('students_created', lazy=True))
     is_platoon_graded_duty = db.Column(db.Boolean, default=False, nullable=False)
+    is_smt = db.Column(db.Boolean, default=False, nullable=False) # Total Medical Exemption
 
     def __repr__(self): 
         graded_duty_info = " (Gradat Pluton)" if self.is_platoon_graded_duty else ""
-        return f'<Student {self.grad_militar} {self.nume} {self.prenume} - Pl.{self.pluton}{graded_duty_info}>'
+        smt_info = " (SMT)" if self.is_smt else ""
+        return f'<Student {self.grad_militar} {self.nume} {self.prenume} - Pl.{self.pluton}{graded_duty_info}{smt_info}>'
 
 class Permission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -1203,6 +1205,7 @@ def admin_edit_student(student_id):
         student_to_edit.batalion = form.get('batalion','').strip()
         student_to_edit.gender = form.get('gender')
         student_to_edit.is_platoon_graded_duty = 'is_platoon_graded_duty' in request.form
+        student_to_edit.is_smt = 'is_smt' in request.form # Handle SMT status
         new_id_unic = form.get('id_unic_student','').strip() or None
 
         # Potentially allow changing created_by_user_id by admin? For now, no.
@@ -1500,9 +1503,11 @@ def _calculate_presence_data(student_list, check_datetime):
     if not student_list:
         return {
             "efectiv_control": 0, "efectiv_prezent_total": 0, "efectiv_absent_total": 0,
+            "efectiv_control": 0, "efectiv_prezent_total": 0, "efectiv_absent_total": 0,
             "in_formation_count": 0, "in_formation_students_details": [],
             "on_duty_count": 0, "on_duty_students_details": [],
             "platoon_graded_duty_count": 0, "platoon_graded_duty_students_details": [],
+            "smt_count": 0, "smt_students_details": [], # Added SMT
             "absent_students_details": []
         }
 
@@ -1558,22 +1563,20 @@ def _calculate_presence_data(student_list, check_datetime):
     on_duty_list = []
     platoon_graded_duty_list = []
     absent_list = []
+    smt_list = [] # New list for SMT students
 
     for s in student_list:
         student_display_name = f"{s.grad_militar} {s.nume} {s.prenume}"
-        status_found = False # Flag pentru a ne asigura că un student nu e numărat de mai multe ori
+        status_found = False
 
-        # Ordinea verificării contează dacă un student ar putea fi în mai multe stări simultan
-        # (de ex. serviciu și permisie - deși conflictele ar trebui prevenite la creare)
-        # Serviciile 'critice' au prioritate.
-        if s.id in active_services_map:
+        if s.is_smt: # Check SMT first
+            smt_list.append(f"{student_display_name} - SMT")
+            status_found = True
+        elif s.id in active_services_map:
             active_service = active_services_map[s.id]
-            # Considerăm 'participates_in_roll_call' aici dacă e relevant pentru 'on_duty_list' vs 'in_formation_list'
-            # Pentru moment, toți cei cu serviciu activ sunt 'on_duty'
             on_duty_list.append(f"{student_display_name} - Serviciu ({active_service.service_type})")
             status_found = True
         elif s.id in active_permissions_map:
-            # active_permission = active_permissions_map[s.id] # Nu e nevoie de obiectul în sine pentru mesaj
             absent_list.append(f"{student_display_name} - Permisie")
             status_found = True
         elif s.id in active_weekend_leaves_map:
@@ -1585,38 +1588,41 @@ def _calculate_presence_data(student_list, check_datetime):
             absent_list.append(f"{student_display_name} - Învoire Zilnică ({dl.leave_type_display})")
             status_found = True
 
-        if not status_found: # Dacă nu e în niciun serviciu sau învoire/permisie
+        if not status_found:
             if s.is_platoon_graded_duty:
                 platoon_graded_duty_list.append(f"{student_display_name} - Gradat Pluton")
             else:
                 in_formation_list.append(student_display_name)
-        # else: studentul a fost deja clasificat (serviciu, permisie, etc.)
 
     in_formation_count = len(in_formation_list)
     on_duty_count = len(on_duty_list)
     platoon_graded_duty_count = len(platoon_graded_duty_list)
-    efectiv_absent_total = len(absent_list)
+    smt_count = len(smt_list)
 
-    # Ep = (în formație) + (la datorie, dar nu la apel dacă e cazul) + (gradat pluton prezent)
-    # Simplificat: toți cei care nu sunt absenți sunt prezenți într-o formă sau alta.
-    # on_duty_list și platoon_graded_duty_list sunt considerați prezenți.
+    # Students on leave/permission are in absent_list. SMT students are also effectively absent.
+    efectiv_absent_total = len(absent_list) + smt_count
+
+    # Efectiv prezent = those in formation, on duty (and participating in roll call if that logic is added), or graded platoon.
+    # SMT students are NOT part of efectiv_prezent_total.
     efectiv_prezent_total = in_formation_count + on_duty_count + platoon_graded_duty_count
 
-    # Verificare consistență (opțional, pentru debug)
+    # Optional consistency check
     # if efectiv_control != efectiv_prezent_total + efectiv_absent_total:
-    #     app.logger.warning(f"Discrepancy in presence data: EC({efectiv_control}) != EP({efectiv_prezent_total}) + EA({efectiv_absent_total})")
+    #     app.logger.warning(f"Discrepancy in presence data: EC({efectiv_control}) != EP({efectiv_prezent_total}) + EA({efectiv_absent_total}) for check_datetime {check_datetime}")
 
     return {
         "efectiv_control": efectiv_control,
         "efectiv_prezent_total": efectiv_prezent_total,
-        "efectiv_absent_total": efectiv_absent_total,
+        "efectiv_absent_total": efectiv_absent_total, # Includes SMT
         "in_formation_count": in_formation_count,
         "in_formation_students_details": sorted(in_formation_list),
         "on_duty_count": on_duty_count,
         "on_duty_students_details": sorted(on_duty_list),
         "platoon_graded_duty_count": platoon_graded_duty_count,
         "platoon_graded_duty_students_details": sorted(platoon_graded_duty_list),
-        "absent_students_details": sorted(absent_list)
+        "smt_count": smt_count, # New SMT count
+        "smt_students_details": sorted(smt_list), # New SMT details
+        "absent_students_details": sorted(absent_list) # Now only leaves/permissions
     }
 
 # --- Commander Dashboards ---
@@ -2206,34 +2212,115 @@ def volunteer_generate_students():
         return redirect(url_for('dashboard'))
 
     generated_students_list = None
-    num_students_req_val = 5 # Default value for GET
-    exclude_girls_val = False # Default value for GET
+    num_students_req_val = 5
+    exclude_girls_val = False
+    # Use current date as default for activity_date_for_check if not provided in POST
+    activity_date_for_check_str = request.form.get('activity_date_for_check', get_localized_now().date().isoformat())
+
 
     if request.method == 'POST':
         try:
             num_students_req_val = int(request.form.get('num_students', 5))
             if num_students_req_val <= 0:
                 flash("Numărul de studenți necesari trebuie să fie pozitiv.", "warning")
-                num_students_req_val = 5 # Reset to default if invalid
+                num_students_req_val = 5
         except ValueError:
             flash("Număr de studenți invalid.", "warning")
-            num_students_req_val = 5 # Reset to default
+            num_students_req_val = 5
 
         exclude_girls_val = 'exclude_girls' in request.form
+        # activity_date_for_check_str is already retrieved above, use it here
+        # activity_date_for_check_str = request.form.get('activity_date_for_check', get_localized_now().date().isoformat())
+
+
+        try:
+            activity_check_date = datetime.strptime(activity_date_for_check_str, '%Y-%m-%d').date()
+            # Define activity day period in aware UTC for comparison with DB (if DB times are UTC)
+            # Or keep as naive if all DB datetimes are naive and represent local time.
+            # Given current structure, Permission.start/end_datetime are naive local.
+            # DailyLeave properties start_datetime/end_datetime are naive local.
+            # WeekendLeave.get_intervals() returns aware local (Europe/Bucharest).
+            # For consistency, let's make activity_day_start/end aware (Europe/Bucharest)
+            activity_day_start = EUROPE_BUCHAREST.localize(datetime.combine(activity_check_date, time.min))
+            activity_day_end = EUROPE_BUCHAREST.localize(datetime.combine(activity_check_date, time.max))
+
+        except ValueError:
+            flash("Format dată activitate invalid. Se folosește data curentă pentru verificare.", "warning")
+            activity_check_date = get_localized_now().date()
+            activity_day_start = EUROPE_BUCHAREST.localize(datetime.combine(activity_check_date, time.min))
+            activity_day_end = EUROPE_BUCHAREST.localize(datetime.combine(activity_check_date, time.max))
+
 
         students_query = Student.query.filter_by(created_by_user_id=current_user.id)
+
         if exclude_girls_val:
             students_query = students_query.filter(Student.gender != 'F')
+
+        # Filter out SMT students
+        students_query = students_query.filter(Student.is_smt == False) # Use '==' for SQLAlchemy
+
+
+        # Get IDs of students to exclude due to leaves
+        # We need to get all student IDs managed by the gradat first to filter leaves efficiently
+        all_managed_student_ids_query = Student.query.filter_by(created_by_user_id=current_user.id).with_entities(Student.id)
+        all_managed_student_ids = [s_id[0] for s_id in all_managed_student_ids_query.all()]
+
+        ids_to_exclude = set()
+
+        # Permissions: Overlap with the activity day. Permissions are stored naive.
+        # Convert activity_day_start/end to naive for comparison if Permission datetimes are naive.
+        act_day_start_naive_comp = activity_day_start.replace(tzinfo=None)
+        act_day_end_naive_comp = activity_day_end.replace(tzinfo=None)
+
+        permissions_active_on_day = Permission.query.filter(
+            Permission.student_id.in_(all_managed_student_ids),
+            Permission.status == 'Aprobată',
+            Permission.start_datetime < act_day_end_naive_comp,
+            Permission.end_datetime > act_day_start_naive_comp
+        ).with_entities(Permission.student_id).distinct().all()
+        for p_id in permissions_active_on_day: ids_to_exclude.add(p_id[0])
+
+        # Daily Leaves: Check if any daily leave on activity_check_date overlaps
+        daily_leaves_on_activity_day = DailyLeave.query.filter(
+            DailyLeave.student_id.in_(all_managed_student_ids),
+            DailyLeave.status == 'Aprobată',
+            DailyLeave.leave_date == activity_check_date
+        ).all()
+        for dl in daily_leaves_on_activity_day:
+            # dl.start_datetime and dl.end_datetime are naive properties
+            if dl.start_datetime < act_day_end_naive_comp and dl.end_datetime > act_day_start_naive_comp:
+                ids_to_exclude.add(dl.student_id)
+
+        # Weekend Leaves: Any interval overlaps with the activity day. get_intervals() returns aware.
+        # Fetch weekend leaves that could potentially overlap with activity_check_date
+        weekend_leaves_potential = WeekendLeave.query.filter(
+            WeekendLeave.student_id.in_(all_managed_student_ids),
+            WeekendLeave.status == 'Aprobată',
+            WeekendLeave.weekend_start_date <= activity_check_date,
+            WeekendLeave.weekend_start_date >= activity_check_date - timedelta(days=3) # Heuristic
+        ).all()
+        for wl in weekend_leaves_potential:
+            for interval in wl.get_intervals(): # interval start/end are aware (Europe/Bucharest)
+                if interval['start'] < activity_day_end and interval['end'] > activity_day_start:
+                    ids_to_exclude.add(wl.student_id)
+                    break
+
+        if ids_to_exclude:
+            students_query = students_query.filter(Student.id.notin_(list(ids_to_exclude)))
 
         generated_students_list = students_query.order_by(Student.volunteer_points.asc(), Student.nume.asc()).limit(num_students_req_val).all()
 
         if not generated_students_list:
-            flash('Nu s-au găsit studenți conform criteriilor specificate sau nu aveți studenți în evidență.', 'info')
+            flash('Nu s-au găsit studenți eligibili conform criteriilor sau nu aveți studenți în evidență.', 'info')
+        elif ids_to_exclude: # Only flash if some were actually excluded
+             flash(f'{len(ids_to_exclude)} studenți au fost excluși automat (învoire/permisie/SMT) pe data de {activity_check_date.strftime("%d-%m-%Y")}.', 'info')
+
 
     return render_template('volunteer_generate_students.html',
                            generated_students=generated_students_list,
                            num_students_requested=num_students_req_val,
-                           exclude_girls_opt=exclude_girls_val)
+                           exclude_girls_opt=exclude_girls_val,
+                           activity_date_for_check=activity_date_for_check_str) # Pass this to template for repopulation
 
 @app.route('/volunteer/activity/delete/<int:activity_id>', methods=['POST'], endpoint='delete_volunteer_activity')
 @login_required
@@ -2437,6 +2524,7 @@ def add_student():
         companie = form.get('companie','').strip()
         batalion = form.get('batalion','').strip()
         is_platoon_graded_duty_val = 'is_platoon_graded_duty' in request.form
+        is_smt_val = 'is_smt' in request.form # Read SMT status
 
         if not all([nume, prenume, grad_militar, gender, pluton, companie, batalion]):
             flash('Toate câmpurile marcate cu * sunt obligatorii (inclusiv genul).', 'warning')
@@ -2460,6 +2548,7 @@ def add_student():
             companie=companie,
             batalion=batalion,
             is_platoon_graded_duty=is_platoon_graded_duty_val,
+            is_smt=is_smt_val, # Save SMT status
             created_by_user_id=current_user.id
         )
         db.session.add(new_student)
@@ -2514,6 +2603,7 @@ def edit_student(student_id):
         s_edit.batalion = form.get('batalion','').strip()
         s_edit.gender = form.get('gender')
         s_edit.is_platoon_graded_duty = 'is_platoon_graded_duty' in request.form
+        s_edit.is_smt = 'is_smt' in request.form # Handle SMT status
         new_id_unic = form.get('id_unic_student','').strip() or None
 
         if not all([s_edit.nume, s_edit.prenume, s_edit.grad_militar, s_edit.pluton, s_edit.companie, s_edit.batalion, s_edit.gender]):
@@ -6306,6 +6396,123 @@ def gradat_export_daily_leaves_word():
                      download_name=filename,
                      as_attachment=True,
                      mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+# START JULES BLOCK - MORNING INVIGORATION REPORT (PROBLEM 5)
+@app.route('/reports/morning_invigoration', methods=['GET', 'POST'])
+@login_required
+def morning_invigoration_report():
+    if current_user.role not in ['gradat', 'admin', 'comandant_companie', 'comandant_batalion']:
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    form_data = {
+        'report_date_str': get_localized_now().date().isoformat(),
+        'platoon_3_participates': False # Default for the toggle
+    }
+    report_data_to_render = None
+
+    if request.method == 'POST':
+        form_data['report_date_str'] = request.form.get('report_date', get_localized_now().date().isoformat())
+        # Checkbox value is 'on' if checked, otherwise not present in form
+        form_data['platoon_3_participates'] = request.form.get('platoon_3_participates') == 'on'
+
+        try:
+            report_date = datetime.strptime(form_data['report_date_str'], '%Y-%m-%d').date()
+        except ValueError:
+            flash("Format dată invalid. Se folosește data curentă.", "warning")
+            report_date = get_localized_now().date()
+            form_data['report_date_str'] = report_date.isoformat()
+
+        invigoration_time = time(6, 5) # Standard invigoration time
+        # Create aware datetime for the check
+        datetime_to_check = EUROPE_BUCHAREST.localize(datetime.combine(report_date, invigoration_time))
+        report_title_detail = f"Înviorare Dimineață ({datetime_to_check.strftime('%d.%m.%Y %H:%M')})"
+
+        students_for_report_query = Student.query
+        report_base_title = "Raport Prezență Înviorare"
+
+        # Scope students based on user role
+        if current_user.role == 'gradat':
+            students_for_report_query = students_for_report_query.filter(Student.created_by_user_id == current_user.id)
+            # If gradat is for Platoon 3, the toggle on their view might be confusing.
+            # However, the current logic means they see their own students; if they are Platoon 3,
+            # and the toggle (if shown to them, though not planned) is off, their students would be "non-participating".
+            # For simplicity, a gradat's report is just for their students.
+            # The platoon_3_participates toggle is primarily for commanders/admin.
+        elif current_user.role == 'comandant_companie':
+            company_id = _get_commander_unit_id(current_user.username, "CmdC")
+            if company_id:
+                students_for_report_query = students_for_report_query.filter(Student.companie == company_id)
+                report_base_title = f"Raport Înviorare Compania {company_id}"
+            else:
+                flash("ID Companie invalid.", "danger"); return redirect(url_for('dashboard'))
+        elif current_user.role == 'comandant_batalion':
+            battalion_id = _get_commander_unit_id(current_user.username, "CmdB")
+            if battalion_id:
+                students_for_report_query = students_for_report_query.filter(Student.batalion == battalion_id)
+                report_base_title = f"Raport Înviorare Batalionul {battalion_id}"
+            else:
+                flash("ID Batalion invalid.", "danger"); return redirect(url_for('dashboard'))
+        elif current_user.role == 'admin':
+             report_base_title = "Raport Înviorare General (Admin)"
+             # No specific unit filter for admin, they see all by default for this report type.
+
+        all_students_in_scope = students_for_report_query.all()
+
+        students_to_calculate_presence_for = []
+        platoon_3_non_participants_details = [] # Students from Platoon 3 not participating
+
+        if not form_data['platoon_3_participates']:
+            for s in all_students_in_scope:
+                # Assuming platoon is stored as a string, e.g., '3', '11', '21'
+                if s.pluton == '3':
+                    platoon_3_non_participants_details.append(f"{s.grad_militar} {s.nume} {s.prenume} - Pluton 3 (Neparticipant)")
+                else:
+                    students_to_calculate_presence_for.append(s)
+        else: # Platoon 3 participates
+            students_to_calculate_presence_for = all_students_in_scope
+
+        if not all_students_in_scope:
+            flash('Niciun student în evidență pentru acest raport.', 'info')
+            # Still render the template but report_data_calculated will be based on empty list
+
+        report_data_calculated = _calculate_presence_data(students_to_calculate_presence_for, datetime_to_check)
+
+        # Adjust final counts for the report display
+        final_efectiv_control = len(all_students_in_scope)
+        # Absentees = those calculated as absent from participating students + non-participating Platoon 3 + SMT from Platoon 3 (if any)
+        # _calculate_presence_data already includes SMT in its absent_total for the list it processed.
+        # So, if Platoon 3 students were in students_to_calculate_presence_for, their SMT status is handled.
+        # If Platoon 3 students were moved to platoon_3_non_participants_details, their SMT status is not in report_data_calculated.smt_count.
+
+        # Let's ensure SMT students from a non-participating Platoon 3 are also listed in the SMT section of the main report
+        # if they are SMT, rather than just "Pluton 3 (Neparticipant)".
+        # The current _calculate_presence_data handles SMT first.
+        # So, if Platoon 3 *is* participating, their SMTs are caught.
+        # If Platoon 3 is *not* participating, they are entirely in platoon_3_non_participants_details.
+        # This seems acceptable: if Platoon 3 is marked as non-participating, all its members are listed as such for this specific report.
+
+        final_efectiv_absent = report_data_calculated['efectiv_absent_total'] + len(platoon_3_non_participants_details)
+        final_efectiv_prezent = report_data_calculated['efectiv_prezent_total'] # Based on those who were supposed to participate
+
+        report_data_to_render = {
+            **report_data_calculated,
+            "efectiv_control": final_efectiv_control,
+            "efectiv_prezent_total": final_efectiv_prezent,
+            "efectiv_absent_total": final_efectiv_absent,
+            "platoon_3_non_participants_details": sorted(platoon_3_non_participants_details),
+            "platoon_3_non_participants_count": len(platoon_3_non_participants_details),
+            "platoon_3_participated_fully": form_data['platoon_3_participates'],
+            "title": f"{report_base_title} - {report_title_detail}",
+            "datetime_checked": datetime_to_check.strftime('%d %B %Y, %H:%M:%S')
+        }
+
+    return render_template('morning_invigoration_report.html',
+                           form_data=form_data, # Pass current form data for repopulation
+                           report_data=report_data_to_render,
+                           current_user_role=current_user.role) # For conditional display of toggle in template
+# END JULES BLOCK - MORNING INVIGORATION REPORT (PROBLEM 5)
+
 
 # START JULES BLOCK - NEW AND MODIFIED FUNCTIONS (PROBLEMS 2 & 4)
 

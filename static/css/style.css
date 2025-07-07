@@ -188,49 +188,91 @@ body.dark-mode .card-header {
     color: var(--text-primary); /* Ensure header text is also correct */
 }
 
-/* === START JULES' MODIFICATIONS FOR DARK MODE TABLE STYLING === */
+/* === START JULES' REVISED MODIFICATIONS FOR DARK MODE TABLE/LIST STYLING === */
+
+/* General table cell styling for dark mode */
 body.dark-mode .table th,
 body.dark-mode .table td {
-    /* color: var(--text-primary); */ /* This is already set a bit lower, will be inherited or re-asserted */
-    background-color: transparent !important; /* Remove individual cell backgrounds */
-    /* border-color: var(--border-color); */ /* Will be inherited or re-asserted by general table styles */
+    color: var(--text-primary) !important; /* Ensure high contrast text */
+    border-color: var(--border-color); /* Use dark mode border color */
+    background-color: transparent; /* Default to transparent cells over surface */
 }
 
+/* Table header specific styling */
 body.dark-mode .table thead th {
-    background-color: var(--bg-surface-hover) !important; /* Keep header distinct but ensure it's one of the dark theme's neutral colors */
-    /* color: var(--text-primary); */ /* Already set */
-    border-bottom-width: 2px; /* Keep header border distinct */
+    background-color: var(--bg-surface-hover) !important; /* Slightly different header bg */
+    color: var(--text-primary) !important;
+    border-bottom-width: 2px;
+    border-color: var(--border-color);
 }
 
-/* Neutralize specific hover and striped effects if they interfere */
+/* Subtle striping for table rows in dark mode */
 body.dark-mode .table-striped > tbody > tr:nth-of-type(odd) > * {
-    background-color: transparent !important;
+    /* A very subtle difference from the default (even) rows */
+    /* Default even rows will be transparent over --bg-surface */
+    /* Odd rows will be slightly darker than --bg-surface */
+    background-color: rgba(0, 0, 0, 0.05) !important; /* Adjust alpha for subtlety */
 }
+
+/* Hover effect for table rows */
 body.dark-mode .table-hover > tbody > tr:hover > * {
-    background-color: rgba(255, 255, 255, 0.05) !important; /* Very subtle light hover */
+    background-color: rgba(255, 255, 255, 0.07) !important; /* Slightly lighter subtle hover */
+    color: var(--text-primary) !important; /* Ensure text color remains high contrast on hover */
 }
 
-/* Neutralize contextual backgrounds like .table-success, .table-warning etc. for ALL tables in dark mode */
-body.dark-mode .table-success > td, body.dark-mode .table-success > th,
-body.dark-mode .table-warning > td, body.dark-mode .table-warning > th,
-body.dark-mode .table-danger > td, body.dark-mode .table-danger > th,
-body.dark-mode .table-info > td, body.dark-mode .table-info > th,
-body.dark-mode .table-active > td, body.dark-mode .table-active > th,
-body.dark-mode .table-secondary > td, body.dark-mode .table-secondary > th,
-body.dark-mode .table-light > td, body.dark-mode .table-light > th,
-body.dark-mode .table-dark > td, body.dark-mode .table-dark > th {
-    background-color: transparent !important;
-    color: var(--text-primary) !important; /* Ensure text remains light */
+/* Contextual backgrounds (e.g., .table-success) - make them subtle and ensure text contrast */
+/* If these are not used for student lists, this might be less critical for the described issue */
+/* For now, we'll keep them subtle but distinct from fully transparent */
+
+body.dark-mode .table-success > td, body.dark-mode .table-success > th {
+    background-color: rgba(40, 167, 69, 0.15) !important; /* Subtle green indication */
+    color: var(--text-primary) !important;
+}
+body.dark-mode .table-warning > td, body.dark-mode .table-warning > th {
+    background-color: rgba(255, 193, 7, 0.15) !important; /* Subtle yellow indication */
+    color: #dfa100 !important; /* Darker yellow/gold text for better contrast on subtle yellow bg */
+}
+body.dark-mode .table-danger > td, body.dark-mode .table-danger > th {
+    background-color: rgba(220, 53, 69, 0.15) !important; /* Subtle red indication */
+    color: var(--text-primary) !important;
+}
+body.dark-mode .table-info > td, body.dark-mode .table-info > th {
+    background-color: rgba(13, 202, 240, 0.1) !important; /* Subtle cyan indication */
+    color: var(--text-primary) !important;
 }
 
-/* Ensure links within these neutralized tables are also styled for dark mode */
+/* Ensure links within tables are also styled for dark mode */
 body.dark-mode .table a {
-    color: var(--link-color); /* Use the dark mode link color */
+    color: var(--link-color) !important;
 }
 body.dark-mode .table a:hover {
-    color: var(--link-hover-color);
+    color: var(--link-hover-color) !important;
 }
-/* === END JULES' MODIFICATIONS FOR DARK MODE TABLE STYLING === */
+
+/* List group items (used for services/leaves display in some cards) */
+body.dark-mode .list-group-item {
+    background-color: var(--bg-surface) !important; /* Ensure consistent surface background */
+    color: var(--text-primary) !important;         /* Ensure high contrast text */
+    border-color: var(--border-color) !important;   /* Dark mode appropriate border */
+}
+/* For striped list groups, if any are used */
+body.dark-mode .list-group-item-striped:nth-of-type(odd) {
+     background-color: rgba(0, 0, 0, 0.05) !important; /* Subtle striping */
+}
+/* Ensure text on specific status list items is readable */
+body.dark-mode .list-group-item-success {
+    background-color: rgba(40, 167, 69, 0.15) !important;
+    color: var(--text-primary) !important;
+}
+body.dark-mode .list-group-item-warning {
+    background-color: rgba(255, 193, 7, 0.15) !important;
+    color: #dfa100 !important;
+}
+body.dark-mode .list-group-item-danger {
+    background-color: rgba(220, 53, 69, 0.15) !important;
+    color: var(--text-primary) !important;
+}
+/* === END JULES' REVISED MODIFICATIONS FOR DARK MODE TABLE/LIST STYLING === */
 
 body.dark-mode .table thead th { /* This rule was already present, ensure it's not conflicting or duplicate if my additions are above */
     background-color: var(--bg-surface-hover);
