@@ -88,22 +88,38 @@
                         {# Momentan, ne concentrăm pe funcționalitatea gradatului #}
                         {% if current_user.role == 'gradat' or current_user.role == 'admin' %}
                         <hr>
-                        <div class="mb-3 form-check">
-                            <input type="checkbox" class="form-check-input" id="is_platoon_graded_duty" name="is_platoon_graded_duty" {% if student and student.is_platoon_graded_duty %}checked{% elif form_data and form_data.is_platoon_graded_duty %}checked{% endif %}>
-                            <label class="form-check-label" for="is_platoon_graded_duty">
-                                <strong>Desemnat Gradat Pluton</strong>
-                            </label>
-                            <small class="form-text text-muted d-block">
-                                Marchează acest student ca având funcții de gradat în cadrul plutonului său.
-                            </small>
+                        <div class="mb-3">
+                            <label for="exemption_details" class="form-label">Detalii Scutire/Excepție (Opțional)</label>
+                            <input type="text" class="form-control" id="exemption_details" name="exemption_details" value="{{ student.exemption_details if student else (form_data.exemption_details if form_data else '') }}" placeholder="ex: Medicală parțială - efort fizic redus; Comisie examen">
+                            <small class="form-text text-muted">Dacă studentul este scutit SMT, bifați căsuța de mai jos. Pentru alte scutiri/excepții, completați aici.</small>
                         </div>
+
                         <div class="mb-3 form-check">
                             <input type="checkbox" class="form-check-input" id="is_smt" name="is_smt" {% if student and student.is_smt %}checked{% elif form_data and form_data.is_smt %}checked{% endif %}>
                             <label class="form-check-label" for="is_smt">
                                 <strong>SMT (Scutire Medicală Totală)</strong>
                             </label>
                             <small class="form-text text-muted d-block">
-                                Marchează acest student ca având scutire medicală totală. Nu va participa la activități.
+                                Marchează acest student ca având scutire medicală totală. Nu va participa la activități. Acest status are prioritate.
+                            </small>
+                        </div>
+
+                        <hr>
+                        <h5 class="mt-3 mb-2">Statut Gradat</h5>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="is_platoon_graded_duty" name="is_platoon_graded_duty" {% if student and student.is_platoon_graded_duty %}checked{% elif form_data and form_data.is_platoon_graded_duty %}checked{% endif %}>
+                            <label class="form-check-label" for="is_platoon_graded_duty">
+                                Desemnat Gradat în Plutonul Propriu (<strong class="text-info">{{ student.pluton if student else (form_data.pluton if form_data else 'N/A') }}</strong>)
+                            </label>
+                            <small class="form-text text-muted d-block">
+                                Marchează dacă studentul are funcții de gradat în cadrul plutonului său de apartenență.
+                            </small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="assigned_graded_platoon" class="form-label">Gradat la Alt Pluton (ID Pluton)</label>
+                            <input type="text" class="form-control form-control-sm" id="assigned_graded_platoon" name="assigned_graded_platoon" value="{{ student.assigned_graded_platoon if student and student.assigned_graded_platoon else (form_data.assigned_graded_platoon if form_data else '') }}" placeholder="ex: 2, 113 (lasă gol dacă nu e cazul)">
+                            <small class="form-text text-muted">
+                                Dacă studentul este desemnat gradat la un alt pluton decât cel de apartenență, introduceți aici ID-ul acelui pluton.
                             </small>
                         </div>
                         {% endif %}
