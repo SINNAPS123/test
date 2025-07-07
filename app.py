@@ -144,7 +144,7 @@ class Permission(db.Model):
     destination = db.Column(db.String(255), nullable=True)
     transport_mode = db.Column(db.String(100), nullable=True)
     student = db.relationship('Student', backref=db.backref('permissions', lazy=True, cascade="all, delete-orphan"))
-    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # Made nullable
     creator = db.relationship('User', backref=db.backref('permissions_created', lazy=True))
     @property
     def is_active(self):
@@ -172,7 +172,7 @@ class DailyLeave(db.Model):
     reason = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(50), default='Aprobată', nullable=False)
     student = db.relationship('Student', backref=db.backref('daily_leaves', lazy=True, cascade="all, delete-orphan"))
-    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # Made nullable
     creator = db.relationship('User', backref=db.backref('daily_leaves_created', lazy=True))
     @property
     def start_datetime(self): return datetime.combine(self.leave_date, self.start_time)
@@ -229,7 +229,7 @@ class WeekendLeave(db.Model):
     reason = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(50), default='Aprobată', nullable=False)
     student = db.relationship('Student', backref=db.backref('weekend_leaves', lazy=True, cascade="all, delete-orphan"))
-    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # Made nullable
     creator = db.relationship('User', backref=db.backref('weekend_leaves_created', lazy=True))
     def get_intervals(self):
         intervals = []
@@ -276,7 +276,7 @@ class VolunteerActivity(db.Model):
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
     activity_date = db.Column(db.Date, nullable=False)
-    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # Made nullable
     creator = db.relationship('User', backref=db.backref('volunteer_activities_created', lazy=True))
     participants = db.relationship('ActivityParticipant', backref='activity', lazy='dynamic', cascade="all, delete-orphan")
 
@@ -297,7 +297,7 @@ class ServiceAssignment(db.Model):
     participates_in_roll_call = db.Column(db.Boolean, default=True) 
     notes = db.Column(db.Text, nullable=True)
     student = db.relationship('Student', backref=db.backref('service_assignments', lazy=True, cascade="all, delete-orphan"))
-    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # Made nullable
     creator = db.relationship('User', backref=db.backref('service_assignments_created', lazy=True))
     @property
     def is_active(self):
@@ -1029,25 +1029,66 @@ def admin_delete_user(user_id):
     role_deleted_log = user_to_delete.role
     details_before = model_to_dict(user_to_delete)
     num_students_deleted = 0
+    num_activities_orphaned = 0
+    num_permissions_orphaned = 0
+    num_daily_leaves_orphaned = 0
+    num_weekend_leaves_orphaned = 0
+    num_services_orphaned = 0
 
     try:
+        # Handle VolunteerActivities created by this user
+        activities_to_orphan = VolunteerActivity.query.filter_by(created_by_user_id=user_to_delete.id).all()
+        num_activities_orphaned = len(activities_to_orphan)
+        for activity in activities_to_orphan:
+            activity.created_by_user_id = None
+
+        # Handle Permissions created by this user
+        permissions_to_orphan = Permission.query.filter_by(created_by_user_id=user_to_delete.id).all()
+        num_permissions_orphaned = len(permissions_to_orphan)
+        for perm in permissions_to_orphan:
+            perm.created_by_user_id = None
+
+        # Handle DailyLeaves created by this user
+        daily_leaves_to_orphan = DailyLeave.query.filter_by(created_by_user_id=user_to_delete.id).all()
+        num_daily_leaves_orphaned = len(daily_leaves_to_orphan)
+        for dl in daily_leaves_to_orphan:
+            dl.created_by_user_id = None
+
+        # Handle WeekendLeaves created by this user
+        weekend_leaves_to_orphan = WeekendLeave.query.filter_by(created_by_user_id=user_to_delete.id).all()
+        num_weekend_leaves_orphaned = len(weekend_leaves_to_orphan)
+        for wl in weekend_leaves_to_orphan:
+            wl.created_by_user_id = None
+
+        # Handle ServiceAssignments created by this user
+        services_to_orphan = ServiceAssignment.query.filter_by(created_by_user_id=user_to_delete.id).all()
+        num_services_orphaned = len(services_to_orphan)
+        for sa in services_to_orphan:
+            sa.created_by_user_id = None
+
         if user_to_delete.role == 'gradat':
             students_to_delete = Student.query.filter_by(created_by_user_id=user_to_delete.id).all()
             num_students_deleted = len(students_to_delete)
             for student in students_to_delete:
-                # Log student deletion implicitly by user deletion or explicitly if needed
-                # For now, covered by the user deletion log's description.
-                db.session.delete(student)
+                db.session.delete(student) # Cascading deletes for student's permissions, leaves etc. should be handled by DB/ORM settings
             if num_students_deleted > 0:
-                flash(f'Toți studenții ({num_students_deleted}) și datele asociate pentru gradatul {username_deleted_log} au fost șterse.', 'info')
+                flash(f'Toți studenții ({num_students_deleted}) și datele asociate direct LOR pentru gradatul {username_deleted_log} au fost șterse.', 'info')
 
         db.session.delete(user_to_delete)
 
-        log_action("ADMIN_DELETE_USER_SUCCESS", target_model_name="User", target_id=user_id, # user_id from param, as user_to_delete.id will be gone
+        log_description = (
+            f"Admin {current_user.username} deleted user {username_deleted_log} ({role_deleted_log}). "
+            f"{num_students_deleted} students (and their direct data) also deleted if user was gradat. "
+            f"Orphaned records: Activities({num_activities_orphaned}), Permissions({num_permissions_orphaned}), "
+            f"DailyLeaves({num_daily_leaves_orphaned}), WeekendLeaves({num_weekend_leaves_orphaned}), Services({num_services_orphaned}). "
+            f"IP: {request.remote_addr}"
+        )
+
+        log_action("ADMIN_DELETE_USER_SUCCESS", target_model_name="User", target_id=user_id,
                    details_before_dict=details_before,
-                   description=f"Admin {current_user.username} deleted user {username_deleted_log} ({role_deleted_log}). {num_students_deleted} students also deleted if user was gradat. IP: {request.remote_addr}")
+                   description=log_description)
         db.session.commit()
-        flash(f'Utilizatorul "{username_deleted_log}" și toate datele asociate (dacă este cazul) au fost șterse cu succes.', 'success')
+        flash(f'Utilizatorul "{username_deleted_log}" a fost șters cu succes. Înregistrările create de acesta au fost disociate (păstrate fără creator).', 'success')
 
     except Exception as e:
         db.session.rollback()
@@ -3608,111 +3649,74 @@ def process_daily_leaves_text():
     default_start_time_obj = time(15, 0)
     default_end_time_obj = time(19, 0)
 
-    processed_count, error_count, already_exists_count = 0,0,0
-    error_details_import_dl = [] # Listă pentru a stoca detalii despre erori
+    processed_count, error_count, already_exists_count = 0, 0, 0
+    error_details_import_dl = []
+    not_found_or_ambiguous = [] # Initialize this list to store student lookup issues
 
     for line_raw in lines:
         line_for_student_find = line_raw.strip()
-        if not line_for_student_find: continue
+        if not line_for_student_find:
+            continue
 
-        # Extrage orele din linie, dacă există, înainte de a trimite la find_student_for_bulk_import
-        # parse_leave_line deja face asta și separă numele de oră.
-        # Reutilizăm parse_leave_line pentru a extrage numele și orele.
+        # Initialize time variables for the current iteration with defaults
+        current_iter_start_time = default_start_time_obj
+        current_iter_end_time = default_end_time_obj
 
-        # `parse_leave_line` returnează: normalized_name_search, grad, parsed_start_time_obj, parsed_end_time_obj
-        # normalized_name_search este numele fără grad.
-        # grad este gradul extras.
-        # Vom reconstrui "Nume Student Grad" pentru find_student_for_bulk_import dacă e posibil,
-        # sau vom folosi linia originală dacă `parse_leave_line` nu separă bine.
+        # Attempt to parse time from the line
+        time_match_in_line = re.search(r"(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$", line_for_student_find)
+        student_name_grad_part = line_for_student_find # Assume full line is name part initially
 
-        temp_name_norm, temp_grad, temp_start_time, temp_end_time = parse_leave_line(line_for_student_find)
+        if time_match_in_line:
+            student_name_grad_part = line_for_student_find[:time_match_in_line.start()].strip()
+            try:
+                parsed_line_start_time = datetime.strptime(time_match_in_line.group(1), "%H:%M").time()
+                parsed_line_end_time = datetime.strptime(time_match_in_line.group(2), "%H:%M").time()
+                # Only update if both start and end times are successfully parsed
+                current_iter_start_time = parsed_line_start_time
+                current_iter_end_time = parsed_line_end_time
+            except ValueError:
+                # Time format is invalid, defaults will be used. Log this.
+                app.logger.info(f"Daily Leave Text Import: Invalid time format in line '{line_raw}'. Using default times.")
+                # error_details_import_dl.append(f"Linia '{line_raw}': Format orar invalid, s-au folosit orele implicite.")
+                # We might not want to count this as a hard error if we proceed with defaults.
+                pass
 
-        # Construim șirul pentru căutarea studentului. `find_student_for_bulk_import` se așteaptă la "Grad Nume Prenume" sau "Nume Prenume"
-        # `parse_leave_line` returnează `temp_name_norm` ca "nume prenume" (sau ce a rămas după extragerea gradului și orei)
-        # și `temp_grad` ca gradul.
+        if not student_name_grad_part: # If line was only time or became empty after stripping time
+            error_details_import_dl.append(f"Linia '{line_raw}': Nume student lipsă sau format invalid după procesarea orei.")
+            error_count +=1
+            not_found_or_ambiguous.append(f"Linia '{line_raw.strip()}': Nume student lipsă.")
+            continue
 
-        student_search_string = ""
-        if temp_grad and temp_name_norm: # Avem și grad și nume
-            # `temp_name_norm` este deja normalizat (lowercase, unidecode). `find_student_for_bulk_import` face și el normalizare.
-            # Pentru a pasa corect, ar trebui să avem numele original.
-            # `parse_leave_line` ar trebui să returneze și numele original ne-normalizat.
-            # Modificare: Să folosim direct `line_for_student_find` pentru `find_student_for_bulk_import`
-            # și să extragem orele separat.
+        found_student, student_error = find_student_for_bulk_import(student_name_grad_part, current_user.id)
 
-            # Abordare mai simplă: extragem orele întâi, restul e numele + gradul.
-            time_match_in_line = re.search(r"(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$", line_for_student_find.strip())
-            student_name_grad_part = line_for_student_find.strip()
-            line_start_time_obj = None
-            line_end_time_obj = None
+        if student_error:
+            app.logger.warning(f"Daily Leave Text Import: Student find error for line '{line_raw}' (name part: '{student_name_grad_part}'). Error: {student_error}")
+            error_details_import_dl.append(f"Linia '{line_raw}' (student: '{student_name_grad_part}'): {student_error}")
+            error_count += 1
+            not_found_or_ambiguous.append(f"Linia '{line_raw.strip()}': {student_error}")
+            continue
 
-            if time_match_in_line:
-                student_name_grad_part = line_for_student_find.strip()[:time_match_in_line.start()].strip()
-                try:
-                    line_start_time_obj = datetime.strptime(time_match_in_line.group(1), "%H:%M").time()
-                    line_end_time_obj = datetime.strptime(time_match_in_line.group(2), "%H:%M").time()
-                except ValueError:
-                    pass # Orele nu sunt valide, vor fi tratate ca parte din nume sau se vor folosi cele default
+        if not found_student:
+            app.logger.error(f"Daily Leave Text Import: found_student is None but student_error was also None for line '{line_raw}' (name part: '{student_name_grad_part}').")
+            error_details_import_dl.append(f"Linia '{line_raw}' (student: '{student_name_grad_part}'): Eroare internă la identificarea studentului.")
+            error_count += 1
+            not_found_or_ambiguous.append(f"Linia '{line_raw.strip()}': Eroare internă la identificare.")
+            continue
 
-            found_student, student_error = find_student_for_bulk_import(student_name_grad_part, current_user.id)
-
-            if student_error:
-                app.logger.warning(f"Daily Leave Text Import: Student find error for line '{line_raw}'. Error: {student_error}")
-                error_details_import_dl.append(f"Linia '{line_raw}': {student_error}")
-                error_count += 1
-                continue
-            # This 'else' block was problematic as find_student_for_bulk_import either returns a student or an error string.
-            # If student_error is None, found_student should be valid.
-            # The initial check for student_error should be sufficient.
-            if not found_student: # Should be caught by student_error, but as an explicit double check.
-                app.logger.error(f"Daily Leave Text Import: found_student is None but student_error was also None for line '{line_raw}'. This indicates a logic flaw in find_student_for_bulk_import or here.")
-                error_details_import_dl.append(f"Linia '{line_raw}': Eroare internă la identificarea studentului.")
-                error_count += 1
-                continue
-
-        # Determine start and end times for the leave
-        # line_start_time_obj and line_end_time_obj are initialized to None or parsed time objects.
-
-        # Use parsed time if available, otherwise use default.
-        current_start_time = line_start_time_obj if line_start_time_obj is not None else default_start_time_obj
-        current_end_time = line_end_time_obj if line_end_time_obj is not None else default_end_time_obj
-
-        # If line_start_time_obj was parsed but line_end_time_obj was not (e.g., "HH:MM-" or malformed end),
-        # ensure current_end_time uses the default if line_end_time_obj ended up as None.
-        # This specific condition `if line_start_time_obj and not line_end_time_obj:`
-        # was identified as a potential source of UnboundLocalError if line_start_time_obj was not bound.
-        # However, with the initialization `line_start_time_obj = None`, it should be bound.
-        # The logic below ensures that if start time was parsed but end time parsing failed (so line_end_time_obj is None),
-        # we still use the default_end_time_obj. This is already handled by the line:
-        # `current_end_time = line_end_time_obj if line_end_time_obj is not None else default_end_time_obj`
-
-        # The condition `if line_start_time_obj and not line_end_time_obj:` can be removed
-        # as its intent is covered by the direct assignment with fallback.
-        # No, keeping it might be important if only start time was provided and valid, and we want specific behavior for that.
-        # Let's re-evaluate: if line_start_time_obj is a time object (truthy) and line_end_time_obj is None (falsy for `not`)
-        if line_start_time_obj is not None and line_end_time_obj is None:
-            # This means a start time was successfully parsed from the line, but an end time was not.
-            # In this scenario, we might want to ensure the default end time is used.
-            # The line `current_end_time = line_end_time_obj if line_end_time_obj is not None else default_end_time_obj`
-            # already correctly sets current_end_time to default_end_time_obj if line_end_time_obj is None.
-            # So this explicit if block is redundant if the goal is just to set default end time.
-            # However, if there was a specific reason for this block (e.g. logging, different default), it would stay.
-            # For now, let's assume the above assignment is sufficient.
-            pass # The logic is covered. This comment serves as an explanation.
-
-        valid_schedule, validation_message = validate_daily_leave_times(current_start_time, current_end_time, apply_date_obj)
+        # Use current_iter_start_time and current_iter_end_time which are now guaranteed to be valid time objects
+        valid_schedule, validation_message = validate_daily_leave_times(current_iter_start_time, current_iter_end_time, apply_date_obj)
         if not valid_schedule:
-            app.logger.warning(f"Daily Leave Text Import: Invalid schedule for student '{found_student.nume}' line '{line_raw}'. Message: {validation_message}")
+            app.logger.warning(f"Daily Leave Text Import: Invalid schedule for student '{found_student.nume}' line '{line_raw}'. Start: {current_iter_start_time}, End: {current_iter_end_time}. Message: {validation_message}")
             error_details_import_dl.append(f"Linia '{line_raw}' ({found_student.nume}): Interval orar invalid - {validation_message}.")
             error_count +=1
             continue
 
-        start_dt_bulk = datetime.combine(apply_date_obj, current_start_time)
+        start_dt_bulk = datetime.combine(apply_date_obj, current_iter_start_time)
         effective_end_date_bulk = apply_date_obj
-        if current_end_time < current_start_time : # Spans midnight
+        if current_iter_end_time < current_iter_start_time : # Spans midnight
             effective_end_date_bulk += timedelta(days=1)
-        end_dt_bulk = datetime.combine(effective_end_date_bulk, current_end_time)
+        end_dt_bulk = datetime.combine(effective_end_date_bulk, current_iter_end_time)
 
-        # Conflict checking (existing logic seems fine)
         active_intervention_service = ServiceAssignment.query.filter(
             ServiceAssignment.student_id == found_student.id,
             ServiceAssignment.service_type == 'Intervenție',
@@ -3720,16 +3724,15 @@ def process_daily_leaves_text():
             ServiceAssignment.end_datetime > start_dt_bulk
         ).first()
         if active_intervention_service:
-            flash(f'Studentul {found_student.nume} {found_student.prenume} este în "Intervenție". Învoire ignorată pentru {line_raw}.', 'warning')
+            error_details_import_dl.append(f"Linia '{line_raw}' ({found_student.nume}): Student în 'Intervenție'. Învoire ignorată.")
             error_count += 1
             continue
 
-        # Check for existing identical leave
         existing_leave = DailyLeave.query.filter_by(
             student_id=found_student.id,
             leave_date=apply_date_obj,
-            start_time=current_start_time,
-            end_time=current_end_time,
+            start_time=current_iter_start_time, # Use the guaranteed time object
+            end_time=current_iter_end_time,     # Use the guaranteed time object
             status='Aprobată'
         ).first()
         if existing_leave:
@@ -3739,8 +3742,8 @@ def process_daily_leaves_text():
         new_leave = DailyLeave(
             student_id=found_student.id,
             leave_date=apply_date_obj,
-            start_time=current_start_time,
-            end_time=current_end_time,
+            start_time=current_iter_start_time, # Use the guaranteed time object
+            end_time=current_iter_end_time,     # Use the guaranteed time object
             status='Aprobată',
             created_by_user_id=current_user.id,
             reason=f"Procesare text: {line_raw}"
@@ -3751,10 +3754,28 @@ def process_daily_leaves_text():
     try:
         db.session.commit()
         if processed_count > 0: flash(f'{processed_count} învoiri procesate și adăugate.', 'success')
-        if error_count > 0: flash(f'{error_count} linii nu au putut fi procesate complet.', 'danger')
-        if already_exists_count > 0: flash(f'{already_exists_count} învoiri identice existau deja și au fost ignorate.', 'info')
-        if not_found_or_ambiguous: flash(f"Probleme identificare studenți: {'; '.join(not_found_or_ambiguous)}", 'warning')
-    except Exception as e: db.session.rollback(); flash(f'Eroare majoră la salvarea învoirilor din text: {str(e)}', 'danger')
+
+        final_error_messages = []
+        if error_count > 0: final_error_messages.append(f'{error_count} linii nu au putut fi procesate complet.')
+        if already_exists_count > 0: final_error_messages.append(f'{already_exists_count} învoiri identice existau deja și au fost ignorate.')
+        # not_found_or_ambiguous list is populated directly with messages including line content
+        if not_found_or_ambiguous:
+            # Add a general count for student lookup issues
+            final_error_messages.append(f"Probleme identificare studenți: {len(not_found_or_ambiguous)} cazuri.")
+            # Log detailed student lookup errors for admin/debug
+            app.logger.warning(f"Daily Leave Text Import - Student Lookup Issues: User {current_user.id}, Issues: {not_found_or_ambiguous[:5]}")
+
+
+        if final_error_messages:
+            flash("Rezumat procesare: " + " | ".join(final_error_messages), 'warning')
+            # Log detailed processing errors if any were collected in error_details_import_dl
+            if error_details_import_dl:
+                 app.logger.warning(f"Daily Leave Text Import - Processing Errors: User {current_user.id}, Errors: {error_details_import_dl[:5]}")
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare majoră la salvarea învoirilor din text: {str(e)}', 'danger')
+        app.logger.error(f"Daily Leave Text Import Commit Exception: {str(e)}")
     return redirect(url_for('list_daily_leaves'))
 
 @app.route('/gradat/daily_leaves/delete/<int:leave_id>', methods=['POST'])
@@ -4816,8 +4837,12 @@ def admin_action_logs():
 
     logs_pagination = logs_query.paginate(page=page, per_page=per_page, error_out=False)
 
+    # Convert iter_pages generator to a list for use with |length in template
+    page_iterator_list = list(logs_pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=3))
+
     return render_template('admin_action_logs.html',
                            logs_pagination=logs_pagination,
+                           page_iterator_list=page_iterator_list, # Pass the list
                            title="Jurnal Acțiuni Sistem",
                            # Pass filter values back to template
                            user_id_filter_val=filter_user_id_str,
