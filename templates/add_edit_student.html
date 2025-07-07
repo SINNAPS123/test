@@ -95,7 +95,15 @@
                             </label>
                             <small class="form-text text-muted d-block">
                                 Marchează acest student ca având funcții de gradat în cadrul plutonului său.
-                                Va fi raportat separat și va avea reguli specifice de prezență și permisii (conform definirii).
+                            </small>
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="is_smt" name="is_smt" {% if student and student.is_smt %}checked{% elif form_data and form_data.is_smt %}checked{% endif %}>
+                            <label class="form-check-label" for="is_smt">
+                                <strong>SMT (Scutire Medicală Totală)</strong>
+                            </label>
+                            <small class="form-text text-muted d-block">
+                                Marchează acest student ca având scutire medicală totală. Nu va participa la activități.
                             </small>
                         </div>
                         {% endif %}

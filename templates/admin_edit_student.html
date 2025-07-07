@@ -92,6 +92,16 @@
                                 Marchează acest student ca având funcții de gradat în cadrul plutonului său.
                             </small>
                         </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="is_smt" name="is_smt"
+                                   {% if (form_data.is_smt if form_data and form_data.is_smt is defined else student.is_smt) %}checked{% endif %}>
+                            <label class="form-check-label" for="is_smt">
+                                <strong>SMT (Scutire Medicală Totală)</strong>
+                            </label>
+                             <small class="form-text text-muted d-block">
+                                Marchează acest student ca având scutire medicală totală.
+                            </small>
+                        </div>
 
                         {# Admin might need to edit volunteer points directly? For now, not included. #}
                         {# <div class="mb-3">

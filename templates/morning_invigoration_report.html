@@ -1,37 +1,38 @@
 {% extends "base.html" %}
 
-{% block title %}Raport Prezență{% endblock %}
+{% block title %}Raport Prezență Înviorare Dimineață{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>Generare Raport Prezență și Efective</h2>
+        <h2>Raport Prezență Înviorare Dimineață (06:05)</h2>
         <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Înapoi la Panou</a>
     </div>
 
     <div class="card shadow-sm mb-4">
         <div class="card-body">
-            <form method="POST" action="{{ url_for('presence_report') }}">
+            <form method="POST" action="{{ url_for('morning_invigoration_report') }}">
                 <div class="row g-3 align-items-end">
                     <div class="col-md-4">
-                        <label for="report_type" class="form-label">Tip Raport:</label>
-                        <select class="form-select" id="report_type" name="report_type">
-                            <option value="current" selected>Prezență Curentă (Acum)</option>
-                            <option value="evening_roll_call">Apel Seară (L-J 20:00, V-D 22:00)</option>
-                            <option value="company_report">Raport Companie (14:20)</option>
-                            <option value="morning_check">Prezență Dimineață (ex: 07:00)</option>
-                            <option value="custom">Dată și Oră Specifică</option>
-                        </select>
+                        <label for="report_date" class="form-label">Data Raportului:</label>
+                        <input type="date" class="form-control" id="report_date" name="report_date" value="{{ form_data.report_date_str }}" required>
                     </div>
-                    <div class="col-md-4">
-                        <label for="custom_datetime" class="form-label">Dată și Oră Custom (dacă e selectat):</label>
-                        <input type="datetime-local" class="form-control" id="custom_datetime" name="custom_datetime" value="{{ current_datetime_str }}">
+
+                    {# Toggle for Platoon 3 participation - visible for commanders/admin #}
+                    {% if current_user_role in ['comandant_companie', 'comandant_batalion', 'admin'] %}
+                    <div class="col-md-4 d-flex align-items-center pt-3"> {# Using pt-3 for some spacing #}
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="platoon_3_participates" name="platoon_3_participates" {% if form_data.platoon_3_participates %}checked{% endif %}>
+                            <label class="form-check-label" for="platoon_3_participates">
+                                Plutonul 3 Participă?
+                            </label>
+                        </div>
                     </div>
+                    {% endif %}
+
                     <div class="col-md-4">
                         <button type="submit" class="btn btn-primary w-100">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-text-fill" viewBox="0 0 16 16">
-                                <path d="M9.293 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.707A1 1 0 0 0 13.707 4L10 .293A1 1 0 0 0 9.293 0zM9.5 3.5v-2l3 3h-2a1 1 0 0 1-1-1zM4.5 9a.5.5 0 0 1 0-1h7a.5.5 0 0 1 0 1h-7zM4 10.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zm.5 2.5a.5.5 0 0 1 0-1h4a.5.5 0 0 1 0 1h-4z"/>
-                              </svg> Generează Raport
+                            <i class="fas fa-sun me-1"></i> Generează Raport Înviorare
                         </button>
                     </div>
                 </div>
@@ -40,27 +41,32 @@
     </div>
 
     {% if report_data %}
-    <div class="card shadow-lg border-primary">
-        <div class="card-header bg-primary text-white">
+    <div class="card shadow-lg border-info">
+        <div class="card-header bg-info text-white">
             <div class="d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">{{ report_data.title }}</h4>
-                <button class="btn btn-sm btn-light" onclick="copyReportToClipboard()" title="Copiază raportul în format text">
+                 <button class="btn btn-sm btn-light" onclick="copyReportToClipboardInvigoration()" title="Copiază raportul în format text">
                     <i class="fas fa-copy"></i> Copiază Raport Text
                 </button>
             </div>
             <small>Generat pentru: {{ report_data.datetime_checked }}</small>
+            {% if not report_data.platoon_3_participated_fully and report_data.platoon_3_non_participants_count > 0 %}
+                <small class="d-block text-white-50">Notă: Plutonul 3 nu a participat.</small>
+            {% elif report_data.platoon_3_participated_fully %}
+                 <small class="d-block text-white-50">Notă: Plutonul 3 a participat.</small>
+            {% endif %}
         </div>
         <div class="card-body">
-            <h5>Efective Generale:</h5>
+            <h5>Efective Generale (Înviorare):</h5>
             <div class="row mb-3">
                 <div class="col-md-4"><strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ report_data.efectiv_control }}</span></div>
-                <div class="col-md-4"><strong>Efectiv Prezent Total (Ep):</strong> <span class="badge bg-success fs-6">{{ report_data.efectiv_prezent_total }}</span></div>
-                <div class="col-md-4"><strong>Efectiv Absent Motivat (Ea):</strong> <span class="badge bg-danger fs-6">{{ report_data.efectiv_absent_total }}</span></div>
+                <div class="col-md-4"><strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ report_data.efectiv_prezent_total }}</span></div>
+                <div class="col-md-4"><strong>Efectiv Absent Total (Ea):</strong> <span class="badge bg-danger fs-6">{{ report_data.efectiv_absent_total }}</span></div>
             </div>
             <hr>
 
             <h5 class="mt-3">
-                <i class="fas fa-users text-info me-2"></i>Prezenți în Formație
+                <i class="fas fa-users text-info me-2"></i>Prezenți la Înviorare
                 <span class="badge rounded-pill bg-info ms-1">{{ report_data.in_formation_count }}</span>
             </h5>
             {% if report_data.in_formation_students_details %}
@@ -70,11 +76,11 @@
                     {% endfor %}
                 </ul>
             {% elif report_data.in_formation_count == 0 %}
-                <p class="text-muted ms-3"><small>Niciun student prezent în formație.</small></p>
+                <p class="text-muted ms-3"><small>Niciun student prezent la înviorare (din cei participanți).</small></p>
             {% endif %}
 
             <h5 class="mt-3">
-                <i class="fas fa-user-shield text-warning me-2"></i>La Servicii
+                <i class="fas fa-user-shield text-warning me-2"></i>La Servicii (în timpul înviorării)
                 <span class="badge rounded-pill bg-warning text-dark ms-1">{{ report_data.on_duty_students_details | length }}</span>
             </h5>
             {% if report_data.on_duty_students_details %}
@@ -84,12 +90,12 @@
                     {% endfor %}
                 </ul>
             {% elif (report_data.on_duty_students_details | length) == 0 %}
-                <p class="text-muted ms-3"><small>Niciun student la servicii.</small></p>
+                <p class="text-muted ms-3"><small>Niciun student la servicii (din cei participanți).</small></p>
             {% endif %}
 
             {% if report_data.platoon_graded_duty_students_details %}
             <h5 class="mt-3">
-                <i class="fas fa-user-check text-primary me-2"></i>Gradați Pluton (Activitate Specifică)
+                <i class="fas fa-user-check text-primary me-2"></i>Gradați Pluton (prezenți la înviorare)
                 <span class="badge rounded-pill bg-primary ms-1">{{ report_data.platoon_graded_duty_count }}</span>
             </h5>
             {% if report_data.platoon_graded_duty_students_details %}
@@ -98,30 +104,36 @@
                         <li class="list-group-item py-1 ps-2">{{ loop.index }}. {{ graded_student }}</li>
                     {% endfor %}
                 </ul>
-            {% elif report_data.platoon_graded_duty_count == 0 %}
-                <p class="text-muted ms-3"><small>Niciun student desemnat Gradat Pluton activ.</small></p>
             {% endif %}
             {% endif %}
 
-            {% if report_data.smt_students_details or report_data.smt_count > 0 %} {# Show if there are SMT students or count > 0 #}
+            {% if report_data.smt_count > 0 %}
             <h5 class="mt-3">
                 <i class="fas fa-user-md text-secondary me-2"></i>SMT (Scutire Medicală Totală)
                 <span class="badge rounded-pill bg-secondary ms-1">{{ report_data.smt_count }}</span>
             </h5>
-            {% if report_data.smt_students_details %}
                 <ul class="list-group list-group-flush mb-3" style="font-size: 0.9em;">
                     {% for smt_student in report_data.smt_students_details %}
                         <li class="list-group-item py-1 ps-2">{{ loop.index }}. {{ smt_student }}</li>
                     {% endfor %}
                 </ul>
-            {% elif report_data.smt_count == 0 %}
-                <p class="text-muted ms-3"><small>Niciun student SMT.</small></p>
             {% endif %}
+
+            {% if report_data.platoon_3_non_participants_count > 0 %}
+            <h5 class="mt-3">
+                <i class="fas fa-running text-muted me-2"></i>Plutonul 3 (Neparticipant Înviorare)
+                <span class="badge rounded-pill bg-light text-dark ms-1">{{ report_data.platoon_3_non_participants_count }}</span>
+            </h5>
+                <ul class="list-group list-group-flush mb-3" style="font-size: 0.9em;">
+                    {% for p3_student in report_data.platoon_3_non_participants_details %}
+                        <li class="list-group-item py-1 ps-2">{{ loop.index }}. {{ p3_student }}</li>
+                    {% endfor %}
+                </ul>
             {% endif %}
 
             <h5 class="mt-3">
-                <i class="fas fa-user-times text-danger me-2"></i>Absenți Motivat
-                <span class="badge rounded-pill bg-danger ms-1">{{ report_data.efectiv_absent_total }}</span>
+                <i class="fas fa-user-times text-danger me-2"></i>Alți Absenți Motivat (Permisii, Învoiri)
+                <span class="badge rounded-pill bg-danger ms-1">{{ report_data.absent_students_details | length }}</span>
             </h5>
             {% if report_data.absent_students_details %}
                 <ul class="list-group list-group-flush" style="font-size: 0.9em;">
@@ -129,22 +141,21 @@
                         <li class="list-group-item py-1 ps-2">{{ loop.index }}. {{ absent_student }}</li>
                     {% endfor %}
                 </ul>
-            {% elif report_data.efectiv_absent_total == 0 and report_data.efectiv_control > 0 %}
-                 <p class="text-success mt-1 ms-3"><small>Niciun student absent motivat.</small></p>
-            {% elif report_data.efectiv_control == 0 %}
-                 <p class="text-info mt-1 ms-3"><small>Nu există studenți în evidență.</small></p>
+            {% elif (report_data.absent_students_details | length) == 0 and report_data.efectiv_control > 0 and (report_data.efectiv_absent_total - report_data.smt_count - report_data.platoon_3_non_participants_count) == 0 %}
+                 <p class="text-success mt-1 ms-3"><small>Niciun alt student absent motivat.</small></p>
             {% endif %}
         </div>
-        <div id="reportTextForCopy" class="d-none">
+        <div id="reportTextForCopyInvigoration" class="d-none">
 {{- report_data.title }}
 Data raport: {{ report_data.datetime_checked }}
+{% if not report_data.platoon_3_participated_fully and report_data.platoon_3_non_participants_count > 0 -%}Notă: Plutonul 3 NU a participat.{% elif report_data.platoon_3_participated_fully -%}Notă: Plutonul 3 A participat.{% endif %}
 
 Efectiv Control (EC): {{ report_data.efectiv_control }}
 Efectiv Prezent (Ep): {{ report_data.efectiv_prezent_total }}
-Efectiv Absent (Ea): {{ report_data.efectiv_absent_total }}
+Efectiv Absent Total (Ea): {{ report_data.efectiv_absent_total }}
 
 {% if report_data.in_formation_count > 0 -%}
-PREZENȚI ÎN FORMAȚIE ({{ report_data.in_formation_count }}):
+PREZENȚI LA ÎNVIORARE ({{ report_data.in_formation_count }}):
 {% for present_student in report_data.in_formation_students_details -%}
   - {{ present_student }}
 {% endfor %}
@@ -158,21 +169,28 @@ LA SERVICII ({{ report_data.on_duty_students_details | length }}):
 {% endif %}
 
 {% if report_data.platoon_graded_duty_count > 0 -%}
-GRADAȚI PLUTON (Activitate Specifică) ({{ report_data.platoon_graded_duty_count }}):
+GRADAȚI PLUTON (prezenți la înviorare) ({{ report_data.platoon_graded_duty_count }}):
 {% for graded_student in report_data.platoon_graded_duty_students_details -%}
   - {{ graded_student }}
 {% endfor %}
 {% endif %}
 
-{% if report_data.smt_count > 0 -%} {# New SMT section for text report #}
+{% if report_data.smt_count > 0 -%}
 SMT (Scutire Medicală Totală) ({{ report_data.smt_count }}):
 {% for smt_student in report_data.smt_students_details -%}
   - {{ smt_student }}
 {% endfor %}
 {% endif %}
 
-{% if report_data.absent_students_details %} {# This list no longer includes SMT #}
-ABSENȚI MOTIVAT ({{ report_data.absent_students_details | length }}): {# Count based on details list length #}
+{% if report_data.platoon_3_non_participants_count > 0 -%}
+PLUTONUL 3 (Neparticipant Înviorare) ({{ report_data.platoon_3_non_participants_count }}):
+{% for p3_student in report_data.platoon_3_non_participants_details -%}
+  - {{ p3_student }}
+{% endfor %}
+{% endif %}
+
+{% if report_data.absent_students_details %}
+ALȚI ABSENȚI MOTIVAT (Permisii, Învoiri) ({{ report_data.absent_students_details | length }}):
 {% for absent_student in report_data.absent_students_details -%}
   - {{ absent_student }}
 {% endfor %}
@@ -183,27 +201,8 @@ ABSENȚI MOTIVAT ({{ report_data.absent_students_details | length }}): {# Count 
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const reportTypeSelect = document.getElementById('report_type');
-    const customDateTimeField = document.getElementById('custom_datetime');
-
-    function toggleCustomDateTime() {
-        if (reportTypeSelect.value === 'custom') {
-            customDateTimeField.closest('div').style.display = 'block'; // Arată câmpul
-            customDateTimeField.required = true;
-        } else {
-            customDateTimeField.closest('div').style.display = 'none'; // Ascunde câmpul
-            customDateTimeField.required = false;
-        }
-    }
-    if (reportTypeSelect) {
-        reportTypeSelect.addEventListener('change', toggleCustomDateTime);
-        toggleCustomDateTime(); // Setează starea inițială la încărcare
-    }
-});
-
-function copyReportToClipboard() {
-    const reportTextElement = document.getElementById('reportTextForCopy');
+function copyReportToClipboardInvigoration() {
+    const reportTextElement = document.getElementById('reportTextForCopyInvigoration');
     if (!reportTextElement) {
         alert('Eroare: Elementul text pentru copiere nu a fost găsit.');
         return;
@@ -212,22 +211,21 @@ function copyReportToClipboard() {
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(reportText).then(function() {
-            alert('Raportul a fost copiat în clipboard!');
+            alert('Raportul de înviorare a fost copiat în clipboard!');
         }, function(err) {
             console.error('Async: Could not copy text: ', err);
             alert('Eroare la copierea raportului (navigator). Încercați manual.');
         });
     } else if (document.queryCommandSupported && document.queryCommandSupported('copy')) {
-        // Pentru execCommand, trebuie să copiem textul într-un textarea temporar
         const textarea = document.createElement('textarea');
         textarea.value = reportText;
-        textarea.style.position = 'fixed'; // Previne scroll-ul
+        textarea.style.position = 'fixed';
         textarea.style.opacity = 0;
         document.body.appendChild(textarea);
         textarea.select();
         try {
             document.execCommand('copy');
-            alert('Raportul a fost copiat în clipboard! (fallback)');
+            alert('Raportul de înviorare a fost copiat în clipboard! (fallback)');
         } catch (err) {
             console.error('Fallback: Oops, unable to copy: ', err);
             alert('Eroare la copierea raportului (fallback). Încercați manual.');
