@@ -3174,18 +3174,18 @@ def export_permissions_word():
     document.add_heading('Raport Permisii Studenți', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     # User and date info
-    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}"
     p_user = document.add_paragraph()
     p_user.add_run(user_info_text).italic = True
     p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph() # Spacer
 
-    table = document.add_table(rows=1, cols=8) # Increased cols to 8
+    table = document.add_table(rows=1, cols=7) # Nr.crt, Grad, Nume și Prenume, Perioada, Grupa, Localitate, Transport
     table.style = 'Table Grid'
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
     hdr_cells = table.rows[0].cells
-    column_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Data Început', 'Data Sfârșit', 'Destinația', 'Mijloc Transport', 'Observații/Nr. Auto']
+    column_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Perioada', 'Grupa', 'Localitate', 'Transport']
     for i, title in enumerate(column_titles):
         hdr_cells[i].text = title
         hdr_cells[i].paragraphs[0].runs[0].font.bold = True
@@ -3195,41 +3195,38 @@ def export_permissions_word():
         row_cells = table.add_row().cells
         row_cells[0].text = str(idx + 1)
         row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
         row_cells[1].text = p.student.grad_militar
         row_cells[2].text = f"{p.student.nume} {p.student.prenume}"
 
-        row_cells[3].text = p.start_datetime.strftime('%d.%m.%Y %H:%M')
+        # Formatare perioadă: DD.MM-DD.MM.YYYY HH:MM - HH:MM
+        start_dt_local = EUROPE_BUCHAREST.localize(p.start_datetime) if p.start_datetime.tzinfo is None else p.start_datetime.astimezone(EUROPE_BUCHAREST)
+        end_dt_local = EUROPE_BUCHAREST.localize(p.end_datetime) if p.end_datetime.tzinfo is None else p.end_datetime.astimezone(EUROPE_BUCHAREST)
+
+        if start_dt_local.date() == end_dt_local.date():
+            period_str = f"{start_dt_local.strftime('%d.%m.%Y %H:%M')} - {end_dt_local.strftime('%H:%M')}"
+        else:
+            period_str = f"{start_dt_local.strftime('%d.%m.%Y %H:%M')} - {end_dt_local.strftime('%d.%m.%Y %H:%M')}"
+        row_cells[3].text = period_str
         row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[4].text = p.end_datetime.strftime('%d.%m.%Y %H:%M')
+
+        row_cells[4].text = p.student.pluton # Grupa
         row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[5].text = p.destination if p.destination else "-" # Localitate
+        row_cells[6].text = p.transport_mode if p.transport_mode else "-" # Transport
+        # Motivul/Nr. Auto nu mai este în formatul nou specificat.
 
-        row_cells[5].text = p.destination if p.destination else "-"
-        row_cells[6].text = p.transport_mode if p.transport_mode else "-"
-        row_cells[7].text = p.reason if p.reason else "-" # p.reason might contain car plate or other notes
-        row_cells[7].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER # Center if it's just car plate
-
-    # Set column widths (optional, but good for layout) - adjust for 8 columns
-    # Old: {0: 0.5, 1: 0.8, 2: 2.0, 3: 1.2, 4: 1.2, 5: 2.0, 6: 1.0} # Sum = 8.7
-    # New: NrCrt, Grad, Nume, Start, End, Dest, Transport, Obs/Auto
-    # Total width around 8.5-9 inches for A4 portrait with margins
-    widths = {
-        0: Inches(0.4), # Nr. Crt.
-        1: Inches(0.7), # Grad
-        2: Inches(1.8), # Nume și Prenume
-        3: Inches(1.1), # Data Început
-        4: Inches(1.1), # Data Sfârșit
-        5: Inches(1.5), # Destinația
-        6: Inches(1.2), # Mijloc Transport
-        7: Inches(1.2)  # Observații/Nr. Auto
+    # Ajustare lățimi coloane pentru noul format:
+    # NrCrt(0.4), Grad(0.7), Nume(1.8), Perioada(2.5), Grupa(0.8), Localitate(1.2), Transport(1.1)
+    # Total: 8.5 inches
+    new_widths = {
+        0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8),
+        3: Inches(2.5), 4: Inches(0.8), 5: Inches(1.2), 6: Inches(1.1)
     }
-    # Apply widths
-    for col_idx, width_val in widths.items():
+    for col_idx, width_val in new_widths.items():
         for row in table.rows:
-            try:
-                row.cells[col_idx].width = width_val
-            except IndexError:
-                app.logger.warning(f"IndexError setting width for col {col_idx} in export_permissions_word. Row has {len(row.cells)} cells.")
-
+            if col_idx < len(row.cells):
+                 row.cells[col_idx].width = width_val
 
     # Change font for the whole document (optional)
     style = document.styles['Normal']
@@ -3636,35 +3633,45 @@ def process_daily_leaves_text():
             # This 'else' block was problematic as find_student_for_bulk_import either returns a student or an error string.
             # If student_error is None, found_student should be valid.
             # The initial check for student_error should be sufficient.
-            # else: # Student negăsit sau eroare la parsarea inițială
-            #     app.logger.warning(f"Daily Leave Text Import: Could not identify student or invalid format for line '{line_raw}'.")
-            #     error_details_import_dl.append(f"Linia '{line_raw}': Nu s-a putut identifica studentul sau format invalid.")
-            #     error_count += 1
-            #     continue
             if not found_student: # Should be caught by student_error, but as an explicit double check.
                 app.logger.error(f"Daily Leave Text Import: found_student is None but student_error was also None for line '{line_raw}'. This indicates a logic flaw in find_student_for_bulk_import or here.")
                 error_details_import_dl.append(f"Linia '{line_raw}': Eroare internă la identificarea studentului.")
                 error_count += 1
                 continue
 
-
         # Determine start and end times for the leave
-        current_start_time = line_start_time_obj if line_start_time_obj else default_start_time_obj
-        current_end_time = line_end_time_obj if line_end_time_obj else default_end_time_obj # Corrected from line_end_time
+        # line_start_time_obj and line_end_time_obj are initialized to None or parsed time objects.
 
-        # This case might be redundant if default_end_time_obj is always used when line_end_time_obj is None
-        # However, if line_start_time_obj is provided but line_end_time_obj is not (e.g. malformed HH:MM- input),
-        # it's safer to ensure a valid end time.
-        if line_start_time_obj and not line_end_time_obj: # If only start time is given from regex, but end time failed parsing or wasn't there
-            current_end_time = default_end_time_obj
-            # Flash message might be too noisy if it happens often for default cases. Consider logging instead or only if truly ambiguous.
-            # flash(f"Doar ora de început specificată pentru {found_student.nume} în '{line_raw}'. S-a folosit ora de sfârșit implicită ({default_end_time_obj.strftime('%H:%M')}).", "info")
+        # Use parsed time if available, otherwise use default.
+        current_start_time = line_start_time_obj if line_start_time_obj is not None else default_start_time_obj
+        current_end_time = line_end_time_obj if line_end_time_obj is not None else default_end_time_obj
 
+        # If line_start_time_obj was parsed but line_end_time_obj was not (e.g., "HH:MM-" or malformed end),
+        # ensure current_end_time uses the default if line_end_time_obj ended up as None.
+        # This specific condition `if line_start_time_obj and not line_end_time_obj:`
+        # was identified as a potential source of UnboundLocalError if line_start_time_obj was not bound.
+        # However, with the initialization `line_start_time_obj = None`, it should be bound.
+        # The logic below ensures that if start time was parsed but end time parsing failed (so line_end_time_obj is None),
+        # we still use the default_end_time_obj. This is already handled by the line:
+        # `current_end_time = line_end_time_obj if line_end_time_obj is not None else default_end_time_obj`
+
+        # The condition `if line_start_time_obj and not line_end_time_obj:` can be removed
+        # as its intent is covered by the direct assignment with fallback.
+        # No, keeping it might be important if only start time was provided and valid, and we want specific behavior for that.
+        # Let's re-evaluate: if line_start_time_obj is a time object (truthy) and line_end_time_obj is None (falsy for `not`)
+        if line_start_time_obj is not None and line_end_time_obj is None:
+            # This means a start time was successfully parsed from the line, but an end time was not.
+            # In this scenario, we might want to ensure the default end time is used.
+            # The line `current_end_time = line_end_time_obj if line_end_time_obj is not None else default_end_time_obj`
+            # already correctly sets current_end_time to default_end_time_obj if line_end_time_obj is None.
+            # So this explicit if block is redundant if the goal is just to set default end time.
+            # However, if there was a specific reason for this block (e.g. logging, different default), it would stay.
+            # For now, let's assume the above assignment is sufficient.
+            pass # The logic is covered. This comment serves as an explanation.
 
         valid_schedule, validation_message = validate_daily_leave_times(current_start_time, current_end_time, apply_date_obj)
         if not valid_schedule:
             app.logger.warning(f"Daily Leave Text Import: Invalid schedule for student '{found_student.nume}' line '{line_raw}'. Message: {validation_message}")
-            # flash(f"Interval orar invalid pentru {found_student.nume} ({validation_message}). Încercare ignorată pentru '{line_raw}'.", "warning")
             error_details_import_dl.append(f"Linia '{line_raw}' ({found_student.nume}): Interval orar invalid - {validation_message}.")
             error_count +=1
             continue
@@ -4154,43 +4161,54 @@ def export_weekend_leaves_word():
     p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph()
 
-    table = document.add_table(rows=1, cols=6) # NrCrt, Grad, Nume, Weekend (Vineri), Intervale, Motiv
+    table = document.add_table(rows=1, cols=6) # Nr. crt, Grad, Nume, Prenume, Pluton(Grupa), Data
     table.style = 'Table Grid'
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
     hdr_cells = table.rows[0].cells
-    col_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Weekend (Vineri)', 'Intervale Selectate', 'Motiv (Biserică)']
-    for i, title in enumerate(col_titles):
+    # Format nou: Nr. crt, Grad, Nume, Prenume, Plutonul(Grupa), Data
+    column_titles = ['Nr. crt.', 'Grad', 'Nume', 'Prenume', 'Plutonul (Grupa)', 'Data']
+    for i, title in enumerate(column_titles):
         hdr_cells[i].text = title
         hdr_cells[i].paragraphs[0].runs[0].font.bold = True
         hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    for idx, leave in enumerate(leaves_to_export):
-        row_cells = table.add_row().cells
-        row_cells[0].text = str(idx + 1)
-        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[1].text = leave.student.grad_militar
-        row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}"
-        row_cells[3].text = leave.weekend_start_date.strftime('%d.%m.%Y')
-        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    current_row_idx = 0
+    for leave in leaves_to_export:
+        # Fiecare zi din învoirea de weekend va fi o intrare separată în tabel
+        intervals = leave.get_intervals() # Aceasta returnează zilele selectate (Vineri, Sâmbătă, Duminică)
 
-        intervals_str = []
-        for interval in leave.get_intervals():
-            intervals_str.append(f"{interval['day_name']} ({interval['start'].strftime('%d.%m')}) {interval['start'].strftime('%H:%M')}-{interval['end'].strftime('%H:%M')}")
-        row_cells[4].text = "; ".join(intervals_str) if intervals_str else "N/A"
+        for interval in intervals:
+            # interval['start'] este un datetime aware object pentru începutul zilei de învoire
+            # interval['day_name'] este numele zilei (Vineri, Sambata, Duminica)
+            # interval['start'].date() ne dă data specifică a acelei zile de învoire
 
-        reason_text = leave.reason or ""
-        if leave.duminica_biserica:
-            reason_text = (reason_text + " (Biserică Duminică)").strip()
-        if not reason_text: reason_text = "-"
-        row_cells[5].text = reason_text
+            current_row_idx += 1
+            row_cells = table.add_row().cells
+            row_cells[0].text = str(current_row_idx)
+            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    # Approx widths: NrCrt(0.5), Grad(0.8), Nume(2.0), Vineri(1.0), Intervale(2.5), Motiv(1.5)
-    widths = {0: 0.5, 1: 0.7, 2: 1.8, 3: 1.0, 4: 2.8, 5: 1.5} # Inches
-    for col_idx, width_val in widths.items():
+            row_cells[1].text = leave.student.grad_militar
+            row_cells[2].text = leave.student.nume
+            row_cells[3].text = leave.student.prenume
+            row_cells[4].text = leave.student.pluton # Presupunând că 'pluton' stochează grupa
+            row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            # Data specifică a zilei de învoire (Vineri, Sâmbătă sau Duminică)
+            specific_leave_date = interval['start'].astimezone(EUROPE_BUCHAREST).date()
+            row_cells[5].text = specific_leave_date.strftime('%d.%m.%Y')
+            row_cells[5].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Ajustare lățimi coloane pentru noul format
+    # NrCrt(0.5), Grad(0.8), Nume(1.5), Prenume(1.5), Pluton(1.0), Data(1.0)
+    new_widths = {
+        0: Inches(0.5), 1: Inches(0.8), 2: Inches(1.5),
+        3: Inches(1.5), 4: Inches(1.0), 5: Inches(1.0)
+    }
+    for col_idx, width_val in new_widths.items():
         for row in table.rows:
-            if col_idx < len(row.cells): # Check if cell exists
-                 row.cells[col_idx].width = Inches(width_val)
+            if col_idx < len(row.cells):
+                 row.cells[col_idx].width = width_val
 
     style = document.styles['Normal']
     font = style.font
@@ -5685,11 +5703,12 @@ def admin_export_permissions_word():
     p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph()
 
-    table = document.add_table(rows=1, cols=8)
+    table = document.add_table(rows=1, cols=7) # Nr.crt, Grad, Nume și Prenume, Perioada, Grupa, Localitate, Transport
     table.style = 'Table Grid'
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
     hdr_cells = table.rows[0].cells
-    column_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Data Început', 'Data Sfârșit', 'Destinația', 'Mijloc Transport', 'Observații/Nr. Auto']
+    column_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Perioada', 'Grupa', 'Localitate', 'Transport']
     for i, title in enumerate(column_titles):
         hdr_cells[i].text = title
         hdr_cells[i].paragraphs[0].runs[0].font.bold = True
@@ -5699,21 +5718,32 @@ def admin_export_permissions_word():
         row_cells = table.add_row().cells
         row_cells[0].text = str(idx + 1)
         row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
         row_cells[1].text = p.student.grad_militar
         row_cells[2].text = f"{p.student.nume} {p.student.prenume}"
-        row_cells[3].text = p.start_datetime.strftime('%d.%m.%Y %H:%M')
+
+        start_dt_local = EUROPE_BUCHAREST.localize(p.start_datetime) if p.start_datetime.tzinfo is None else p.start_datetime.astimezone(EUROPE_BUCHAREST)
+        end_dt_local = EUROPE_BUCHAREST.localize(p.end_datetime) if p.end_datetime.tzinfo is None else p.end_datetime.astimezone(EUROPE_BUCHAREST)
+        if start_dt_local.date() == end_dt_local.date():
+            period_str = f"{start_dt_local.strftime('%d.%m.%Y %H:%M')} - {end_dt_local.strftime('%H:%M')}"
+        else:
+            period_str = f"{start_dt_local.strftime('%d.%m.%Y %H:%M')} - {end_dt_local.strftime('%d.%m.%Y %H:%M')}"
+        row_cells[3].text = period_str
         row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[4].text = p.end_datetime.strftime('%d.%m.%Y %H:%M')
+
+        row_cells[4].text = p.student.pluton
         row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         row_cells[5].text = p.destination if p.destination else "-"
         row_cells[6].text = p.transport_mode if p.transport_mode else "-"
-        row_cells[7].text = p.reason if p.reason else "-"
-        row_cells[7].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    widths = {0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8), 3: Inches(1.1), 4: Inches(1.1), 5: Inches(1.5), 6: Inches(1.2), 7: Inches(1.2)}
-    for col_idx, width_val in widths.items():
+    new_widths = {
+        0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8),
+        3: Inches(2.5), 4: Inches(0.8), 5: Inches(1.2), 6: Inches(1.1)
+    }
+    for col_idx, width_val in new_widths.items():
         for row in table.rows:
-            if col_idx < len(row.cells): row.cells[col_idx].width = width_val
+            if col_idx < len(row.cells):
+                 row.cells[col_idx].width = width_val
 
     style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
     f = io.BytesIO(); document.save(f); f.seek(0)
@@ -5743,32 +5773,44 @@ def admin_export_weekend_leaves_word():
     p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True; p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph()
 
-    table = document.add_table(rows=1, cols=6)
-    table.style = 'Table Grid'; table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table = document.add_table(rows=1, cols=6) # Nr. crt, Grad, Nume, Prenume, Pluton(Grupa), Data
+    table.style = 'Table Grid'
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
     hdr_cells = table.rows[0].cells
-    col_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Weekend (Vineri)', 'Intervale Selectate', 'Motiv (Biserică)']
-    for i, title in enumerate(col_titles):
-        hdr_cells[i].text = title; hdr_cells[i].paragraphs[0].runs[0].font.bold = True; hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    column_titles = ['Nr. crt.', 'Grad', 'Nume', 'Prenume', 'Plutonul (Grupa)', 'Data']
+    for i, title in enumerate(column_titles):
+        hdr_cells[i].text = title
+        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
+        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    for idx, leave in enumerate(leaves_to_export):
-        row_cells = table.add_row().cells
-        row_cells[0].text = str(idx + 1); row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[1].text = leave.student.grad_militar
-        row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}"
-        row_cells[3].text = leave.weekend_start_date.strftime('%d.%m.%Y'); row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    current_row_idx = 0
+    for leave in leaves_to_export:
+        intervals = leave.get_intervals()
+        for interval in intervals:
+            current_row_idx += 1
+            row_cells = table.add_row().cells
+            row_cells[0].text = str(current_row_idx)
+            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        intervals_str = [f"{i['day_name']} ({i['start'].strftime('%d.%m')}) {i['start'].strftime('%H:%M')}-{i['end'].strftime('%H:%M')}" for i in leave.get_intervals()]
-        row_cells[4].text = "; ".join(intervals_str) if intervals_str else "N/A"
+            row_cells[1].text = leave.student.grad_militar
+            row_cells[2].text = leave.student.nume
+            row_cells[3].text = leave.student.prenume
+            row_cells[4].text = leave.student.pluton
+            row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        reason_text = leave.reason or ""
-        if leave.duminica_biserica and any(d['day_name']=='Duminica' for d in leave.get_intervals()): reason_text = (reason_text + " (Biserică Duminică)").strip()
-        if not reason_text: reason_text = "-"
-        row_cells[5].text = reason_text
+            specific_leave_date = interval['start'].astimezone(EUROPE_BUCHAREST).date()
+            row_cells[5].text = specific_leave_date.strftime('%d.%m.%Y')
+            row_cells[5].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    widths = {0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8), 3: Inches(1.0), 4: Inches(2.8), 5: Inches(1.5)}
-    for col_idx, width_val in widths.items():
+    new_widths = {
+        0: Inches(0.5), 1: Inches(0.8), 2: Inches(1.5),
+        3: Inches(1.5), 4: Inches(1.0), 5: Inches(1.0)
+    }
+    for col_idx, width_val in new_widths.items():
         for row in table.rows:
-            if col_idx < len(row.cells): row.cells[col_idx].width = width_val
+            if col_idx < len(row.cells):
+                 row.cells[col_idx].width = width_val
 
     style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
     f = io.BytesIO(); document.save(f); f.seek(0)
@@ -5810,28 +5852,47 @@ def company_commander_export_permissions_word():
     p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True; p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph()
 
-    table = document.add_table(rows=1, cols=8) # Standard 8 columns
-    table.style = 'Table Grid'; table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table = document.add_table(rows=1, cols=7) # Nr.crt, Grad, Nume și Prenume, Perioada, Grupa, Localitate, Transport
+    table.style = 'Table Grid'
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
     hdr_cells = table.rows[0].cells
-    column_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Data Început', 'Data Sfârșit', 'Destinația', 'Mijloc Transport', 'Observații/Nr. Auto']
+    column_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Perioada', 'Grupa', 'Localitate', 'Transport']
     for i, title in enumerate(column_titles):
-        hdr_cells[i].text = title; hdr_cells[i].paragraphs[0].runs[0].font.bold = True; hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        hdr_cells[i].text = title
+        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
+        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     for idx, p in enumerate(permissions_to_export):
         row_cells = table.add_row().cells
-        row_cells[0].text = str(idx + 1); row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[0].text = str(idx + 1)
+        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
         row_cells[1].text = p.student.grad_militar
         row_cells[2].text = f"{p.student.nume} {p.student.prenume}"
-        row_cells[3].text = p.start_datetime.strftime('%d.%m.%Y %H:%M'); row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[4].text = p.end_datetime.strftime('%d.%m.%Y %H:%M'); row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        start_dt_local = EUROPE_BUCHAREST.localize(p.start_datetime) if p.start_datetime.tzinfo is None else p.start_datetime.astimezone(EUROPE_BUCHAREST)
+        end_dt_local = EUROPE_BUCHAREST.localize(p.end_datetime) if p.end_datetime.tzinfo is None else p.end_datetime.astimezone(EUROPE_BUCHAREST)
+        if start_dt_local.date() == end_dt_local.date():
+            period_str = f"{start_dt_local.strftime('%d.%m.%Y %H:%M')} - {end_dt_local.strftime('%H:%M')}"
+        else:
+            period_str = f"{start_dt_local.strftime('%d.%m.%Y %H:%M')} - {end_dt_local.strftime('%d.%m.%Y %H:%M')}"
+        row_cells[3].text = period_str
+        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        row_cells[4].text = p.student.pluton
+        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         row_cells[5].text = p.destination if p.destination else "-"
         row_cells[6].text = p.transport_mode if p.transport_mode else "-"
-        row_cells[7].text = p.reason if p.reason else "-"; row_cells[7].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    widths = {0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8), 3: Inches(1.1), 4: Inches(1.1), 5: Inches(1.5), 6: Inches(1.2), 7: Inches(1.2)}
-    for col_idx, width_val in widths.items():
+    new_widths = {
+        0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8),
+        3: Inches(2.5), 4: Inches(0.8), 5: Inches(1.2), 6: Inches(1.1)
+    }
+    for col_idx, width_val in new_widths.items():
         for row in table.rows:
-            if col_idx < len(row.cells): row.cells[col_idx].width = width_val
+            if col_idx < len(row.cells):
+                 row.cells[col_idx].width = width_val
 
     style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
     f = io.BytesIO(); document.save(f); f.seek(0)
@@ -5872,32 +5933,44 @@ def company_commander_export_weekend_leaves_word():
     p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True; p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph()
 
-    table = document.add_table(rows=1, cols=6)
-    table.style = 'Table Grid'; table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table = document.add_table(rows=1, cols=6) # Nr. crt, Grad, Nume, Prenume, Pluton(Grupa), Data
+    table.style = 'Table Grid'
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
     hdr_cells = table.rows[0].cells
-    col_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Weekend (Vineri)', 'Intervale Selectate', 'Motiv (Biserică)']
-    for i, title in enumerate(col_titles):
-        hdr_cells[i].text = title; hdr_cells[i].paragraphs[0].runs[0].font.bold = True; hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    column_titles = ['Nr. crt.', 'Grad', 'Nume', 'Prenume', 'Plutonul (Grupa)', 'Data']
+    for i, title in enumerate(column_titles):
+        hdr_cells[i].text = title
+        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
+        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    for idx, leave in enumerate(leaves_to_export):
-        row_cells = table.add_row().cells
-        row_cells[0].text = str(idx + 1); row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[1].text = leave.student.grad_militar
-        row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}"
-        row_cells[3].text = leave.weekend_start_date.strftime('%d.%m.%Y'); row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    current_row_idx = 0
+    for leave in leaves_to_export:
+        intervals = leave.get_intervals()
+        for interval in intervals:
+            current_row_idx += 1
+            row_cells = table.add_row().cells
+            row_cells[0].text = str(current_row_idx)
+            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        intervals_str = [f"{i['day_name']} ({i['start'].strftime('%d.%m')}) {i['start'].strftime('%H:%M')}-{i['end'].strftime('%H:%M')}" for i in leave.get_intervals()]
-        row_cells[4].text = "; ".join(intervals_str) if intervals_str else "N/A"
+            row_cells[1].text = leave.student.grad_militar
+            row_cells[2].text = leave.student.nume
+            row_cells[3].text = leave.student.prenume
+            row_cells[4].text = leave.student.pluton
+            row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        reason_text = leave.reason or ""
-        if leave.duminica_biserica and any(d['day_name']=='Duminica' for d in leave.get_intervals()): reason_text = (reason_text + " (Biserică Duminică)").strip()
-        if not reason_text: reason_text = "-"
-        row_cells[5].text = reason_text
+            specific_leave_date = interval['start'].astimezone(EUROPE_BUCHAREST).date()
+            row_cells[5].text = specific_leave_date.strftime('%d.%m.%Y')
+            row_cells[5].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    widths = {0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8), 3: Inches(1.0), 4: Inches(2.8), 5: Inches(1.5)}
-    for col_idx, width_val in widths.items():
+    new_widths = {
+        0: Inches(0.5), 1: Inches(0.8), 2: Inches(1.5),
+        3: Inches(1.5), 4: Inches(1.0), 5: Inches(1.0)
+    }
+    for col_idx, width_val in new_widths.items():
         for row in table.rows:
-            if col_idx < len(row.cells): row.cells[col_idx].width = width_val
+            if col_idx < len(row.cells):
+                 row.cells[col_idx].width = width_val
 
     style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
     f = io.BytesIO(); document.save(f); f.seek(0)
@@ -5939,28 +6012,47 @@ def battalion_commander_export_permissions_word():
     p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True; p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph()
 
-    table = document.add_table(rows=1, cols=8)
-    table.style = 'Table Grid'; table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table = document.add_table(rows=1, cols=7) # Nr.crt, Grad, Nume și Prenume, Perioada, Grupa, Localitate, Transport
+    table.style = 'Table Grid'
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
     hdr_cells = table.rows[0].cells
-    column_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Data Început', 'Data Sfârșit', 'Destinația', 'Mijloc Transport', 'Observații/Nr. Auto']
+    column_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Perioada', 'Grupa', 'Localitate', 'Transport']
     for i, title in enumerate(column_titles):
-        hdr_cells[i].text = title; hdr_cells[i].paragraphs[0].runs[0].font.bold = True; hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        hdr_cells[i].text = title
+        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
+        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     for idx, p in enumerate(permissions_to_export):
         row_cells = table.add_row().cells
-        row_cells[0].text = str(idx + 1); row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[0].text = str(idx + 1)
+        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
         row_cells[1].text = p.student.grad_militar
         row_cells[2].text = f"{p.student.nume} {p.student.prenume}"
-        row_cells[3].text = p.start_datetime.strftime('%d.%m.%Y %H:%M'); row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[4].text = p.end_datetime.strftime('%d.%m.%Y %H:%M'); row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        start_dt_local = EUROPE_BUCHAREST.localize(p.start_datetime) if p.start_datetime.tzinfo is None else p.start_datetime.astimezone(EUROPE_BUCHAREST)
+        end_dt_local = EUROPE_BUCHAREST.localize(p.end_datetime) if p.end_datetime.tzinfo is None else p.end_datetime.astimezone(EUROPE_BUCHAREST)
+        if start_dt_local.date() == end_dt_local.date():
+            period_str = f"{start_dt_local.strftime('%d.%m.%Y %H:%M')} - {end_dt_local.strftime('%H:%M')}"
+        else:
+            period_str = f"{start_dt_local.strftime('%d.%m.%Y %H:%M')} - {end_dt_local.strftime('%d.%m.%Y %H:%M')}"
+        row_cells[3].text = period_str
+        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        row_cells[4].text = p.student.pluton
+        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         row_cells[5].text = p.destination if p.destination else "-"
         row_cells[6].text = p.transport_mode if p.transport_mode else "-"
-        row_cells[7].text = p.reason if p.reason else "-"; row_cells[7].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    widths = {0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8), 3: Inches(1.1), 4: Inches(1.1), 5: Inches(1.5), 6: Inches(1.2), 7: Inches(1.2)}
-    for col_idx, width_val in widths.items():
+    new_widths = {
+        0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8),
+        3: Inches(2.5), 4: Inches(0.8), 5: Inches(1.2), 6: Inches(1.1)
+    }
+    for col_idx, width_val in new_widths.items():
         for row in table.rows:
-            if col_idx < len(row.cells): row.cells[col_idx].width = width_val
+            if col_idx < len(row.cells):
+                 row.cells[col_idx].width = width_val
 
     style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
     f = io.BytesIO(); document.save(f); f.seek(0)
@@ -6001,38 +6093,143 @@ def battalion_commander_export_weekend_leaves_word():
     p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True; p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph()
 
-    table = document.add_table(rows=1, cols=6)
-    table.style = 'Table Grid'; table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table = document.add_table(rows=1, cols=6) # Nr. crt, Grad, Nume, Prenume, Pluton(Grupa), Data
+    table.style = 'Table Grid'
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
     hdr_cells = table.rows[0].cells
-    col_titles = ['Nr. Crt.', 'Grad', 'Nume și Prenume', 'Weekend (Vineri)', 'Intervale Selectate', 'Motiv (Biserică)']
-    for i, title in enumerate(col_titles):
-        hdr_cells[i].text = title; hdr_cells[i].paragraphs[0].runs[0].font.bold = True; hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    column_titles = ['Nr. crt.', 'Grad', 'Nume', 'Prenume', 'Plutonul (Grupa)', 'Data']
+    for i, title in enumerate(column_titles):
+        hdr_cells[i].text = title
+        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
+        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    for idx, leave in enumerate(leaves_to_export):
-        row_cells = table.add_row().cells
-        row_cells[0].text = str(idx + 1); row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[1].text = leave.student.grad_militar
-        row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}"
-        row_cells[3].text = leave.weekend_start_date.strftime('%d.%m.%Y'); row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    current_row_idx = 0
+    for leave in leaves_to_export:
+        intervals = leave.get_intervals()
+        for interval in intervals:
+            current_row_idx += 1
+            row_cells = table.add_row().cells
+            row_cells[0].text = str(current_row_idx)
+            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        intervals_str = [f"{i['day_name']} ({i['start'].strftime('%d.%m')}) {i['start'].strftime('%H:%M')}-{i['end'].strftime('%H:%M')}" for i in leave.get_intervals()]
-        row_cells[4].text = "; ".join(intervals_str) if intervals_str else "N/A"
+            row_cells[1].text = leave.student.grad_militar
+            row_cells[2].text = leave.student.nume
+            row_cells[3].text = leave.student.prenume
+            row_cells[4].text = leave.student.pluton
+            row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        reason_text = leave.reason or ""
-        if leave.duminica_biserica and any(d['day_name']=='Duminica' for d in leave.get_intervals()): reason_text = (reason_text + " (Biserică Duminică)").strip()
-        if not reason_text: reason_text = "-"
-        row_cells[5].text = reason_text
+            specific_leave_date = interval['start'].astimezone(EUROPE_BUCHAREST).date()
+            row_cells[5].text = specific_leave_date.strftime('%d.%m.%Y')
+            row_cells[5].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    widths = {0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8), 3: Inches(1.0), 4: Inches(2.8), 5: Inches(1.5)}
-    for col_idx, width_val in widths.items():
+    new_widths = {
+        0: Inches(0.5), 1: Inches(0.8), 2: Inches(1.5),
+        3: Inches(1.5), 4: Inches(1.0), 5: Inches(1.0)
+    }
+    for col_idx, width_val in new_widths.items():
         for row in table.rows:
-            if col_idx < len(row.cells): row.cells[col_idx].width = width_val
+            if col_idx < len(row.cells):
+                 row.cells[col_idx].width = width_val
 
     style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
     f = io.BytesIO(); document.save(f); f.seek(0)
     filename = f"Raport_Weekend_Batalion_{battalion_id_str}_{date.today().strftime('%Y%m%d')}.docx"
     return send_file(f, download_name=filename, as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
 
+# --- Gradat Daily Leaves Word Export ---
+@app.route('/gradat/daily_leaves/export_word', endpoint='gradat_export_daily_leaves_word')
+@login_required
+def gradat_export_daily_leaves_word():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    student_id_tuples = db.session.query(Student.id).filter_by(created_by_user_id=current_user.id).all()
+    student_ids = [s[0] for s in student_id_tuples]
+
+    if not student_ids:
+        flash('Nu aveți studenți pentru a exporta învoiri zilnice.', 'info')
+        return redirect(url_for('list_daily_leaves'))
+
+    # Fetch all approved daily leaves for the gradat's students
+    # For export, typically all relevant (approved) leaves are included, or based on a filter.
+    # Here, we'll fetch all approved ones and sort them.
+    leaves_to_export = DailyLeave.query.options(
+        joinedload(DailyLeave.student)
+    ).filter(
+        DailyLeave.student_id.in_(student_ids),
+        DailyLeave.status == 'Aprobată'
+    ).join(Student).order_by(
+        DailyLeave.leave_date.asc(), # Sort by date first
+        Student.nume.asc(),          # Then by student name
+        Student.prenume.asc(),
+        DailyLeave.start_time.asc()
+    ).all()
+
+    if not leaves_to_export:
+        flash('Nicio învoire zilnică aprobată de exportat.', 'info')
+        return redirect(url_for('list_daily_leaves'))
+
+    document = Document()
+    document.add_heading('Raport Învoiri Zilnice', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}"
+    p_user = document.add_paragraph()
+    p_user.add_run(user_info_text).italic = True
+    p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    document.add_paragraph() # Spacer
+
+    table = document.add_table(rows=1, cols=6) # Nr. crt, Grad, Nume, Prenume, Pluton(Grupa), Data
+    table.style = 'Table Grid'
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    hdr_cells = table.rows[0].cells
+    column_titles = ['Nr. crt.', 'Grad', 'Nume', 'Prenume', 'Plutonul (Grupa)', 'Data']
+    for i, title in enumerate(column_titles):
+        hdr_cells[i].text = title
+        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
+        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    for idx, leave in enumerate(leaves_to_export):
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(idx + 1)
+        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[1].text = leave.student.grad_militar
+        row_cells[2].text = leave.student.nume
+        row_cells[3].text = leave.student.prenume
+        row_cells[4].text = leave.student.pluton # Assuming 'pluton' field in Student model stores the group
+        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[5].text = leave.leave_date.strftime('%d.%m.%Y')
+        row_cells[5].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # Ora nu este cerută în formatul specificat, deci nu o adăugăm.
+
+    # Set column widths (optional, but good for layout)
+    # NrCrt(0.5), Grad(0.8), Nume(1.5), Prenume(1.5), Pluton(1.0), Data(1.0)
+    widths = {
+        0: Inches(0.5), 1: Inches(0.8), 2: Inches(1.5),
+        3: Inches(1.5), 4: Inches(1.0), 5: Inches(1.0)
+    }
+    for col_idx, width_val in widths.items():
+        for row in table.rows:
+            if col_idx < len(row.cells):
+                 row.cells[col_idx].width = width_val
+
+    style = document.styles['Normal']
+    font = style.font
+    font.name = 'Calibri'
+    font.size = Pt(11)
+
+    f = io.BytesIO()
+    document.save(f)
+    f.seek(0)
+
+    filename = f"Raport_Invoiri_Zilnice_{current_user.username}_{get_localized_now().date().strftime('%Y%m%d')}.docx"
+
+    return send_file(f,
+                     download_name=filename,
+                     as_attachment=True,
+                     mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
 
 # START JULES BLOCK - NEW AND MODIFIED FUNCTIONS (PROBLEMS 2 & 4)
 
