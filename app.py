@@ -2,6 +2,7 @@ from flask import Flask, render_template, redirect, url_for, flash, request, jso
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate # Added for database migrations
 from sqlalchemy.orm import joinedload
+import sqlalchemy as sa # Adăugat pentru server_default=sa.text()
 import io
 from docx import Document
 from docx.shared import Pt, Inches
@@ -11,13 +12,13 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, curren
 from werkzeug.security import generate_password_hash, check_password_hash
 import bcrypt
 import os
-import secrets 
-from datetime import datetime, date, time, timedelta 
-from sqlalchemy import func, or_, and_
-import re 
+import secrets
+from datetime import datetime, date, time, timedelta
+from sqlalchemy import func, or_, and_, inspect, text # Am adăugat text aici explicit, deși sa.text ar fi funcționat cu importul de mai sus
+import re
 from unidecode import unidecode
 import json
-from sqlalchemy import inspect
+# from sqlalchemy import inspect # Duplicat, inspect este deja importat mai sus
 import pytz # Adăugat pentru fusuri orare
 
 # Inițializare aplicație Flask
@@ -130,7 +131,7 @@ class Student(db.Model):
     creator = db.relationship('User', backref=db.backref('students_created', lazy=True))
     is_platoon_graded_duty = db.Column(db.Boolean, default=False, nullable=False) # True if leader in own platoon
     assigned_graded_platoon = db.Column(db.String(50), nullable=True) # Platoon ID they are assigned to lead, if different from their own or to be explicit
-    is_smt = db.Column(db.Boolean, default=False, nullable=False) # Total Medical Exemption
+    is_smt = db.Column(db.Boolean, default=False, server_default=sa.text('0'), nullable=False) # Total Medical Exemption
     exemption_details = db.Column(db.String(255), nullable=True) # Details for other/partial exemptions
 
     def __repr__(self):
