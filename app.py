@@ -3261,92 +3261,75 @@ def export_permissions_word():
 
     document = Document()
     # General document heading (optional, could be removed if each table has a full title)
+    # General document heading (optional, could be removed if each table has a full title)
     # document.add_heading('Raport Permisii Studenți', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     # User and date info
     user_info_text = f"Raport generat de: {current_user.username}\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}"
-    p_user = document.add_paragraph()
-    p_user.add_run(user_info_text).italic = True
-    p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_user_info = document.add_paragraph()
+    p_user_info.add_run(user_info_text).italic = True
+    p_user_info.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph() # Spacer
 
-    table = document.add_table(rows=1, cols=6) # Nr.crt, Grad, Nume și Prenume, Perioada, Grupa, Localitate, Transport (removed one col)
-    table.style = 'Table Grid'
-    table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    hdr_cells = table.rows[0].cells
-    column_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Perioada', 'Grupa', 'Localitate', 'Transport']
-    # The user request implies combining Nume and Prenume, so the number of columns should be 6 if 'Transport' is the last.
-    # Original: Nr.crt, Grad, Nume și Prenume, Perioada, Grupa, Localitate, Transport (7 cols)
-    # If Nume și Prenume was already combined, then this part was fine.
-    # Let's re-check the original request. "La toate exporturile Nume Prenume să nu fie coloane separate, ci o coloană cu Nume și prenume"
-    # This means the original code was likely already correct in having a single 'Nume și Prenume' column header if it used that title.
-    # The change is to ensure the *data* f"{p.student.nume} {p.student.prenume}" is used and that there aren't separate Nume and Prenume data columns.
-    # The code block for `export_permissions_word` already had `column_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', ...]`
-    # and `row_cells[2].text = f"{p.student.nume} {p.student.prenume}"`
-    # This suggests this specific function *might* have already been compliant with the request.
-    # However, the user's request is generic. I will ensure the number of columns in add_table and widths match the titles.
-    # If 'Nume și Prenume' is one column, then 7 titles mean 7 columns.
-
-    # Assuming the titles are what they should be:
-    # ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Perioada', 'Grupa', 'Localitate', 'Transport'] - this is 7 columns.
-    # The existing code `table = document.add_table(rows=1, cols=7)` matches this.
-    # The data `row_cells[2].text = f"{p.student.nume} {p.student.prenume}"` also matches.
-    # The widths `new_widths` also has 7 entries (0 to 6).
-    # So, for `export_permissions_word`, it seems it was already correct. I will make no change to this function block.
-    # I will proceed assuming this and apply changes to other functions where Nume and Prenume might be separate.
-
-    # Re-evaluating: The plan step includes "Adjust table column headers and widths accordingly."
-    # If the function was already correct, no adjustment is needed. I will log this.
-    # For safety, I will output the code block as it is, to confirm no accidental change.
-
-    # NO CHANGE TO THIS BLOCK as it seems to already meet the requirement.
-    # The table has 7 columns, the 3rd column (index 2) is 'Nume și Prenume'.
-    # Data is combined: f"{p.student.nume} {p.student.prenume}"
-
-    # Keeping the original code block:
-    table = document.add_table(rows=1, cols=7)
-    table.style = 'Table Grid'
-    table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    hdr_cells = table.rows[0].cells
-    column_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Perioada', 'Grupa', 'Localitate', 'Transport']
-    for i, title in enumerate(column_titles):
-        hdr_cells[i].text = title
-        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
-        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    for idx, p in enumerate(permissions_to_export):
-        row_cells = table.add_row().cells
-        row_cells[0].text = str(idx + 1)
-        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        row_cells[1].text = p.student.grad_militar
-        row_cells[2].text = f"{p.student.nume} {p.student.prenume}" # This is already combined
-
-        start_dt_local = EUROPE_BUCHAREST.localize(p.start_datetime) if p.start_datetime.tzinfo is None else p.start_datetime.astimezone(EUROPE_BUCHAREST)
-        end_dt_local = EUROPE_BUCHAREST.localize(p.end_datetime) if p.end_datetime.tzinfo is None else p.end_datetime.astimezone(EUROPE_BUCHAREST)
-
-        if start_dt_local.date() == end_dt_local.date():
-            period_str = f"{start_dt_local.strftime('%d.%m.%Y %H:%M')} - {end_dt_local.strftime('%H:%M')}"
-        else:
-            period_str = f"{start_dt_local.strftime('%d.%m.%Y %H:%M')} - {end_dt_local.strftime('%d.%m.%Y %H:%M')}"
-        row_cells[3].text = period_str
-        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        row_cells[4].text = p.student.pluton
-        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[5].text = p.destination if p.destination else "-"
-        row_cells[6].text = p.transport_mode if p.transport_mode else "-"
-
+    # Column titles for each table (Period column is removed)
+    column_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Grupa', 'Localitate', 'Transport']
+    # New column widths for 6 columns
     new_widths = {
-        0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8), # Nume și Prenume
-        3: Inches(2.5), 4: Inches(0.8), 5: Inches(1.2), 6: Inches(1.1)
-    }
-    for col_idx, width_val in new_widths.items():
-        for row in table.rows:
-            if col_idx < len(row.cells):
-                 row.cells[col_idx].width = width_val
+        0: Inches(0.4),  # Nr. crt.
+        1: Inches(0.8),  # Grad
+        2: Inches(2.0),  # Nume și Prenume
+        3: Inches(0.8),  # Grupa
+        4: Inches(1.5),  # Localitate
+        5: Inches(1.5)   # Transport
+    } # Total width approx 7.0 inches
+
+    for period_key, permissions_in_period in sorted_grouped_permissions:
+        start_dt_period = EUROPE_BUCHAREST.localize(period_key[0]) if period_key[0].tzinfo is None else period_key[0].astimezone(EUROPE_BUCHAREST)
+        end_dt_period = EUROPE_BUCHAREST.localize(period_key[1]) if period_key[1].tzinfo is None else period_key[1].astimezone(EUROPE_BUCHAREST)
+
+        # Format period string for the title
+        # Example: Joi, 25.07.2024 (14:00) - Duminică, 28.07.2024 (22:00)
+        period_title_str = (
+            f"{get_day_name_ro(start_dt_period)}, {start_dt_period.strftime('%d.%m.%Y (%H:%M')}) - "
+            f"{get_day_name_ro(end_dt_period)}, {end_dt_period.strftime('%d.%m.%Y (%H:%M)')}"
+        )
+
+        document.add_heading(f"Tabel nominal cu studenții care pleacă in permisie în perioada {period_title_str}", level=2).alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        table = document.add_table(rows=1, cols=len(column_titles)) # Create table with 6 columns
+        table.style = 'Table Grid'
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        hdr_cells = table.rows[0].cells
+        for i, title in enumerate(column_titles):
+            hdr_cells[i].text = title
+            hdr_cells[i].paragraphs[0].runs[0].font.bold = True
+            hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # Sort permissions within this period group by student name for consistency
+        permissions_in_period.sort(key=lambda p: (p.student.nume, p.student.prenume))
+
+        for idx, p_item in enumerate(permissions_in_period):
+            row_cells = table.add_row().cells
+            row_cells[0].text = str(idx + 1)
+            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            row_cells[1].text = p_item.student.grad_militar
+            row_cells[2].text = f"{p_item.student.nume} {p_item.student.prenume}" # Combined name
+
+            row_cells[3].text = p_item.student.pluton # Grupa/Pluton
+            row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            row_cells[4].text = p_item.destination if p_item.destination else "-"
+            row_cells[5].text = p_item.transport_mode if p_item.transport_mode else "-"
+
+        # Apply column widths to the current table
+        for col_idx, width_val in new_widths.items():
+            for row in table.rows: # Apply to all rows including header
+                if col_idx < len(row.cells):
+                     row.cells[col_idx].width = width_val
+
+        document.add_paragraph() # Add some space between tables
 
     # Change font for the whole document (optional)
     style = document.styles['Normal']
