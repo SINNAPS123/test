@@ -1532,19 +1532,29 @@ def _calculate_presence_data(student_list_for_platoon_view, check_datetime):
         }
 
     report_platoon_id = student_list_for_platoon_view[0].pluton
-    now = check_datetime
+
+    # `check_datetime` is assumed to be a naive datetime representing local time
+    now_naive_for_query = check_datetime
+
+    # Create an aware version for Python comparisons
+    if check_datetime.tzinfo is None:
+        now_aware_for_compare = EUROPE_BUCHAREST.localize(check_datetime, is_dst=None)
+    else:
+        # If it's somehow already aware, ensure it's in the correct timezone
+        now_aware_for_compare = check_datetime.astimezone(EUROPE_BUCHAREST)
 
     all_students_system = Student.query.all()
     all_student_ids_system = [s.id for s in all_students_system]
 
+    # Use naive datetime for queries against naive DB columns
     active_services_map_all = {sa.student_id: sa for sa in ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(all_student_ids_system),
-        ServiceAssignment.start_datetime <= now, ServiceAssignment.end_datetime >= now
+        ServiceAssignment.start_datetime <= now_naive_for_query, ServiceAssignment.end_datetime >= now_naive_for_query
     ).all()}
 
     active_permissions_map_all = {p.student_id: p for p in Permission.query.filter(
         Permission.student_id.in_(all_student_ids_system), Permission.status == 'Aprobată',
-        Permission.start_datetime <= now, Permission.end_datetime >= now
+        Permission.start_datetime <= now_naive_for_query, Permission.end_datetime >= now_naive_for_query
     ).all()}
 
     all_daily_leaves_system = DailyLeave.query.filter(
@@ -1552,9 +1562,11 @@ def _calculate_presence_data(student_list_for_platoon_view, check_datetime):
     ).all()
     active_daily_leaves_map_all = {}
     for dl in all_daily_leaves_system:
-        dl_start_aware = EUROPE_BUCHAREST.localize(dl.start_datetime) if dl.start_datetime.tzinfo is None else dl.start_datetime.astimezone(EUROPE_BUCHAREST)
-        dl_end_aware = EUROPE_BUCHAREST.localize(dl.end_datetime) if dl.end_datetime.tzinfo is None else dl.end_datetime.astimezone(EUROPE_BUCHAREST)
-        if dl_start_aware <= now <= dl_end_aware:
+        # dl.start_datetime and dl.end_datetime are naive properties representing local time
+        # Make them aware for comparison with now_aware_for_compare
+        dl_start_aware = EUROPE_BUCHAREST.localize(dl.start_datetime, is_dst=None)
+        dl_end_aware = EUROPE_BUCHAREST.localize(dl.end_datetime, is_dst=None)
+        if dl_start_aware <= now_aware_for_compare <= dl_end_aware:
             if dl.student_id not in active_daily_leaves_map_all: active_daily_leaves_map_all[dl.student_id] = dl
 
     all_weekend_leaves_system = WeekendLeave.query.filter(
@@ -1562,8 +1574,8 @@ def _calculate_presence_data(student_list_for_platoon_view, check_datetime):
     ).all()
     active_weekend_leaves_map_all = {}
     for wl in all_weekend_leaves_system:
-        for interval in wl.get_intervals():
-            if interval['start'] <= now <= interval['end']:
+        for interval in wl.get_intervals(): # get_intervals() returns aware datetimes
+            if interval['start'] <= now_aware_for_compare <= interval['end']:
                 if wl.student_id not in active_weekend_leaves_map_all: active_weekend_leaves_map_all[wl.student_id] = {"leave": wl, "interval": interval}
                 break
 
