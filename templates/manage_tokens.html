@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Gestionează Tokenuri de Acces Read-Only{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Gestionează Tokenuri de Acces Read-Only</h2>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Înapoi la Panou</a>
+    </div>
+
+    <p class="text-muted">
+        Creați tokenuri pentru a oferi acces read-only la situația unității dumneavoastră. Oricine are linkul va putea vizualiza raportul, fără a se autentifica.
+        Linkurile pot avea o dată de expirare.
+    </p>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Creează un Token Nou</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('manage_tokens') }}">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="description" class="form-label">Descriere:</label>
+                        <input type="text" class="form-control" id="description" name="description" required placeholder="Ex: Link pentru raport săptămânal, Acces temporar pentru X">
+                        <small class="form-text text-muted">Un text scurt pentru a identifica scopul acestui token.</small>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="expires_at" class="form-label">Data Expirării (Opțional):</label>
+                        <input type="datetime-local" class="form-control" id="expires_at" name="expires_at">
+                        <small class="form-text text-muted">Lăsați gol dacă tokenul nu trebuie să expire.</small>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end mb-3">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-plus-circle me-1"></i> Generează
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <h4 class="mt-4">Tokenuri Active</h4>
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>Descriere</th>
+                    <th>Link de Acces</th>
+                    <th>Scop</th>
+                    <th>Expiră La</th>
+                    <th>Acțiuni</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for token in tokens %}
+                <tr>
+                    <td>{{ token.description }}</td>
+                    <td>
+                        <div class="input-group">
+                            <input type="text" class="form-control form-control-sm" id="token-url-{{ token.id }}" value="{{ url_for('view_by_token', token=token.token, _external=True) }}" readonly>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="copyToClipboard('token-url-{{ token.id }}')">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge bg-info">{{ token.scope.replace('_', ' ')|title }} {% if token.unit_id %}{{ token.unit_id }}{% endif %}</span>
+                    </td>
+                    <td>
+                        {% if token.expires_at %}
+                            {{ token.expires_at | localdatetime }}
+                        {% else %}
+                            <span class="text-muted">Niciodată</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="POST" action="{{ url_for('revoke_token', token_id=token.id) }}" onsubmit="return confirm('Sunteți sigur că doriți să revocați acest token? Acțiunea este ireversibilă.');" style="display: inline;">
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                <i class="fas fa-trash-alt me-1"></i> Revocă
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-center text-muted">Nu ați creat niciun token de acces.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function copyToClipboard(elementId) {
+    const input = document.getElementById(elementId);
+    input.select();
+    input.setSelectionRange(0, 99999); // For mobile devices
+
+    try {
+        navigator.clipboard.writeText(input.value).then(() => {
+            // Optional: Show a temporary success message
+            const originalButton = event.target.closest('button');
+            const originalIcon = originalButton.innerHTML;
+            originalButton.innerHTML = '<i class="fas fa-check"></i> Copiat!';
+            setTimeout(() => {
+                originalButton.innerHTML = originalIcon;
+            }, 2000);
+        }).catch(err => {
+            console.error('Could not copy text: ', err);
+            alert('Eroare la copierea linkului.');
+        });
+    } catch (err) {
+        console.error('Clipboard API not available: ', err);
+        // Fallback for older browsers
+        try {
+            document.execCommand('copy');
+            alert('Link copiat în clipboard (fallback).');
+        } catch (execErr) {
+            alert('Nu s-a putut copia linkul. Vă rugăm să îl copiați manual.');
+        }
+    }
+}
+</script>
+{% endblock %}
