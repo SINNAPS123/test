@@ -87,6 +87,12 @@
                  <div id="day_selection_warning_bulk" class="form-text text-warning mb-2" style="display: none;">
                     Atenție: Ați selectat 3 zile pentru învoire. Asigurați-vă că acest lucru este permis.
                 </div>
+                <hr>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="duminica_biserica_bulk" name="duminica_biserica" value="true" disabled>
+                    <label class="form-check-label" for="duminica_biserica_bulk">Participă la Biserică Duminică (09:00-11:00)</label>
+                    <small class="form-text text-muted d-block">Se poate selecta doar dacă ziua de Duminică este aleasă.</small>
+                </div>
             </div>
         </div>
 
@@ -115,10 +121,22 @@
 document.addEventListener('DOMContentLoaded', function() {
     const dayCheckboxes = document.querySelectorAll('.day-checkbox-bulk');
     const warningDivBulk = document.getElementById('day_selection_warning_bulk');
+    const duminicaCheckbox = document.getElementById('check_bulk_duminica');
+    const bisericaCheckbox = document.getElementById('duminica_biserica_bulk');
     const maxDaysAllowedBulk = 3;
+
+    function toggleBisericaCheckbox() {
+        if (duminicaCheckbox && bisericaCheckbox) {
+            bisericaCheckbox.disabled = !duminicaCheckbox.checked;
+            if (!duminicaCheckbox.checked) {
+                bisericaCheckbox.checked = false; // Uncheck if Duminica is deselected
+            }
+        }
+    }
 
     dayCheckboxes.forEach(checkbox => {
         checkbox.addEventListener('change', function() {
+            toggleBisericaCheckbox(); // Call the function to manage the biserica checkbox state
             const dayNameLower = this.value.toLowerCase();
             const timesDiv = document.getElementById('times_bulk_' + dayNameLower);
             const startTimeInput = document.getElementById('bulk_' + dayNameLower + '_start_time');

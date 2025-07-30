@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, flash, request, jsonify, send_file
+from flask import Flask, render_template, redirect, url_for, flash, request, jsonify, send_file, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate # Added for database migrations
 from sqlalchemy.orm import joinedload
@@ -2715,6 +2715,66 @@ def volunteer_activity_details(activity_id):
                            current_participant_ids=current_participant_ids,
                            activity_participants_detailed=activity_participants_detailed_query)
 
+def _generate_eligible_volunteers(gradat_id, num_to_generate, exclude_girls=False, activity_date=None, exclude_student_ids=None):
+    """
+    Helper function to generate a list of eligible students for volunteering.
+    """
+    students_query = Student.query.filter_by(created_by_user_id=gradat_id)
+
+    if exclude_girls:
+        students_query = students_query.filter(Student.gender != 'F')
+
+    # Exclude students with medical exemptions
+    students_query = students_query.filter(Student.is_smt == False)
+    students_query = students_query.filter(or_(Student.exemption_details == None, Student.exemption_details == ''))
+
+    # Exclude students already provided in the exclusion list (e.g., from a session)
+    if exclude_student_ids:
+        students_query = students_query.filter(Student.id.notin_(exclude_student_ids))
+
+    # Exclude students with leaves on the specified activity date
+    if activity_date:
+        ids_on_leave = set()
+        activity_day_start_aware = EUROPE_BUCHAREST.localize(datetime.combine(activity_date, time.min))
+        activity_day_end_aware = EUROPE_BUCHAREST.localize(datetime.combine(activity_date, time.max))
+
+        all_managed_student_ids = [s.id for s in Student.query.filter_by(created_by_user_id=gradat_id).with_entities(Student.id).all()]
+
+        # Permissions
+        act_day_start_naive = activity_day_start_aware.replace(tzinfo=None)
+        act_day_end_naive = activity_day_end_aware.replace(tzinfo=None)
+        permissions = Permission.query.filter(
+            Permission.student_id.in_(all_managed_student_ids), Permission.status == 'Aprobată',
+            Permission.start_datetime < act_day_end_naive, Permission.end_datetime > act_day_start_naive
+        ).with_entities(Permission.student_id).all()
+        for p_id in permissions: ids_on_leave.add(p_id[0])
+
+        # Daily Leaves
+        daily_leaves = DailyLeave.query.filter(
+            DailyLeave.student_id.in_(all_managed_student_ids), DailyLeave.status == 'Aprobată',
+            DailyLeave.leave_date == activity_date
+        ).all()
+        for dl in daily_leaves:
+            if dl.start_datetime < act_day_end_naive and dl.end_datetime > act_day_start_naive:
+                ids_on_leave.add(dl.student_id)
+
+        # Weekend Leaves
+        weekend_leaves = WeekendLeave.query.filter(
+            WeekendLeave.student_id.in_(all_managed_student_ids), WeekendLeave.status == 'Aprobată',
+            WeekendLeave.weekend_start_date <= activity_date, WeekendLeave.weekend_start_date >= activity_date - timedelta(days=3)
+        ).all()
+        for wl in weekend_leaves:
+            for interval in wl.get_intervals():
+                if interval['start'] < activity_day_end_aware and interval['end'] > activity_day_start_aware:
+                    ids_on_leave.add(wl.student_id)
+                    break
+
+        if ids_on_leave:
+            students_query = students_query.filter(Student.id.notin_(list(ids_on_leave)))
+
+    return students_query.order_by(Student.volunteer_points.asc(), Student.nume.asc()).limit(num_to_generate).all()
+
+
 @app.route('/volunteer/generate', methods=['GET', 'POST'])
 @login_required
 def volunteer_generate_students():
@@ -2723,116 +2783,42 @@ def volunteer_generate_students():
         return redirect(url_for('dashboard'))
 
     generated_students_list = None
-    num_students_req_val = 5
-    exclude_girls_val = False
-    # Use current date as default for activity_date_for_check if not provided in POST
-    activity_date_for_check_str = request.form.get('activity_date_for_check', get_localized_now().date().isoformat())
-
+    form_data = {
+        'num_students': request.form.get('num_students', 5),
+        'exclude_girls': 'exclude_girls' in request.form,
+        'activity_date_for_check': request.form.get('activity_date_for_check', get_localized_now().date().isoformat())
+    }
 
     if request.method == 'POST':
         try:
-            num_students_req_val = int(request.form.get('num_students', 5))
-            if num_students_req_val <= 0:
+            num_to_generate = int(form_data['num_students'])
+            if num_to_generate <= 0:
                 flash("Numărul de studenți necesari trebuie să fie pozitiv.", "warning")
-                num_students_req_val = 5
-        except ValueError:
+                num_to_generate = 5
+        except (ValueError, TypeError):
             flash("Număr de studenți invalid.", "warning")
-            num_students_req_val = 5
-
-        exclude_girls_val = 'exclude_girls' in request.form
-        # activity_date_for_check_str is already retrieved above, use it here
-        # activity_date_for_check_str = request.form.get('activity_date_for_check', get_localized_now().date().isoformat())
-
+            num_to_generate = 5
 
         try:
-            activity_check_date = datetime.strptime(activity_date_for_check_str, '%Y-%m-%d').date()
-            # Define activity day period in aware UTC for comparison with DB (if DB times are UTC)
-            # Or keep as naive if all DB datetimes are naive and represent local time.
-            # Given current structure, Permission.start/end_datetime are naive local.
-            # DailyLeave properties start_datetime/end_datetime are naive local.
-            # WeekendLeave.get_intervals() returns aware local (Europe/Bucharest).
-            # For consistency, let's make activity_day_start/end aware (Europe/Bucharest)
-            activity_day_start = EUROPE_BUCHAREST.localize(datetime.combine(activity_check_date, time.min))
-            activity_day_end = EUROPE_BUCHAREST.localize(datetime.combine(activity_check_date, time.max))
+            activity_date = datetime.strptime(form_data['activity_date_for_check'], '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            flash("Format dată activitate invalid. Se folosește data curentă.", "warning")
+            activity_date = get_localized_now().date()
+            form_data['activity_date_for_check'] = activity_date.isoformat()
 
-        except ValueError:
-            flash("Format dată activitate invalid. Se folosește data curentă pentru verificare.", "warning")
-            activity_check_date = get_localized_now().date()
-            activity_day_start = EUROPE_BUCHAREST.localize(datetime.combine(activity_check_date, time.min))
-            activity_day_end = EUROPE_BUCHAREST.localize(datetime.combine(activity_check_date, time.max))
-
-
-        students_query = Student.query.filter_by(created_by_user_id=current_user.id)
-
-        if exclude_girls_val:
-            students_query = students_query.filter(Student.gender != 'F')
-
-        # Filter out SMT students and those with other exemptions
-        students_query = students_query.filter(Student.is_smt == False)
-        students_query = students_query.filter(or_(Student.exemption_details == None, Student.exemption_details == ''))
-
-
-        # Get IDs of students to exclude due to leaves
-        # We need to get all student IDs managed by the gradat first to filter leaves efficiently
-        all_managed_student_ids_query = Student.query.filter_by(created_by_user_id=current_user.id).with_entities(Student.id)
-        all_managed_student_ids = [s_id[0] for s_id in all_managed_student_ids_query.all()]
-
-        ids_to_exclude = set()
-
-        # Permissions: Overlap with the activity day. Permissions are stored naive.
-        # Convert activity_day_start/end to naive for comparison if Permission datetimes are naive.
-        act_day_start_naive_comp = activity_day_start.replace(tzinfo=None)
-        act_day_end_naive_comp = activity_day_end.replace(tzinfo=None)
-
-        permissions_active_on_day = Permission.query.filter(
-            Permission.student_id.in_(all_managed_student_ids),
-            Permission.status == 'Aprobată',
-            Permission.start_datetime < act_day_end_naive_comp,
-            Permission.end_datetime > act_day_start_naive_comp
-        ).with_entities(Permission.student_id).distinct().all()
-        for p_id in permissions_active_on_day: ids_to_exclude.add(p_id[0])
-
-        # Daily Leaves: Check if any daily leave on activity_check_date overlaps
-        daily_leaves_on_activity_day = DailyLeave.query.filter(
-            DailyLeave.student_id.in_(all_managed_student_ids),
-            DailyLeave.status == 'Aprobată',
-            DailyLeave.leave_date == activity_check_date
-        ).all()
-        for dl in daily_leaves_on_activity_day:
-            # dl.start_datetime and dl.end_datetime are naive properties
-            if dl.start_datetime < act_day_end_naive_comp and dl.end_datetime > act_day_start_naive_comp:
-                ids_to_exclude.add(dl.student_id)
-
-        # Weekend Leaves: Any interval overlaps with the activity day. get_intervals() returns aware.
-        # Fetch weekend leaves that could potentially overlap with activity_check_date
-        weekend_leaves_potential = WeekendLeave.query.filter(
-            WeekendLeave.student_id.in_(all_managed_student_ids),
-            WeekendLeave.status == 'Aprobată',
-            WeekendLeave.weekend_start_date <= activity_check_date,
-            WeekendLeave.weekend_start_date >= activity_check_date - timedelta(days=3) # Heuristic
-        ).all()
-        for wl in weekend_leaves_potential:
-            for interval in wl.get_intervals(): # interval start/end are aware (Europe/Bucharest)
-                if interval['start'] < activity_day_end and interval['end'] > activity_day_start:
-                    ids_to_exclude.add(wl.student_id)
-                    break
-
-        if ids_to_exclude:
-            students_query = students_query.filter(Student.id.notin_(list(ids_to_exclude)))
-
-        generated_students_list = students_query.order_by(Student.volunteer_points.asc(), Student.nume.asc()).limit(num_students_req_val).all()
+        generated_students_list = _generate_eligible_volunteers(
+            gradat_id=current_user.id,
+            num_to_generate=num_to_generate,
+            exclude_girls=form_data['exclude_girls'],
+            activity_date=activity_date
+        )
 
         if not generated_students_list:
-            flash('Nu s-au găsit studenți eligibili conform criteriilor sau nu aveți studenți în evidență.', 'info')
-        elif ids_to_exclude: # Only flash if some were actually excluded
-             flash(f'{len(ids_to_exclude)} studenți au fost excluși automat (învoire/permisie/SMT) pe data de {activity_check_date.strftime("%d-%m-%Y")}.', 'info')
-
+            flash('Nu s-au găsit studenți eligibili conform criteriilor.', 'info')
 
     return render_template('volunteer_generate_students.html',
                            generated_students=generated_students_list,
-                           num_students_requested=num_students_req_val,
-                           exclude_girls_opt=exclude_girls_val,
-                           activity_date_for_check=activity_date_for_check_str) # Pass this to template for repopulation
+                           form_data=form_data)
 
 @app.route('/volunteer/save_session', methods=['POST'], endpoint='save_volunteer_session')
 @login_required
@@ -2894,7 +2880,7 @@ def volunteer_sessions_list():
     
     return render_template('volunteer_sessions_list.html', sessions=sessions)
 
-@app.route('/volunteer/session/<int:session_id>', methods=['GET'], endpoint='volunteer_session_details')
+@app.route('/volunteer/session/<int:session_id>', methods=['GET', 'POST'], endpoint='volunteer_session_details')
 @login_required
 def volunteer_session_details(session_id):
     if current_user.role != 'gradat':
@@ -2906,7 +2892,65 @@ def volunteer_session_details(session_id):
         flash('Acces neautorizat la această listă.', 'danger')
         return redirect(url_for('volunteer_sessions_list'))
 
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add_students':
+            student_ids_to_add = request.form.getlist('student_ids_to_add', type=int)
+            if not student_ids_to_add:
+                flash('Nu ați selectat niciun student pentru a adăuga.', 'warning')
+                return redirect(url_for('volunteer_session_details', session_id=session_id))
+
+            students_to_add = Student.query.filter(
+                Student.id.in_(student_ids_to_add),
+                Student.created_by_user_id == current_user.id
+            ).all()
+
+            added_count = 0
+            for student in students_to_add:
+                if student not in session.students:
+                    session.students.append(student)
+                    added_count += 1
+
+            if added_count > 0:
+                try:
+                    db.session.commit()
+                    flash(f'{added_count} studenți au fost adăugați la listă.', 'success')
+                except Exception as e:
+                    db.session.rollback()
+                    flash(f'Eroare la adăugarea studenților: {str(e)}', 'danger')
+
+            return redirect(url_for('volunteer_session_details', session_id=session_id))
+
+        elif action == 'award_points':
+            points_to_award = request.form.get('points_to_award_direct', type=int)
+            if points_to_award is None or points_to_award < 0:
+                flash('Numărul de puncte de acordat este invalid.', 'warning')
+                return redirect(url_for('volunteer_session_details', session_id=session_id))
+
+            students_in_session = session.students.all()
+            if not students_in_session:
+                flash('Nu există studenți în această listă pentru a le acorda puncte.', 'info')
+                return redirect(url_for('volunteer_session_details', session_id=session_id))
+
+            updated_count = 0
+            for student in students_in_session:
+                student.volunteer_points = (student.volunteer_points or 0) + points_to_award
+                updated_count += 1
+
+            if updated_count > 0:
+                try:
+                    db.session.commit()
+                    flash(f'{points_to_award} puncte au fost acordate pentru {updated_count} studenți.', 'success')
+                except Exception as e:
+                    db.session.rollback()
+                    flash(f'Eroare la acordarea punctelor: {str(e)}', 'danger')
+
+            return redirect(url_for('volunteer_session_details', session_id=session_id))
+
+
+    # GET request or if POST action is not 'add_students'
     students_in_session = session.students.all()
+    all_managed_students = Student.query.filter_by(created_by_user_id=current_user.id).all()
     
     # Get activities created by the user to populate the dropdown
     available_activities = VolunteerActivity.query.filter_by(created_by_user_id=current_user.id)\
@@ -2915,6 +2959,7 @@ def volunteer_session_details(session_id):
     return render_template('volunteer_session_details.html', 
                            session=session, 
                            students=students_in_session,
+                           all_managed_students=all_managed_students,
                            available_activities=available_activities)
 
 @app.route('/volunteer/session/<int:session_id>/assign', methods=['POST'], endpoint='assign_session_to_activity')
@@ -2974,6 +3019,51 @@ def assign_session_to_activity(session_id):
         app.logger.error(f"Error assigning volunteer session {session_id} to activity {activity_id}: {str(e)}")
 
     return redirect(url_for('volunteer_activity_details', activity_id=activity.id))
+
+@app.route('/volunteer/session/<int:session_id>/generate_and_add', methods=['POST'], endpoint='generate_and_add_to_session')
+@login_required
+def generate_and_add_to_session(session_id):
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    session = VolunteerSession.query.get_or_404(session_id)
+    if session.created_by_user_id != current_user.id:
+        flash('Acces neautorizat la această listă.', 'danger')
+        return redirect(url_for('volunteer_sessions_list'))
+
+    num_students_to_generate = request.form.get('num_students_to_generate', type=int, default=5)
+    exclude_girls = 'exclude_girls_generate' in request.form
+
+    # Re-use the logic from volunteer_generate_students, but adapt it
+    students_query = Student.query.filter_by(created_by_user_id=current_user.id)
+
+    if exclude_girls:
+        students_query = students_query.filter(Student.gender != 'F')
+
+    # Exclude students already in the session
+    student_ids_in_session = [s.id for s in session.students]
+    if student_ids_in_session:
+        students_query = students_query.filter(Student.id.notin_(student_ids_in_session))
+
+    # Simple generation logic (lowest points first)
+    generated_students = students_query.order_by(Student.volunteer_points.asc(), Student.nume.asc()).limit(num_students_to_generate).all()
+
+    if not generated_students:
+        flash('Nu s-au găsit studenți eligibili pentru a fi adăugați.', 'info')
+        return redirect(url_for('volunteer_session_details', session_id=session_id))
+
+    for student in generated_students:
+        session.students.append(student)
+
+    try:
+        db.session.commit()
+        flash(f'{len(generated_students)} studenți au fost generați și adăugați la listă.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la adăugarea studenților generați: {str(e)}', 'danger')
+
+    return redirect(url_for('volunteer_session_details', session_id=session_id))
 
 @app.route('/volunteer/session/delete/<int:session_id>', methods=['POST'], endpoint='delete_volunteer_session')
 @login_required
@@ -5346,133 +5436,103 @@ def assign_multiple_services():
     students = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.nume).all()
     if not students:
         flash('Nu aveți studenți în evidență pentru a le asigna servicii.', 'warning')
-        return redirect(url_for('list_services')) # Or gradat_dashboard
+        return redirect(url_for('list_services'))
 
-    # Default times for JS, same as single assign
     default_times_for_js = {
         "GSS": ("07:00", "07:00"), "SVM": ("05:50", "20:00"),
         "Intervenție": ("20:00", "00:00"),
         "Planton 1": ("22:00", "00:00"), "Planton 2": ("00:00", "02:00"),
         "Planton 3": ("02:00", "04:00"), "Altul": ("", "")
     }
+    today_iso_str_get = get_localized_now().date().isoformat()
 
     if request.method == 'POST':
-        student_id = request.form.get('student_id')
-        if not student_id:
-            flash('Trebuie să selectați un student.', 'warning')
+        student_ids = request.form.getlist('student_ids')
+        service_type = request.form.get('service_type')
+        service_date_str = request.form.get('service_date')
+        start_time_str = request.form.get('start_time')
+        end_time_str = request.form.get('end_time')
+        participates = 'participates_in_roll_call' in request.form
+        notes = request.form.get('notes', '').strip()
+
+        if not student_ids:
+            flash('Trebuie să selectați cel puțin un student.', 'warning')
             return redirect(url_for('assign_multiple_services'))
 
-        stud = Student.query.filter_by(id=student_id, created_by_user_id=current_user.id).first()
-        if not stud:
-            flash('Student invalid sau nu vă aparține.', 'danger')
+        if not all([service_type, service_date_str, start_time_str, end_time_str]):
+            flash('Toate detaliile serviciului (tip, dată, ore) sunt obligatorii.', 'warning')
             return redirect(url_for('assign_multiple_services'))
 
-        services_data = []
-        service_indices = sorted(list(set(key.split('_')[1] for key in request.form if key.startswith('service_type_'))))
+        try:
+            service_date_obj = datetime.strptime(service_date_str, '%Y-%m-%d').date()
+            start_time_obj = datetime.strptime(start_time_str, '%H:%M').time()
+            end_time_obj = datetime.strptime(end_time_str, '%H:%M').time()
+        except ValueError:
+            flash('Format dată sau oră invalid.', 'danger')
+            return redirect(url_for('assign_multiple_services'))
+
+        start_dt_obj = datetime.combine(service_date_obj, start_time_obj)
+        effective_end_date = service_date_obj
+        if end_time_obj < start_time_obj:
+            effective_end_date += timedelta(days=1)
+        elif service_type == "GSS" and end_time_obj == start_time_obj:
+            effective_end_date += timedelta(days=1)
+        end_dt_obj = datetime.combine(effective_end_date, end_time_obj)
+
+        if end_dt_obj <= start_dt_obj:
+            flash('Intervalul orar al serviciului este invalid.', 'danger')
+            return redirect(url_for('assign_multiple_services'))
 
         added_count = 0
         error_count = 0
-        error_messages = []
+        conflict_messages = []
 
-        for index in service_indices:
-            service_type = request.form.get(f'service_type_{index}')
-            service_date_str = request.form.get(f'service_date_{index}')
-            start_time_str = request.form.get(f'start_time_{index}')
-            end_time_str = request.form.get(f'end_time_{index}')
-            participates_str = request.form.get(f'participates_{index}') # Value will be 'on' or None
-            notes = request.form.get(f'notes_{index}', '').strip()
+        for student_id_str in student_ids:
+            stud_id = int(student_id_str)
+            stud = db.session.get(Student, stud_id)
 
-            # Skip if essential fields are missing for this specific service entry
-            if not all([service_type, service_date_str, start_time_str, end_time_str]):
-                # If any field is present, it's a partial entry, consider it an error or just skip.
-                # For now, we'll skip if any of these critical ones are missing.
-                # But if user intended to fill it, they might want an error.
-                # Let's assume if type is chosen, the rest were intended.
-                if service_type: # If a type was chosen, assume user intended to fill this row
-                    error_messages.append(f"Serviciul #{int(index)+1}: Date incomplete (tip, dată, ore).")
-                    error_count += 1
-                continue
-
-            try:
-                service_date_obj = datetime.strptime(service_date_str, '%Y-%m-%d').date()
-                start_time_obj = datetime.strptime(start_time_str, '%H:%M').time()
-                end_time_obj = datetime.strptime(end_time_str, '%H:%M').time()
-            except ValueError:
-                error_messages.append(f"Serviciul #{int(index)+1} ({service_type}): Format dată/oră invalid.")
+            if not stud or stud.created_by_user_id != current_user.id:
                 error_count += 1
+                conflict_messages.append(f"Studentul cu ID {stud_id} este invalid sau nu vă aparține.")
                 continue
 
-            start_dt_obj = datetime.combine(service_date_obj, start_time_obj)
-            effective_end_date = service_date_obj
-            if end_time_obj < start_time_obj:
-                effective_end_date += timedelta(days=1)
-            elif service_type == "GSS" and end_time_obj == start_time_obj: # GSS special case for 24h
-                effective_end_date += timedelta(days=1)
-            end_dt_obj = datetime.combine(effective_end_date, end_time_obj)
-
-            if end_dt_obj <= start_dt_obj:
-                error_messages.append(f"Serviciul #{int(index)+1} ({service_type}): Interval orar invalid.")
-                error_count += 1
-                continue
-
-            participates_bool = (participates_str == 'on')
-
-            conflict_msg = check_service_conflict_for_student(stud.id, start_dt_obj, end_dt_obj, service_type, None) # None for assignment_id as it's new
+            conflict_msg = check_service_conflict_for_student(stud.id, start_dt_obj, end_dt_obj, service_type, None)
             if conflict_msg:
-                error_messages.append(f"Serviciul #{int(index)+1} ({service_type} pe {service_date_str}): Conflict - studentul are deja {conflict_msg}.")
                 error_count += 1
+                conflict_messages.append(f"Conflict pentru {stud.nume} {stud.prenume}: are deja {conflict_msg}.")
                 continue
 
-            # If all checks pass, prepare to add
             new_assignment = ServiceAssignment(
                 student_id=stud.id, service_type=service_type, service_date=service_date_obj,
                 start_datetime=start_dt_obj, end_datetime=end_dt_obj,
-                participates_in_roll_call=participates_bool, notes=notes,
+                participates_in_roll_call=participates, notes=notes,
                 created_by_user_id=current_user.id
             )
             db.session.add(new_assignment)
-            added_count +=1
+            added_count += 1
 
         if error_count > 0:
-            for msg in error_messages:
+            for msg in conflict_messages:
                 flash(msg, 'danger')
-            if added_count > 0: # If some were added despite errors with others
-                 try:
-                    db.session.commit()
-                    flash(f'{added_count} servicii au fost adăugate cu succes pentru {stud.nume} {stud.prenume}.', 'success')
-                 except Exception as e:
-                    db.session.rollback()
-                    flash(f'Eroare la salvarea unor servicii: {str(e)}', 'danger')
-                    # Log this commit failure
-            else: # No services added, only errors
-                db.session.rollback() # Ensure no partial transaction
-            # Redirect back to the form, ideally repopulating student_id
-            return redirect(url_for('assign_multiple_services', student_id_selected=stud.id))
-
 
         if added_count > 0:
             try:
                 db.session.commit()
-                flash(f'{added_count} servicii au fost adăugate cu succes pentru {stud.nume} {stud.prenume}!', 'success')
-                return redirect(url_for('list_services'))
+                flash(f'{added_count} servicii au fost adăugate cu succes.', 'success')
             except Exception as e:
                 db.session.rollback()
                 flash(f'Eroare la salvarea serviciilor: {str(e)}', 'danger')
-                # Redirect back to form, repopulating student_id
-                return redirect(url_for('assign_multiple_services', student_id_selected=stud.id))
-        else: # No services added, no errors reported above (e.g., no service rows filled)
-            flash('Niciun serviciu valid nu a fost introdus pentru a fi adăugat.', 'info')
-            return redirect(url_for('assign_multiple_services', student_id_selected=stud.id if stud else None))
 
-    # GET request
-    student_id_selected_on_get = request.args.get('student_id_selected', type=int)
-    today_iso_str_get = get_localized_now().date().isoformat() # Pentru valoarea default a datei în formular
+        if added_count == 0 and error_count == 0:
+             flash('Niciun serviciu nu a fost adăugat.', 'info')
+
+        return redirect(url_for('list_services'))
+
     return render_template('assign_multiple_services.html',
                            students=students,
                            service_types=SERVICE_TYPES,
-                           default_times_json=json.dumps(default_times_for_js), # Pass as JSON for JS
-                           today_str=today_iso_str_get,
-                           student_id_selected=student_id_selected_on_get)
+                           default_times_json=json.dumps(default_times_for_js),
+                           today_str=today_iso_str_get)
 
 
 @app.route('/gradat/services/delete/<int:assignment_id>', methods=['POST'])
@@ -6086,6 +6146,8 @@ def gradat_bulk_add_weekend_leave():
         skipped_due_to_conflict_count = 0
         error_details_conflict = []
 
+        duminica_biserica_selected = 'duminica_biserica' in request.form
+
         for student_id_str in student_ids_selected:
             student_id = int(student_id_str)
             # Verificare conflict pentru acest student cu intervalele selectate
@@ -6117,7 +6179,7 @@ def gradat_bulk_add_weekend_leave():
                 reason=reason_common,
                 status='Aprobată',
                 created_by_user_id=current_user.id,
-                duminica_biserica=False # Standard, nu se setează din bulk add
+                duminica_biserica=duminica_biserica_selected
             )
 
             # Atribuie zilele și orele
@@ -8209,8 +8271,13 @@ def generate_public_view_code():
     try:
         db.session.add(new_code)
         db.session.commit()
-        flash(f'Cod de acces public generat cu succes: {new_code_str}', 'success')
-        flash(f'Acesta este valabil pentru {expiry_hours} ore și oferă acces la {scope_type.capitalize()} {scope_id}.', 'info')
+        # Create the full URL for sharing
+        public_url = url_for('public_view_login', code=new_code_str, _external=True)
+
+        # Flash messages with the new code and the full URL
+        flash(f'Cod de acces public generat: {new_code_str}', 'success')
+        flash(f'Link de partajat (valabil {expiry_hours} ore): {public_url}', 'info')
+
     except Exception as e:
         db.session.rollback()
         flash(f'Eroare la generarea codului: {str(e)}', 'danger')
@@ -8240,16 +8307,25 @@ def deactivate_public_view_code(code_id):
 @app.route('/public_view', methods=['GET', 'POST'], endpoint='public_view_login')
 def public_view_login():
     if 'public_view_access' in session:
+        # Re-check expiry on page load in case the session is old but not cleared
+        if datetime.fromisoformat(session['public_view_access'].get('expires_at')) < get_localized_now():
+            session.pop('public_view_access', None)
+            flash('Sesiunea de vizualizare a expirat.', 'info')
+            return redirect(url_for('public_view_login'))
         return redirect(url_for('public_dashboard'))
-        
+
+    code_to_check = None
     if request.method == 'POST':
-        code_str = request.form.get('code', '').strip()
-        if not code_str:
+        code_to_check = request.form.get('code', '').strip()
+        if not code_to_check:
             flash('Vă rugăm introduceți un cod de acces.', 'warning')
             return redirect(url_for('public_view_login'))
+    elif request.method == 'GET':
+        code_to_check = request.args.get('code', '').strip()
 
+    if code_to_check:
         now = get_localized_now()
-        access_code = PublicViewCode.query.filter_by(code=code_str, is_active=True).first()
+        access_code = PublicViewCode.query.filter_by(code=code_to_check, is_active=True).first()
 
         if access_code and access_code.expires_at > now:
             session['public_view_access'] = {
@@ -8257,11 +8333,16 @@ def public_view_login():
                 'scope_id': access_code.scope_id,
                 'expires_at': access_code.expires_at.isoformat()
             }
+            session.permanent = True # Make the session last for PERMANENT_SESSION_LIFETIME
             return redirect(url_for('public_dashboard'))
         else:
-            flash('Codul de acces este invalid, a expirat sau a fost dezactivat.', 'danger')
+            if request.method == 'GET' and code_to_check:
+                 flash('Codul de acces este invalid, a expirat sau a fost dezactivat.', 'danger')
+            elif request.method == 'POST':
+                 flash('Codul de acces este invalid, a expirat sau a fost dezactivat.', 'danger')
             return redirect(url_for('public_view_login'))
 
+    # Render the login form for a GET request with no code
     return render_template('public_login.html')
 
 @app.route('/public_dashboard', endpoint='public_dashboard')

@@ -45,6 +45,53 @@
 
         <!-- Panou Acțiuni -->
         <div class="col-md-5">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h4><i class="fas fa-user-plus me-2"></i> Adaugă Studenți la Listă</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('volunteer_session_details', session_id=session.id) }}">
+                        <input type="hidden" name="action" value="add_students">
+                        <div class="mb-3">
+                            <label for="student_ids_to_add" class="form-label">Selectează Studenții:</label>
+                            <select class="form-select" id="student_ids_to_add" name="student_ids_to_add" multiple required>
+                                {% for student in all_managed_students %}
+                                    {% if student not in students %}
+                                        <option value="{{ student.id }}">{{ student.nume }} {{ student.prenume }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-info w-100">
+                            <i class="fas fa-plus me-1"></i> Adaugă la Listă
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mt-4">
+                <div class="card-header">
+                    <h4><i class="fas fa-random me-2"></i> Generează și Adaugă Studenți</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('generate_and_add_to_session', session_id=session.id) }}">
+                        <div class="mb-3">
+                            <label for="num_students_to_generate" class="form-label">Număr de studenți de generat:</label>
+                            <input type="number" class="form-control" id="num_students_to_generate" name="num_students_to_generate" value="5" min="1" required>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="exclude_girls_generate" name="exclude_girls_generate">
+                            <label class="form-check-label" for="exclude_girls_generate">
+                                Exclude fete
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-cogs me-1"></i> Generează și Adaugă
+                        </button>
+                    </form>
+                </div>
+            </div>
+
             <div class="card shadow-sm">
                 <div class="card-header">
                     <h4><i class="fas fa-tasks me-2"></i> Acțiuni Rapide</h4>
@@ -81,6 +128,25 @@
                             <i class="fas fa-user-plus me-1"></i> Asignează Participanți
                         </button>
                         {% endif %}
+                    </form>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mt-4">
+                <div class="card-header">
+                    <h4><i class="fas fa-star me-2"></i> Acordă Puncte de Voluntariat</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('volunteer_session_details', session_id=session.id) }}">
+                        <input type="hidden" name="action" value="award_points">
+                        <div class="mb-3">
+                            <label for="points_to_award_direct" class="form-label">Puncte de acordat:</label>
+                            <input type="number" class="form-control" id="points_to_award_direct" name="points_to_award_direct" value="1" min="0" required>
+                            <small class="form-text text-muted">Aceste puncte vor fi adăugate la totalul fiecărui student din această listă.</small>
+                        </div>
+                        <button type="submit" class="btn btn-warning w-100">
+                            <i class="fas fa-award me-1"></i> Acordă Puncte
+                        </button>
                     </form>
                 </div>
             </div>
