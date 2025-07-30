@@ -81,6 +81,8 @@
                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarRoleSpecificLinks">
                                 {% if current_user.role == 'gradat' %}
                                     <li><a class="dropdown-item" href="{{ url_for('list_students') }}">Studenți</a></li>
+                                     <li><a class="dropdown-item" href="{{ url_for('bulk_operations_hub') }}"><i class="fas fa-cogs fa-fw me-2"></i>Operațiuni în Masă</a></li>
+                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="{{ url_for('list_permissions') }}">Permisii</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('list_daily_leaves') }}">Învoiri Zilnice</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('list_weekend_leaves') }}">Învoiri Weekend</a></li>
@@ -102,6 +104,10 @@
                                      {# Alte linkuri pentru comandant batalion #}
                                 {% endif %}
                                  <li><hr class="dropdown-divider"></li>
+                                {% if current_user.is_authenticated and current_user.role in ['admin', 'comandant_companie', 'comandant_batalion'] %}
+                                    <li><a class="dropdown-item" href="{{ url_for('manage_tokens') }}"><i class="fas fa-key fa-fw me-2"></i>Gestionează Tokenuri</a></li>
+                                {% endif %}
+                                <li><hr class="dropdown-divider"></li>
                                  <li><a class="dropdown-item" href="{{ url_for('dashboard') }}">Panou Principal Rol</a></li>
                             </ul>
                         </li>

@@ -105,8 +105,7 @@
                 <tr>
                     <th>Nr. Crt.</th>
                     <th>Grad</th>
-                    <th>Nume</th>
-                    <th>Prenume</th>
+                    <th>Nume și Prenume</th>
                     <th>ID Unic</th>
                     <th>Pluton</th>
                     <th>Companie</th>
@@ -134,8 +133,7 @@
                         {% endif %}
                     </td>
                     <td>{{ student.grad_militar }}</td>
-                    <td>{{ student.nume }}</td>
-                    <td>{{ student.prenume }}</td>
+                    <td><a href="{{ url_for('student_profile', student_id=student.id) }}" class="text-decoration-none fw-bold">{{ student.nume }} {{ student.prenume }}</a></td>
                     <td>{{ student.id_unic_student if student.id_unic_student else '-' }}</td>
                     <td>{{ student.pluton }}</td>
                     <td>{{ student.companie }}</td>
