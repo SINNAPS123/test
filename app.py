@@ -8258,7 +8258,7 @@ def generate_public_view_code():
     while PublicViewCode.query.filter_by(code=new_code_str).first():
         new_code_str = secrets.token_hex(8)
         
-    expires_at_dt = get_localized_now() + timedelta(hours=expiry_hours)
+    expires_at_dt = datetime.utcnow() + timedelta(hours=expiry_hours)
 
     new_code = PublicViewCode(
         code=new_code_str,
@@ -8308,7 +8308,7 @@ def deactivate_public_view_code(code_id):
 def public_view_login():
     if 'public_view_access' in session:
         # Re-check expiry on page load in case the session is old but not cleared
-        if datetime.fromisoformat(session['public_view_access'].get('expires_at')) < get_localized_now():
+        if datetime.fromisoformat(session['public_view_access'].get('expires_at')) < datetime.utcnow():
             session.pop('public_view_access', None)
             flash('Sesiunea de vizualizare a expirat.', 'info')
             return redirect(url_for('public_view_login'))
@@ -8324,10 +8324,10 @@ def public_view_login():
         code_to_check = request.args.get('code', '').strip()
 
     if code_to_check:
-        now = get_localized_now()
+        now_utc = datetime.utcnow()
         access_code = PublicViewCode.query.filter_by(code=code_to_check, is_active=True).first()
 
-        if access_code and access_code.expires_at > now:
+        if access_code and access_code.expires_at > now_utc:
             session['public_view_access'] = {
                 'scope_type': access_code.scope_type,
                 'scope_id': access_code.scope_id,
@@ -8353,7 +8353,7 @@ def public_dashboard():
     access_info = session['public_view_access']
     
     # Check expiry on every page load
-    if datetime.fromisoformat(access_info['expires_at']) < get_localized_now():
+    if datetime.fromisoformat(access_info['expires_at']) < datetime.utcnow():
         session.pop('public_view_access', None)
         flash('Sesiunea de vizualizare a expirat.', 'info')
         return redirect(url_for('public_view_login'))
