@@ -1,0 +1,48 @@
+<div class="table-responsive">
+    <table class="table table-sm table-striped table-hover">
+        <thead class="table-light">
+            <tr>
+                <th>Weekendul (Vineri)</th>
+                <th>Intervale</th>
+                <th>Biserică?</th>
+                <th>Motiv</th>
+                <th>Status</th>
+                <th>Adăugat de</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if weekend_leaves %}
+                {% for wl in weekend_leaves %}
+                    <tr>
+                        <td>{{ wl.weekend_start_date|localdate('%d %B %Y') }}</td>
+                        <td>{{ wl.display_days_and_times }}</td>
+                        <td>
+                            {% if wl.duminica_biserica and 'Duminica' in wl.display_days_and_times %}
+                                <span class="badge bg-success">Da</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Nu</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ wl.reason or '-' }}</td>
+                        <td>
+                            <span class="badge
+                                {% if wl.is_any_interval_active_now %} bg-success
+                                {% elif wl.is_overall_active_or_upcoming %} bg-info text-dark
+                                {% elif wl.is_overall_past and wl.status == 'Aprobată' %} bg-secondary
+                                {% elif wl.status == 'Anulată' %} bg-warning text-dark
+                                {% else %} bg-light text-dark
+                                {% endif %}">
+                                {{ wl.status }}
+                            </span>
+                        </td>
+                         <td>{{ wl.creator.username if wl.creator else 'N/A' }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted">Nu există istoric pentru învoiri de weekend.</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>

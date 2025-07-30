@@ -1,0 +1,42 @@
+<div class="table-responsive">
+    <table class="table table-sm table-striped table-hover">
+        <thead class="table-light">
+            <tr>
+                <th>Data</th>
+                <th>Interval Orar</th>
+                <th>Tip</th>
+                <th>Motiv</th>
+                <th>Status</th>
+                <th>Adăugat de</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if daily_leaves %}
+                {% for dl in daily_leaves %}
+                    <tr>
+                        <td>{{ dl.leave_date|localdate('%d %B %Y') }}</td>
+                        <td>{{ dl.start_time|localtime }} - {{ dl.end_time|localtime }}</td>
+                        <td>{{ dl.leave_type_display }}</td>
+                        <td>{{ dl.reason or '-' }}</td>
+                        <td>
+                            <span class="badge
+                                {% if dl.is_active %} bg-success
+                                {% elif dl.is_upcoming %} bg-info text-dark
+                                {% elif dl.is_past and dl.status == 'Aprobată' %} bg-secondary
+                                {% elif dl.status == 'Anulată' %} bg-warning text-dark
+                                {% else %} bg-light text-dark
+                                {% endif %}">
+                                {{ dl.status }}
+                            </span>
+                        </td>
+                        <td>{{ dl.creator.username if dl.creator else 'N/A' }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted">Nu există istoric pentru învoiri zilnice.</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>

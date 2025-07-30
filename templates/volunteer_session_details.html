@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Detalii Listă Voluntari: {{ session.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Detalii Listă: <span class="text-info">{{ session.name }}</span></h2>
+        <a href="{{ url_for('volunteer_sessions_list') }}" class="btn btn-outline-secondary btn-sm">&laquo; Înapoi la Liste</a>
+    </div>
+    <p class="text-muted">Creată la: {{ session.created_at | localdatetime }}</p>
+    <hr>
+
+    <div class="row">
+        <!-- Lista de Studenți -->
+        <div class="col-md-7">
+            <h4>Studenți în Listă ({{ students|length }})</h4>
+            {% if students %}
+            <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Nume și Prenume</th>
+                            <th>Grad</th>
+                            <th>Pluton</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in students %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ student.nume }} {{ student.prenume }}</td>
+                            <td>{{ student.grad_militar }}</td>
+                            <td>{{ student.pluton }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted">Această listă nu conține niciun student.</p>
+            {% endif %}
+        </div>
+
+        <!-- Panou Acțiuni -->
+        <div class="col-md-5">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h4><i class="fas fa-tasks me-2"></i> Acțiuni Rapide</h4>
+                </div>
+                <div class="card-body">
+                    <h5>Asignează la o Activitate</h5>
+                    <p class="small text-muted">Selectează o activitate de voluntariat existentă pentru a adăuga toți studenții din această listă ca participanți.</p>
+
+                    <form method="POST" action="{{ url_for('assign_session_to_activity', session_id=session.id) }}">
+                        <div class="mb-3">
+                            <label for="activity_id" class="form-label">Selectează Activitatea:</label>
+                            {% if available_activities %}
+                                <select class="form-select" id="activity_id" name="activity_id" required>
+                                    <option value="" disabled selected>Alege o activitate...</option>
+                                    {% for activity in available_activities %}
+                                        <option value="{{ activity.id }}">{{ activity.name }} ({{ activity.activity_date|localdate }})</option>
+                                    {% endfor %}
+                                </select>
+                            {% else %}
+                                <p class="text-danger">Nu există activități de voluntariat create. <a href="{{ url_for('volunteer_home') }}">Creează una aici</a>.</p>
+                            {% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label for="points_to_award" class="form-label">Puncte de acordat (Opțional):</label>
+                            <input type="number" class="form-control" id="points_to_award" name="points_to_award" value="0" min="0">
+                            <small class="form-text text-muted">Punctele vor fi setate pentru fiecare participant nou adăugat. Lăsați 0 dacă nu doriți să acordați puncte acum.</small>
+                        </div>
+                        {% if available_activities %}
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-user-plus me-1"></i> Asignează Participanți
+                        </button>
+                        {% else %}
+                        <button type="submit" class="btn btn-success w-100" disabled>
+                            <i class="fas fa-user-plus me-1"></i> Asignează Participanți
+                        </button>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

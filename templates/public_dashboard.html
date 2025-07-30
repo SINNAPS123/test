@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Vizualizare Publică - {{ access_info.scope_type|capitalize }} {{ access_info.scope_id }}{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .details-list {
+        display: none;
+        font-size: 0.85em;
+        padding-left: 1.5rem;
+    }
+    .list-group-item-sm {
+        padding-top: 0.25rem;
+        padding-bottom: 0.25rem;
+    }
+    .toggle-details-btn {
+        font-size: 0.8em;
+        padding: 0.1rem 0.4rem;
+        margin-left: 10px;
+    }
+</style>
+{% endblock %}
+
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2 class="mb-0">Situație Publică: <span class="text-info">{{ access_info.scope_type|capitalize }} {{ access_info.scope_id }}</span></h2>
+            <p class="text-muted mb-0">Vizualizare în timp real la data: {{ get_localized_now()|localdatetime }}</p>
+        </div>
+        <a href="{{ url_for('public_view_logout') }}" class="btn btn-outline-danger">
+            <i class="fas fa-sign-out-alt"></i> Deconectare
+        </a>
+    </div>
+    <hr>
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% elif report_data %}
+        {% macro display_presence_details(data, id_prefix) %}
+            {% if data.in_formation_students_details %}
+                <h6 class="mt-2 mb-1">
+                    Prezenți în Formație ({{ data.in_formation_count }})
+                    <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-formation-details">Detalii</button>
+                </h6>
+                <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-formation-details">
+                    {% for item in data.in_formation_students_details %}
+                        <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            {% if data.on_duty_students_details %}
+                <h6 class="mt-2 mb-1">
+                    La Servicii ({{ data.on_duty_count }})
+                    <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-onduty-details">Detalii</button>
+                </h6>
+                <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-onduty-details">
+                    {% for item in data.on_duty_students_details %}
+                        <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            {% if data.platoon_graded_duty_students_details %}
+                <h6 class="mt-2 mb-1">
+                    Gradați Pluton ({{ data.platoon_graded_duty_count }})
+                    <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-platoon-graded-details">Detalii</button>
+                </h6>
+                <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-platoon-graded-details">
+                    {% for item in data.platoon_graded_duty_students_details %}
+                        <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            {% if data.absent_students_details or data.smt_students_details or data.exempt_other_students_details %}
+                <h6 class="mt-2 mb-1">
+                    Absenți Motivat ({{ report_data.efectiv_absent_total }})
+                    <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-absent-details">Detalii</button>
+                </h6>
+                <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-absent-details">
+                    {% for item in data.absent_students_details %}
+                        <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                    {% endfor %}
+                    {% for item in data.smt_students_details %}
+                        <li class="list-group-item list-group-item-sm py-1 text-danger">{{ item }}</li>
+                    {% endfor %}
+                     {% for item in data.exempt_other_students_details %}
+                        <li class="list-group-item list-group-item-sm py-1 text-warning">{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endmacro %}
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white">
+                <h4 class="mb-0">Situație Generală</h4>
+            </div>
+            <div class="card-body">
+                <p>
+                    <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ report_data.efectiv_control }}</span><br>
+                    <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ report_data.efectiv_prezent_total }}</span>
+                    <small class="d-block ms-3">(Din care: În formație: {{report_data.in_formation_count}}, La servicii: {{report_data.on_duty_count}}, Gradați Pluton: {{report_data.platoon_graded_duty_count}})</small><br>
+                    <strong>Efectiv Absent Motivat (Ea):</strong> <span class="badge bg-danger fs-6">{{ report_data.efectiv_absent_total }}</span>
+                </p>
+                {{ display_presence_details(report_data, "public-view") }}
+            </div>
+        </div>
+    {% else %}
+        <div class="alert alert-warning">Nu s-au putut încărca datele.</div>
+    {% endif %}
+
+</div>
+{% endblock %}

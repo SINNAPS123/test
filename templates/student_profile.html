@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Profil Student: {{ student.nume }} {{ student.prenume }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Antet Profil -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-0">{{ student.grad_militar }} {{ student.nume }} {{ student.prenume }}</h2>
+                    <p class="text-muted mb-1">
+                        Batalionul {{ student.batalion }} | Compania {{ student.companie }} | Plutonul {{ student.pluton }}
+                    </p>
+                    <p class="text-muted mb-0">ID Unic: {{ student.id_unic_student or 'N/A' }}</p>
+                </div>
+                <div>
+                    {% if current_user.role == 'gradat' and student.created_by_user_id == current_user.id %}
+                        <a href="{{ url_for('edit_student', student_id=student.id) }}" class="btn btn-primary"><i class="fas fa-edit"></i> Editează Student</a>
+                    {% elif current_user.role == 'admin' %}
+                         <a href="{{ url_for('admin_edit_student', student_id=student.id) }}" class="btn btn-primary"><i class="fas fa-edit"></i> Editează Student (Admin)</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Curent și Informații Cheie -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header"><h4><i class="fas fa-street-view me-2"></i> Status Curent</h4></div>
+                <div class="card-body">
+                    <p class="fs-5">La data de <strong>{{ get_localized_now()|localdatetime }}</strong>, studentul este:</p>
+                    <h3 class="text-center p-3 rounded
+                        {% if current_status == 'Prezent' %} bg-success text-white
+                        {% elif 'Serviciu' in current_status %} bg-info text-dark
+                        {% else %} bg-danger text-white {% endif %}">
+                        {{ current_status }}
+                    </h3>
+                    {% if student.is_smt %}
+                        <p class="text-danger fw-bold text-center mt-2">Scutire Medicală Totală (SMT)</p>
+                    {% elif student.exemption_details %}
+                         <p class="text-warning fw-bold text-center mt-2">Scutire Parțială: {{ student.exemption_details }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header"><h4><i class="fas fa-chart-line me-2"></i> Statistici Rapide</h4></div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Puncte Voluntariat:
+                        <span class="badge bg-primary rounded-pill fs-6">{{ student.volunteer_points }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Total Permisii:
+                        <span class="badge bg-secondary rounded-pill">{{ permissions|length }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Total Învoiri Weekend:
+                        <span class="badge bg-secondary rounded-pill">{{ weekend_leaves|length }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Total Servicii:
+                        <span class="badge bg-secondary rounded-pill">{{ services|length }}</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Istoric Detaliat cu Tab-uri -->
+    <div class="card">
+        <div class="card-header">
+            <ul class="nav nav-tabs card-header-tabs" id="historyTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="permissions-tab" data-bs-toggle="tab" data-bs-target="#permissions" type="button" role="tab">Permisii</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="weekend-leaves-tab" data-bs-toggle="tab" data-bs-target="#weekend-leaves" type="button" role="tab">Învoiri Weekend</button>
+                </li>
+                 <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="daily-leaves-tab" data-bs-toggle="tab" data-bs-target="#daily-leaves" type="button" role="tab">Învoiri Zilnice</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="services-tab" data-bs-toggle="tab" data-bs-target="#services" type="button" role="tab">Servicii</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="volunteer-tab" data-bs-toggle="tab" data-bs-target="#volunteer" type="button" role="tab">Voluntariat</button>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body">
+            <div class="tab-content" id="historyTabsContent">
+                <!-- Tab Permisii -->
+                <div class="tab-pane fade show active" id="permissions" role="tabpanel">
+                    {% include 'profile_tabs/_permissions_history.html' %}
+                </div>
+                <!-- Tab Învoiri Weekend -->
+                <div class="tab-pane fade" id="weekend-leaves" role="tabpanel">
+                    {% include 'profile_tabs/_weekend_leaves_history.html' %}
+                </div>
+                <!-- Tab Învoiri Zilnice -->
+                <div class="tab-pane fade" id="daily-leaves" role="tabpanel">
+                    {% include 'profile_tabs/_daily_leaves_history.html' %}
+                </div>
+                <!-- Tab Servicii -->
+                <div class="tab-pane fade" id="services" role="tabpanel">
+                    {% include 'profile_tabs/_services_history.html' %}
+                </div>
+                <!-- Tab Voluntariat -->
+                <div class="tab-pane fade" id="volunteer" role="tabpanel">
+                    {% include 'profile_tabs/_volunteer_history.html' %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
