@@ -1,0 +1,38 @@
+<div class="table-responsive">
+    <table class="table table-sm table-striped table-hover">
+        <thead class="table-light">
+            <tr>
+                <th>Data Serviciu</th>
+                <th>Tip Serviciu</th>
+                <th>Interval Orar</th>
+                <th>Participă la Apel?</th>
+                <th>Note</th>
+                <th>Adăugat de</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if services %}
+                {% for s in services %}
+                    <tr>
+                        <td>{{ s.service_date|localdate('%d %B %Y') }}</td>
+                        <td>{{ s.service_type }}</td>
+                        <td>{{ s.start_datetime|localdatetime('%H:%M') }} - {{ s.end_datetime|localdatetime('%H:%M') }}</td>
+                        <td>
+                            {% if s.participates_in_roll_call %}
+                                <span class="badge bg-success">Da</span>
+                            {% else %}
+                                <span class="badge bg-danger">Nu</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ s.notes or '-' }}</td>
+                        <td>{{ s.creator.username if s.creator else 'N/A' }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted">Nu există istoric pentru servicii.</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>

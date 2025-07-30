@@ -1,22 +1,32 @@
 {% extends "base.html" %}
 
-{% block title %}Adăugare Rapidă Permisii{% endblock %}
+{% block title %}Adăugare Permisii în Masă{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>Adăugare Rapidă Permisii Multiple</h2>
+        <h2>Adăugare Permisii în Masă</h2>
         <a href="{{ url_for('list_permissions') }}" class="btn btn-outline-secondary btn-sm">&laquo; Înapoi la Lista Permisii</a>
     </div>
-    <p class="text-muted">Selectați studenții și completați detaliile permisiei. Aceste detalii (perioadă, destinație etc.) vor fi aplicate tuturor studenților selectați. Conflictele individuale vor fi semnalate și acele permisii omise.</p>
-    <hr>
 
-    <form method="POST" action="{{ url_for('gradat_bulk_add_permission') }}" id="bulkPermissionForm">
+    {% if not students_to_prepare %}
+    <!-- ====================================================== -->
+    <!-- PASUL 1: Selectarea Studenților                        -->
+    <!-- ====================================================== -->
+    <p class="text-muted">Selectați studenții pentru care doriți să adăugați permisii, apoi apăsați "Pregătește Permisii".</p>
+    <hr>
+    <form method="GET" action="{{ url_for('gradat_bulk_add_permission') }}" id="studentSelectionForm">
         <div class="card shadow-sm mb-4">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5>1. Selectează Studenții</h5>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="selectAllStudents">
+                    <label class="form-check-label" for="selectAllStudents">
+                        Selectează/Deselectează Toți
+                    </label>
+                </div>
             </div>
-            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+            <div class="card-body" style="max-height: 450px; overflow-y: auto;">
                 {% if students %}
                     <div class="row">
                         {% for student in students %}
@@ -30,91 +40,168 @@
                         </div>
                         {% endfor %}
                     </div>
-                    <hr>
-                    <div class="form-check mt-2">
-                        <input class="form-check-input" type="checkbox" id="selectAllStudentsPerm">
-                        <label class="form-check-label" for="selectAllStudentsPerm">
-                            Selectează/Deselectează Toți Studenții
-                        </label>
-                    </div>
                 {% else %}
                     <p class="text-muted">Nu aveți studenți în evidență.</p>
                 {% endif %}
             </div>
         </div>
+        <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary btn-lg">
+                Pregătește Permisii <i class="fas fa-arrow-right"></i>
+            </button>
+        </div>
+    </form>
 
+    {% else %}
+    <!-- ====================================================== -->
+    <!-- PASUL 2: Completarea Detaliilor                        -->
+    <!-- ====================================================== -->
+    <p class="text-muted">Completați detaliile pentru fiecare permisie. Puteți folosi secțiunea "Date Comune" pentru a completa rapid toate câmpurile.</p>
+    <hr>
+    <form method="POST" action="{{ url_for('gradat_bulk_add_permission') }}" id="permissionDetailsForm">
+        <!-- Secțiunea de Date Comune -->
         <div class="card shadow-sm mb-4">
             <div class="card-header">
-                <h5>2. Detalii Permisie Comună</h5>
+                <h5>Date Comune (Opțional - pentru completare rapidă)</h5>
             </div>
             <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="start_datetime" class="form-label">Data și Ora Început <span class="text-danger">*</span></label>
-                        <input type="datetime-local" class="form-control" id="start_datetime" name="start_datetime" value="{{ form_data.start_datetime if form_data else get_localized_now()|localdatetime('%Y-%m-%dT%H:%M') }}" required>
+                <div class="row align-items-end">
+                    <div class="col-md-3">
+                        <label for="common_start_datetime" class="form-label">Început</label>
+                        <input type="datetime-local" class="form-control" id="common_start_datetime">
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label for="end_datetime" class="form-label">Data și Ora Sfârșit <span class="text-danger">*</span></label>
-                        <input type="datetime-local" class="form-control" id="end_datetime" name="end_datetime" value="{{ form_data.end_datetime if form_data else (get_localized_now() + timedelta(hours=4))|localdatetime('%Y-%m-%dT%H:%M') }}" required>
+                    <div class="col-md-3">
+                        <label for="common_end_datetime" class="form-label">Sfârșit</label>
+                        <input type="datetime-local" class="form-control" id="common_end_datetime">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="common_destination" class="form-label">Destinația</label>
+                        <input type="text" class="form-control" id="common_destination" placeholder="Ex: Acasă">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="common_transport_mode" class="form-label">Transport</label>
+                        <input type="text" class="form-control" id="common_transport_mode" placeholder="Ex: Personal">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-info w-100" id="fillAllButton">
+                            <i class="fas fa-fill-drip"></i> Umple Tot
+                        </button>
                     </div>
                 </div>
-                <div class="mb-3">
-                    <label for="destination" class="form-label">Destinația</label>
-                    <input type="text" class="form-control" id="destination" name="destination" value="{{ form_data.destination if form_data else '' }}" placeholder="Ex: București, Acasă">
-                </div>
-                <div class="mb-3">
-                    <label for="transport_mode" class="form-label">Mijloc de Transport</label>
-                    <input type="text" class="form-control" id="transport_mode" name="transport_mode" value="{{ form_data.transport_mode if form_data else '' }}" placeholder="Ex: Personal, Tren, Auto AG01XYZ">
-                </div>
-                <div class="mb-3">
-                    <label for="reason" class="form-label">Motiv / Observații (poate include nr. auto)</label>
-                    <textarea class="form-control" id="reason" name="reason" rows="2" placeholder="Ex: Probleme personale, Învoire medicală, Auto: B01ABC">{{ form_data.reason if form_data else '' }}</textarea>
+            </div>
+        </div>
+
+        <!-- Tabelul cu Detalii -->
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h5>2. Detalii Permisii pentru Studenții Selectați ({{ students_to_prepare|length }})</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Început <span class="text-danger">*</span></th>
+                                <th>Sfârșit <span class="text-danger">*</span></th>
+                                <th>Destinația</th>
+                                <th>Transport</th>
+                                <th>Motiv/Observații</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for student in students_to_prepare %}
+                            <tr>
+                                <input type="hidden" name="student_id_{{ student.id }}" value="{{ student.id }}">
+                                <td>{{ student.grad_militar }} {{ student.nume }} {{ student.prenume }}</td>
+                                <td><input type="datetime-local" name="start_datetime_{{ student.id }}" class="form-control form-control-sm common-start" required></td>
+                                <td><input type="datetime-local" name="end_datetime_{{ student.id }}" class="form-control form-control-sm common-end" required></td>
+                                <td><input type="text" name="destination_{{ student.id }}" class="form-control form-control-sm common-dest"></td>
+                                <td><input type="text" name="transport_mode_{{ student.id }}" class="form-control form-control-sm common-transport"></td>
+                                <td><input type="text" name="reason_{{ student.id }}" class="form-control form-control-sm"></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
 
         <hr>
-        <div class="d-flex justify-content-end">
-            <button type="submit" class="btn btn-primary btn-lg">
-                <i class="fas fa-check-double"></i> Adaugă Permisii Multiple
+        <div class="d-grid gap-2 d-md-flex justify-content-md-between">
+            <a href="{{ url_for('gradat_bulk_add_permission') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Modifică Selecția Studenților
+            </a>
+            <button type="submit" class="btn btn-success btn-lg">
+                <i class="fas fa-check-double"></i> Salvează Toate Permisiile
             </button>
         </div>
     </form>
+    {% endif %}
 </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const selectAllCheckboxPerm = document.getElementById('selectAllStudentsPerm');
-    if (selectAllCheckboxPerm) {
-        selectAllCheckboxPerm.addEventListener('change', function() {
-            const studentCheckboxes = document.querySelectorAll('input[name="student_ids"]');
-            studentCheckboxes.forEach(cb => {
-                cb.checked = this.checked;
+    // --- Logic for Step 1: Student Selection ---
+    const studentSelectionForm = document.getElementById('studentSelectionForm');
+    if (studentSelectionForm) {
+        const selectAllCheckbox = document.getElementById('selectAllStudents');
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                const studentCheckboxes = document.querySelectorAll('input[name="student_ids"]');
+                studentCheckboxes.forEach(cb => {
+                    cb.checked = this.checked;
+                });
             });
-        });
-    }
+        }
 
-    const form = document.getElementById('bulkPermissionForm');
-    if (form) {
-        form.addEventListener('submit', function(event) {
+        studentSelectionForm.addEventListener('submit', function(event) {
             const selectedStudents = document.querySelectorAll('input[name="student_ids"]:checked').length;
             if (selectedStudents === 0) {
                 alert('Vă rugăm selectați cel puțin un student.');
                 event.preventDefault();
-                return;
             }
-            // Validare pentru start_datetime și end_datetime
-            const startTime = document.getElementById('start_datetime').value;
-            const endTime = document.getElementById('end_datetime').value;
-            if (!startTime || !endTime) {
-                alert('Data și ora de început și sfârșit sunt obligatorii.');
+        });
+    }
+
+    // --- Logic for Step 2: Permission Details ---
+    const permissionDetailsForm = document.getElementById('permissionDetailsForm');
+    if (permissionDetailsForm) {
+        const fillAllButton = document.getElementById('fillAllButton');
+        fillAllButton.addEventListener('click', function() {
+            const commonStart = document.getElementById('common_start_datetime').value;
+            const commonEnd = document.getElementById('common_end_datetime').value;
+            const commonDest = document.getElementById('common_destination').value;
+            const commonTransport = document.getElementById('common_transport_mode').value;
+
+            document.querySelectorAll('.common-start').forEach(input => input.value = commonStart);
+            document.querySelectorAll('.common-end').forEach(input => input.value = commonEnd);
+            document.querySelectorAll('.common-dest').forEach(input => input.value = commonDest);
+            document.querySelectorAll('.common-transport').forEach(input => input.value = commonTransport);
+        });
+
+        permissionDetailsForm.addEventListener('submit', function(event) {
+            let isValid = true;
+            const rows = permissionDetailsForm.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const startInput = row.querySelector('input[name^="start_datetime_"]');
+                const endInput = row.querySelector('input[name^="end_datetime_"]');
+                if (!startInput.value || !endInput.value) {
+                    isValid = false;
+                }
+                if (new Date(endInput.value) <= new Date(startInput.value)) {
+                    isValid = false;
+                    startInput.classList.add('is-invalid');
+                    endInput.classList.add('is-invalid');
+                } else {
+                    startInput.classList.remove('is-invalid');
+                    endInput.classList.remove('is-invalid');
+                }
+            });
+
+            if (!isValid) {
+                alert('Verificați datele introduse. Fiecare permisie trebuie să aibă o dată de început și de sfârșit, iar data de sfârșit trebuie să fie după cea de început.');
                 event.preventDefault();
-                return;
-            }
-            if (new Date(endTime) <= new Date(startTime)) {
-                alert('Data de sfârșit trebuie să fie după data de început.');
-                event.preventDefault();
-                return;
             }
         });
     }
