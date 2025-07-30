@@ -2216,7 +2216,7 @@ def company_commander_dashboard():
         platoons_data_roll_call[platoon_name] = _calculate_presence_data(students_in_pluton, roll_call_datetime)
 
     active_public_codes = PublicViewCode.query.filter_by(
-        created_by_user_id=current_user.id,
+        created_by_user_id=current_user.id, 
         is_active=True,
         scope_type='company',
         scope_id=company_id_str
@@ -2863,12 +2863,12 @@ def save_volunteer_session():
 
     # Find and associate students
     students_to_add = Student.query.filter(Student.id.in_(student_ids), Student.created_by_user_id == current_user.id).all()
-
+    
     if len(students_to_add) != len(student_ids):
         flash('Avertisment: Unii studenți nu au putut fi găsiți sau nu vă aparțin și nu au fost adăugați la listă.', 'warning')
 
     new_session.students.extend(students_to_add)
-
+    
     try:
         db.session.add(new_session)
         db.session.commit()
@@ -2887,11 +2887,11 @@ def volunteer_sessions_list():
     if current_user.role != 'gradat':
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
-
+    
     sessions = VolunteerSession.query.filter_by(created_by_user_id=current_user.id)\
         .order_by(VolunteerSession.created_at.desc())\
         .all()
-
+    
     return render_template('volunteer_sessions_list.html', sessions=sessions)
 
 @app.route('/volunteer/session/<int:session_id>', methods=['GET'], endpoint='volunteer_session_details')
@@ -2907,13 +2907,13 @@ def volunteer_session_details(session_id):
         return redirect(url_for('volunteer_sessions_list'))
 
     students_in_session = session.students.all()
-
+    
     # Get activities created by the user to populate the dropdown
     available_activities = VolunteerActivity.query.filter_by(created_by_user_id=current_user.id)\
         .order_by(VolunteerActivity.activity_date.desc()).all()
 
-    return render_template('volunteer_session_details.html',
-                           session=session,
+    return render_template('volunteer_session_details.html', 
+                           session=session, 
                            students=students_in_session,
                            available_activities=available_activities)
 
@@ -2935,7 +2935,7 @@ def assign_session_to_activity(session_id):
     if not activity_id:
         flash('Trebuie să selectați o activitate.', 'warning')
         return redirect(url_for('volunteer_session_details', session_id=session_id))
-
+    
     activity = VolunteerActivity.query.get_or_404(activity_id)
     if activity.created_by_user_id != current_user.id:
         flash('Acces neautorizat la activitatea selectată.', 'danger')
@@ -2943,10 +2943,10 @@ def assign_session_to_activity(session_id):
 
     students_in_session = session.students.all()
     current_participant_ids = {p.student_id for p in activity.participants}
-
+    
     added_count = 0
     skipped_count = 0
-
+    
     for student in students_in_session:
         if student.id not in current_participant_ids:
             new_participant = ActivityParticipant(
@@ -6176,7 +6176,7 @@ def gradat_bulk_add_permission():
     if request.method == 'POST':
         # This is Step 2: Processing the details form
         student_ids_to_process = [key.split('_')[2] for key in request.form if key.startswith('student_id_')]
-
+        
         added_count = 0
         error_count = 0
         conflict_details_messages = []
@@ -6199,7 +6199,7 @@ def gradat_bulk_add_permission():
                 error_count += 1
                 conflict_details_messages.append(f"Datele de început/sfârșit lipsesc pentru {student_obj.nume}.")
                 continue
-
+            
             try:
                 start_dt = datetime.strptime(start_dt_str, '%Y-%m-%dT%H:%M')
                 end_dt = datetime.strptime(end_dt_str, '%Y-%m-%dT%H:%M')
@@ -6233,18 +6233,18 @@ def gradat_bulk_add_permission():
                 added_count = 0
                 error_count = len(student_ids_to_process)
                 flash(f'Eroare majoră la salvarea permisiilor: {str(e)}', 'danger')
-
+        
         if error_count > 0:
             flash(f'{error_count} permisii nu au putut fi adăugate din cauza erorilor sau conflictelor.', 'danger')
             for msg in conflict_details_messages:
                 flash(msg, 'warning')
-
+        
         return redirect(url_for('list_permissions'))
 
     # This is Step 1: Displaying the student selection or the details form
     student_ids_selected = request.args.getlist('student_ids', type=int)
     students_to_prepare = None
-
+    
     if student_ids_selected:
         # Step 2 View: Prepare the details table
         students_to_prepare = Student.query.filter(
@@ -6255,12 +6255,12 @@ def gradat_bulk_add_permission():
         if len(students_to_prepare) != len(student_ids_selected):
             flash('Unii studenți selectați nu au putut fi găsiți sau nu vă aparțin.', 'warning')
             return redirect(url_for('gradat_bulk_add_permission'))
-
+    
     # Step 1 View: Show the student selection list
     all_students_managed = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.pluton, Student.nume).all()
 
-    return render_template('bulk_add_permission.html',
-                           students=all_students_managed,
+    return render_template('bulk_add_permission.html', 
+                           students=all_students_managed, 
                            students_to_prepare=students_to_prepare)
 
 
@@ -8195,7 +8195,7 @@ def generate_public_view_code():
     new_code_str = secrets.token_hex(8)
     while PublicViewCode.query.filter_by(code=new_code_str).first():
         new_code_str = secrets.token_hex(8)
-
+        
     expires_at_dt = get_localized_now() + timedelta(hours=expiry_hours)
 
     new_code = PublicViewCode(
@@ -8241,7 +8241,7 @@ def deactivate_public_view_code(code_id):
 def public_view_login():
     if 'public_view_access' in session:
         return redirect(url_for('public_dashboard'))
-
+        
     if request.method == 'POST':
         code_str = request.form.get('code', '').strip()
         if not code_str:
@@ -8270,7 +8270,7 @@ def public_dashboard():
         return redirect(url_for('public_view_login'))
 
     access_info = session['public_view_access']
-
+    
     # Check expiry on every page load
     if datetime.fromisoformat(access_info['expires_at']) < get_localized_now():
         session.pop('public_view_access', None)
@@ -8279,7 +8279,7 @@ def public_dashboard():
 
     scope_type = access_info['scope_type']
     scope_id = access_info['scope_id']
-
+    
     students_in_scope = []
     if scope_type == 'company':
         students_in_scope = Student.query.filter_by(companie=scope_id).all()
@@ -8287,9 +8287,9 @@ def public_dashboard():
         students_in_scope = Student.query.filter_by(batalion=scope_id).all()
 
     if not students_in_scope:
-        return render_template('public_dashboard.html',
-                               access_info=access_info,
-                               report_data=None,
+        return render_template('public_dashboard.html', 
+                               access_info=access_info, 
+                               report_data=None, 
                                error="Niciun student găsit pentru unitatea specificată.")
 
     now = get_localized_now()
@@ -8348,7 +8348,7 @@ def student_profile(student_id):
     now = get_localized_now()
     # The _calculate_presence_data function expects a list of students
     presence_data_list = _calculate_presence_data([student], now)
-
+    
     current_status = "Prezent" # Default status
     if presence_data_list.get('smt_students_details'):
         current_status = "Scutit Medical Total"
@@ -8372,7 +8372,7 @@ def student_profile(student_id):
             current_status = "Prezent (Gradat Pluton)"
 
 
-    return render_template('student_profile.html',
+    return render_template('student_profile.html', 
                            student=student,
                            current_status=current_status,
                            permissions=permissions,
