@@ -1,0 +1,32 @@
+<div class="table-responsive">
+    <table class="table table-sm table-striped table-hover">
+        <thead class="table-light">
+            <tr>
+                <th>Nume Activitate</th>
+                <th>Data Activității</th>
+                <th>Puncte Acordate</th>
+                <th>Activitate Creată de</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if volunteer_participations %}
+                {% for p in volunteer_participations %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('volunteer_activity_details', activity_id=p.activity_id) }}">
+                                {{ p.activity.name }}
+                            </a>
+                        </td>
+                        <td>{{ p.activity.activity_date|localdate('%d %B %Y') }}</td>
+                        <td><span class="badge bg-info text-dark">{{ p.points_awarded }}</span></td>
+                        <td>{{ p.activity.creator.username if p.activity.creator else 'N/A' }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="4" class="text-center text-muted">Nu există istoric de participare la voluntariat.</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>

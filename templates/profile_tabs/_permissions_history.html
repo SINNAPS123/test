@@ -1,0 +1,45 @@
+<div class="table-responsive">
+    <table class="table table-sm table-striped table-hover">
+        <thead class="table-light">
+            <tr>
+                <th>Perioada</th>
+                <th>Destinația</th>
+                <th>Transport</th>
+                <th>Motiv</th>
+                <th>Status</th>
+                <th>Adăugat de</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if permissions %}
+                {% for p in permissions %}
+                    <tr>
+                        <td>
+                            {{ p.start_datetime|localdatetime('%d.%m.%y %H:%M') }} -
+                            {{ p.end_datetime|localdatetime('%d.%m.%y %H:%M') }}
+                        </td>
+                        <td>{{ p.destination or '-' }}</td>
+                        <td>{{ p.transport_mode or '-' }}</td>
+                        <td>{{ p.reason or '-' }}</td>
+                        <td>
+                            <span class="badge
+                                {% if p.is_active %} bg-success
+                                {% elif p.is_upcoming %} bg-info text-dark
+                                {% elif p.is_past and p.status == 'Aprobată' %} bg-secondary
+                                {% elif p.status == 'Anulată' %} bg-warning text-dark
+                                {% else %} bg-light text-dark
+                                {% endif %}">
+                                {{ p.status }}
+                            </span>
+                        </td>
+                        <td>{{ p.creator.username if p.creator else 'N/A' }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted">Nu există istoric pentru permisii.</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>

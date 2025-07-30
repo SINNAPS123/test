@@ -304,6 +304,24 @@ class ActivityParticipant(db.Model):
     points_awarded = db.Column(db.Integer, default=0)
     student = db.relationship('Student', backref=db.backref('participations', lazy=True, cascade="all, delete-orphan"))
 
+# --- Models for "Save for Later" Volunteer Generation ---
+volunteer_session_participants = db.Table('volunteer_session_participants',
+    db.Column('volunteer_session_id', db.Integer, db.ForeignKey('volunteer_session.id'), primary_key=True),
+    db.Column('student_id', db.Integer, db.ForeignKey('student.id'), primary_key=True)
+)
+
+class VolunteerSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    creator = db.relationship('User', backref=db.backref('volunteer_sessions_created', lazy=True))
+    students = db.relationship('Student', secondary=volunteer_session_participants, lazy='dynamic',
+                               backref=db.backref('volunteer_sessions', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<VolunteerSession {self.name} (Created by User ID: {self.created_by_user_id})>'
+
 class ServiceAssignment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('student.id', ondelete='CASCADE'), nullable=False)
@@ -375,6 +393,20 @@ class SiteSetting(db.Model):
 
     def __repr__(self):
         return f'<SiteSetting {self.key}: {self.value[:20] if self.value else "None"}>'
+
+class PublicViewCode(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(16), unique=True, nullable=False)
+    scope_type = db.Column(db.String(20), nullable=False)  # 'company' or 'battalion'
+    scope_id = db.Column(db.String(50), nullable=False)   # The ID of the company or battalion
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    creator = db.relationship('User', backref=db.backref('public_view_codes_created', lazy=True))
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+
+    def __repr__(self):
+        return f'<PublicViewCode {self.code} for {self.scope_type} {self.scope_id}>'
 
 @login_manager.user_loader
 def load_user(user_id): return db.session.get(User, int(user_id))
@@ -803,17 +835,22 @@ def admin_dashboard_route():
         flash('Acces neautorizat la panoul de administrare.', 'danger')
         return redirect(url_for('dashboard'))
 
-    # Fetch all users that are not admins to display in the list
     users_to_display = User.query.filter(User.role != 'admin').order_by(User.username).all()
-
-    # Statistics (can be kept or enhanced)
-    total_user_count = User.query.count() # Includes admin
+    total_user_count = User.query.count()
     total_students_count = Student.query.count()
+
+    # Fetch all active public codes for the admin view
+    now = get_localized_now()
+    active_public_codes = PublicViewCode.query.filter(
+        PublicViewCode.is_active == True,
+        PublicViewCode.expires_at > now
+    ).order_by(PublicViewCode.created_at.desc()).all()
 
     return render_template('admin_dashboard.html',
                            users=users_to_display,
                            total_users=total_user_count,
-                           total_students=total_students_count)
+                           total_students=total_students_count,
+                           active_public_codes=active_public_codes)
 
 @app.route('/dashboard')
 @login_required
@@ -2178,6 +2215,13 @@ def company_commander_dashboard():
         platoon_name = f"Plutonul {pluton_id_str}"
         platoons_data_roll_call[platoon_name] = _calculate_presence_data(students_in_pluton, roll_call_datetime)
 
+    active_public_codes = PublicViewCode.query.filter_by(
+        created_by_user_id=current_user.id,
+        is_active=True,
+        scope_type='company',
+        scope_id=company_id_str
+    ).filter(PublicViewCode.expires_at > get_localized_now()).all()
+
     return render_template('company_commander_dashboard.html',
                            company_id=company_id_str,
                            roll_call_time_str=roll_call_time_str,
@@ -2196,7 +2240,8 @@ def company_commander_dashboard():
                             weekend_leaves_active_now_company=weekend_leaves_active_now_company,
                             total_on_leave_now_company=total_on_leave_now_company,
                             services_active_now_company=services_active_now_company,
-                            current_time_for_display=now_localized
+                            current_time_for_display=now_localized,
+                            active_public_codes=active_public_codes
                            )
 
 @app.route('/company_commander/logs', endpoint='company_commander_logs')
@@ -2475,6 +2520,13 @@ def battalion_commander_dashboard():
         company_name = f"Compania {company_id_str_loop}"
         companies_data_roll_call[company_name] = _calculate_presence_data(students_in_company_loop, roll_call_datetime)
 
+    active_public_codes = PublicViewCode.query.filter_by(
+        created_by_user_id=current_user.id,
+        is_active=True,
+        scope_type='battalion',
+        scope_id=battalion_id_str
+    ).filter(PublicViewCode.expires_at > get_localized_now()).all()
+
     return render_template('battalion_commander_dashboard.html',
                            battalion_id=battalion_id_str,
                            roll_call_time_str=roll_call_time_str,
@@ -2493,7 +2545,8 @@ def battalion_commander_dashboard():
                            weekend_leaves_active_now_battalion=weekend_leaves_active_now_battalion,
                            total_on_leave_now_battalion=total_on_leave_now_battalion,
                            services_active_now_battalion=services_active_now_battalion,
-                           current_time_for_display=now_localized_b
+                           current_time_for_display=now_localized_b,
+                           active_public_codes=active_public_codes
                            )
 
 # --- Volunteer Module ---
@@ -2780,6 +2833,173 @@ def volunteer_generate_students():
                            num_students_requested=num_students_req_val,
                            exclude_girls_opt=exclude_girls_val,
                            activity_date_for_check=activity_date_for_check_str) # Pass this to template for repopulation
+
+@app.route('/volunteer/save_session', methods=['POST'], endpoint='save_volunteer_session')
+@login_required
+def save_volunteer_session():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    session_name = request.form.get('session_name', '').strip()
+    student_ids = request.form.getlist('student_ids[]', type=int)
+
+    if not session_name:
+        flash('Numele listei de voluntari este obligatoriu.', 'warning')
+        # This redirect is not ideal as it loses the context of the generated list.
+        # A more advanced implementation might use session to store and repopulate the previous page.
+        # For now, redirecting to the generation page is a simple fallback.
+        return redirect(url_for('volunteer_generate_students'))
+
+    if not student_ids:
+        flash('Niciun student nu a fost selectat pentru a fi salvat în listă.', 'warning')
+        return redirect(url_for('volunteer_generate_students'))
+
+    # Create the new session
+    new_session = VolunteerSession(
+        name=session_name,
+        created_by_user_id=current_user.id
+    )
+
+    # Find and associate students
+    students_to_add = Student.query.filter(Student.id.in_(student_ids), Student.created_by_user_id == current_user.id).all()
+
+    if len(students_to_add) != len(student_ids):
+        flash('Avertisment: Unii studenți nu au putut fi găsiți sau nu vă aparțin și nu au fost adăugați la listă.', 'warning')
+
+    new_session.students.extend(students_to_add)
+
+    try:
+        db.session.add(new_session)
+        db.session.commit()
+        flash(f'Lista de voluntari "{session_name}" a fost salvată cu succes.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la salvarea listei de voluntari: {str(e)}', 'danger')
+        app.logger.error(f"Error saving volunteer session for user {current_user.id}: {str(e)}")
+
+    # Redirect to the list of saved sessions
+    return redirect(url_for('volunteer_sessions_list'))
+
+@app.route('/volunteer/sessions', methods=['GET'], endpoint='volunteer_sessions_list')
+@login_required
+def volunteer_sessions_list():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    sessions = VolunteerSession.query.filter_by(created_by_user_id=current_user.id)\
+        .order_by(VolunteerSession.created_at.desc())\
+        .all()
+
+    return render_template('volunteer_sessions_list.html', sessions=sessions)
+
+@app.route('/volunteer/session/<int:session_id>', methods=['GET'], endpoint='volunteer_session_details')
+@login_required
+def volunteer_session_details(session_id):
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    session = VolunteerSession.query.get_or_404(session_id)
+    if session.created_by_user_id != current_user.id:
+        flash('Acces neautorizat la această listă.', 'danger')
+        return redirect(url_for('volunteer_sessions_list'))
+
+    students_in_session = session.students.all()
+
+    # Get activities created by the user to populate the dropdown
+    available_activities = VolunteerActivity.query.filter_by(created_by_user_id=current_user.id)\
+        .order_by(VolunteerActivity.activity_date.desc()).all()
+
+    return render_template('volunteer_session_details.html',
+                           session=session,
+                           students=students_in_session,
+                           available_activities=available_activities)
+
+@app.route('/volunteer/session/<int:session_id>/assign', methods=['POST'], endpoint='assign_session_to_activity')
+@login_required
+def assign_session_to_activity(session_id):
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    session = VolunteerSession.query.get_or_404(session_id)
+    if session.created_by_user_id != current_user.id:
+        flash('Acces neautorizat la această listă.', 'danger')
+        return redirect(url_for('volunteer_sessions_list'))
+
+    activity_id = request.form.get('activity_id', type=int)
+    points_to_award = request.form.get('points_to_award', type=int, default=0)
+
+    if not activity_id:
+        flash('Trebuie să selectați o activitate.', 'warning')
+        return redirect(url_for('volunteer_session_details', session_id=session_id))
+
+    activity = VolunteerActivity.query.get_or_404(activity_id)
+    if activity.created_by_user_id != current_user.id:
+        flash('Acces neautorizat la activitatea selectată.', 'danger')
+        return redirect(url_for('volunteer_session_details', session_id=session_id))
+
+    students_in_session = session.students.all()
+    current_participant_ids = {p.student_id for p in activity.participants}
+
+    added_count = 0
+    skipped_count = 0
+
+    for student in students_in_session:
+        if student.id not in current_participant_ids:
+            new_participant = ActivityParticipant(
+                activity_id=activity.id,
+                student_id=student.id,
+                points_awarded=points_to_award
+            )
+            db.session.add(new_participant)
+            # If points are awarded, update the student's total
+            if points_to_award > 0:
+                student.volunteer_points += points_to_award
+            added_count += 1
+        else:
+            skipped_count += 1
+
+    try:
+        db.session.commit()
+        if added_count > 0:
+            flash(f'{added_count} studenți au fost adăugați ca participanți la activitatea "{activity.name}".', 'success')
+        if skipped_count > 0:
+            flash(f'{skipped_count} studenți erau deja participanți și au fost omiși.', 'info')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la asignarea participanților: {str(e)}', 'danger')
+        app.logger.error(f"Error assigning volunteer session {session_id} to activity {activity_id}: {str(e)}")
+
+    return redirect(url_for('volunteer_activity_details', activity_id=activity.id))
+
+@app.route('/volunteer/session/delete/<int:session_id>', methods=['POST'], endpoint='delete_volunteer_session')
+@login_required
+def delete_volunteer_session(session_id):
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    session_to_delete = VolunteerSession.query.get_or_404(session_id)
+
+    if session_to_delete.created_by_user_id != current_user.id:
+        flash('Nu aveți permisiunea să ștergeți această listă.', 'danger')
+        return redirect(url_for('volunteer_sessions_list'))
+
+    try:
+        # The relationship is many-to-many, so deleting the session
+        # should just delete the entries in the association table, not the students themselves.
+        db.session.delete(session_to_delete)
+        db.session.commit()
+        flash(f'Lista "{session_to_delete.name}" a fost ștearsă cu succes.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la ștergerea listei: {str(e)}', 'danger')
+        app.logger.error(f"Error deleting volunteer session {session_id} for user {current_user.id}: {str(e)}")
+
+    return redirect(url_for('volunteer_sessions_list'))
 
 @app.route('/volunteer/activity/delete/<int:activity_id>', methods=['POST'], endpoint='delete_volunteer_activity')
 @login_required
@@ -5953,90 +6173,95 @@ def gradat_bulk_add_permission():
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
 
-    students_managed = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.pluton, Student.nume).all()
-
     if request.method == 'POST':
-        student_ids_selected = request.form.getlist('student_ids')
-        start_datetime_str = request.form.get('start_datetime')
-        end_datetime_str = request.form.get('end_datetime')
-        destination = request.form.get('destination', '').strip()
-        transport_mode = request.form.get('transport_mode', '').strip()
-        reason = request.form.get('reason', '').strip()
-
-        if not student_ids_selected:
-            flash('Nu ați selectat niciun student.', 'warning')
-            return render_template('bulk_add_permission.html', students=students_managed, form_data=request.form)
-
-        if not start_datetime_str or not end_datetime_str:
-            flash('Data de început și de sfârșit sunt obligatorii.', 'warning')
-            return render_template('bulk_add_permission.html', students=students_managed, form_data=request.form)
-
-        try:
-            # Datetime-urile din form sunt deja în ora locală. Le vom stoca ca naive.
-            start_dt = datetime.strptime(start_datetime_str, '%Y-%m-%dT%H:%M')
-            end_dt = datetime.strptime(end_datetime_str, '%Y-%m-%dT%H:%M')
-        except ValueError:
-            flash('Format dată/oră invalid.', 'danger')
-            return render_template('bulk_add_permission.html', students=students_managed, form_data=request.form)
-
-        if end_dt <= start_dt:
-            flash('Data de sfârșit trebuie să fie după data de început.', 'warning')
-            return render_template('bulk_add_permission.html', students=students_managed, form_data=request.form)
+        # This is Step 2: Processing the details form
+        student_ids_to_process = [key.split('_')[2] for key in request.form if key.startswith('student_id_')]
 
         added_count = 0
-        skipped_due_to_conflict_count = 0
+        error_count = 0
         conflict_details_messages = []
 
-        for student_id_str in student_ids_selected:
+        for student_id_str in student_ids_to_process:
             student_id = int(student_id_str)
+            start_dt_str = request.form.get(f'start_datetime_{student_id}')
+            end_dt_str = request.form.get(f'end_datetime_{student_id}')
+            destination = request.form.get(f'destination_{student_id}', '').strip()
+            transport_mode = request.form.get(f'transport_mode_{student_id}', '').strip()
+            reason = request.form.get(f'reason_{student_id}', '').strip()
 
-            # Verificare conflict (folosind datetime-uri naive locale)
-            # check_leave_conflict se așteaptă la datetime-uri naive
-            conflict_msg = check_leave_conflict(student_id, start_dt, end_dt, leave_type='permission', existing_leave_id=None)
+            student_obj = db.session.get(Student, student_id)
+            if not student_obj or student_obj.created_by_user_id != current_user.id:
+                error_count += 1
+                conflict_details_messages.append(f"Student ID {student_id} invalid sau nu vă aparține.")
+                continue
+
+            if not start_dt_str or not end_dt_str:
+                error_count += 1
+                conflict_details_messages.append(f"Datele de început/sfârșit lipsesc pentru {student_obj.nume}.")
+                continue
+
+            try:
+                start_dt = datetime.strptime(start_dt_str, '%Y-%m-%dT%H:%M')
+                end_dt = datetime.strptime(end_dt_str, '%Y-%m-%dT%H:%M')
+                if end_dt <= start_dt:
+                    raise ValueError("Data de sfârșit trebuie să fie după data de început.")
+            except ValueError as e:
+                error_count += 1
+                conflict_details_messages.append(f"Format dată invalid pentru {student_obj.nume}: {e}")
+                continue
+
+            conflict_msg = check_leave_conflict(student_id, start_dt, end_dt, 'permission', None)
             if conflict_msg:
-                student_obj = db.session.get(Student, student_id)
-                conflict_details_messages.append(f"Student {student_obj.nume} {student_obj.prenume}: conflict ({conflict_msg}). Permisia nu a fost adăugată.")
-                skipped_due_to_conflict_count += 1
+                error_count += 1
+                conflict_details_messages.append(f"{student_obj.nume} {student_obj.prenume}: Conflict ({conflict_msg}).")
                 continue
 
             new_permission = Permission(
-                student_id=student_id,
-                start_datetime=start_dt,
-                end_datetime=end_dt,
-                destination=destination,
-                transport_mode=transport_mode,
-                reason=reason,
-                status='Aprobată', # Implicit aprobată la adăugare bulk
-                created_by_user_id=current_user.id
+                student_id=student_id, start_datetime=start_dt, end_datetime=end_dt,
+                destination=destination, transport_mode=transport_mode, reason=reason,
+                status='Aprobată', created_by_user_id=current_user.id
             )
             db.session.add(new_permission)
             added_count += 1
 
-        try:
-            db.session.commit()
-            if added_count > 0:
+        if added_count > 0:
+            try:
+                db.session.commit()
                 flash(f'{added_count} permisii au fost adăugate cu succes.', 'success')
-            if skipped_due_to_conflict_count > 0:
-                flash(f'{skipped_due_to_conflict_count} permisii au fost omise din cauza conflictelor. Detalii mai jos.', 'warning')
-                for detail_msg in conflict_details_messages:
-                    flash(detail_msg, 'info')
-            if added_count == 0 and skipped_due_to_conflict_count == 0 and len(student_ids_selected) > 0:
-                 flash('Nicio permisie nu a fost adăugată. Verificați selecțiile și încercați din nou.', 'info')
+            except Exception as e:
+                db.session.rollback()
+                added_count = 0
+                error_count = len(student_ids_to_process)
+                flash(f'Eroare majoră la salvarea permisiilor: {str(e)}', 'danger')
 
-            log_action("BULK_ADD_PERMISSION",
-                       description=f"User {current_user.username} attempted bulk permission. Added: {added_count}, Skipped (conflict): {skipped_due_to_conflict_count}.",
-                       details_after_dict={"students_selected_count": len(student_ids_selected),
-                                           "start_datetime": start_datetime_str, "end_datetime": end_datetime_str,
-                                           "destination": destination, "conflict_messages": conflict_details_messages[:5]})
-            db.session.commit()
-            return redirect(url_for('list_permissions'))
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Eroare la salvarea permisiilor: {str(e)}', 'danger')
-            log_action("BULK_ADD_PERMISSION_FAIL", description=f"Bulk add permission failed for user {current_user.username}. Error: {str(e)}")
-            db.session.commit()
+        if error_count > 0:
+            flash(f'{error_count} permisii nu au putut fi adăugate din cauza erorilor sau conflictelor.', 'danger')
+            for msg in conflict_details_messages:
+                flash(msg, 'warning')
 
-    return render_template('bulk_add_permission.html', students=students_managed, form_data=None, timedelta=timedelta, get_localized_now=get_localized_now)
+        return redirect(url_for('list_permissions'))
+
+    # This is Step 1: Displaying the student selection or the details form
+    student_ids_selected = request.args.getlist('student_ids', type=int)
+    students_to_prepare = None
+
+    if student_ids_selected:
+        # Step 2 View: Prepare the details table
+        students_to_prepare = Student.query.filter(
+            Student.id.in_(student_ids_selected),
+            Student.created_by_user_id == current_user.id
+        ).order_by(Student.pluton, Student.nume).all()
+        # Verify all requested students were found and belong to the user
+        if len(students_to_prepare) != len(student_ids_selected):
+            flash('Unii studenți selectați nu au putut fi găsiți sau nu vă aparțin.', 'warning')
+            return redirect(url_for('gradat_bulk_add_permission'))
+
+    # Step 1 View: Show the student selection list
+    all_students_managed = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.pluton, Student.nume).all()
+
+    return render_template('bulk_add_permission.html',
+                           students=all_students_managed,
+                           students_to_prepare=students_to_prepare)
 
 
 # --- Istoric Învoiri Gradat ---
@@ -7938,8 +8163,223 @@ def admin_homepage_settings():
                            current_badge_text=current_badge_text)
 # END JULES - ADMIN HOME PAGE SETTINGS
 
+
+# --- Public View Code Routes ---
+@app.route('/view_access/generate', methods=['POST'], endpoint='generate_public_view_code')
+@login_required
+def generate_public_view_code():
+    if current_user.role not in ['admin', 'comandant_companie', 'comandant_batalion']:
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    scope_type = request.form.get('scope_type')
+    scope_id = request.form.get('scope_id')
+    expiry_hours = request.form.get('expiry_hours', type=int, default=24)
+
+    # Validation
+    if not scope_type or not scope_id or scope_type not in ['company', 'battalion']:
+        flash('Tip sau ID unitate invalid.', 'danger')
+        return redirect(request.referrer or url_for('dashboard'))
+
+    # Security check: ensure commanders can only create codes for their own unit
+    if current_user.role == 'comandant_companie':
+        if scope_type != 'company' or scope_id != _get_commander_unit_id(current_user.username, "CmdC"):
+            flash('Nu puteți genera coduri pentru altă unitate.', 'danger')
+            return redirect(url_for('company_commander_dashboard'))
+    elif current_user.role == 'comandant_batalion':
+        if scope_type != 'battalion' or scope_id != _get_commander_unit_id(current_user.username, "CmdB"):
+            flash('Nu puteți genera coduri pentru altă unitate.', 'danger')
+            return redirect(url_for('battalion_commander_dashboard'))
+
+    # Generate unique code
+    new_code_str = secrets.token_hex(8)
+    while PublicViewCode.query.filter_by(code=new_code_str).first():
+        new_code_str = secrets.token_hex(8)
+
+    expires_at_dt = get_localized_now() + timedelta(hours=expiry_hours)
+
+    new_code = PublicViewCode(
+        code=new_code_str,
+        scope_type=scope_type,
+        scope_id=scope_id,
+        expires_at=expires_at_dt,
+        created_by_user_id=current_user.id
+    )
+
+    try:
+        db.session.add(new_code)
+        db.session.commit()
+        flash(f'Cod de acces public generat cu succes: {new_code_str}', 'success')
+        flash(f'Acesta este valabil pentru {expiry_hours} ore și oferă acces la {scope_type.capitalize()} {scope_id}.', 'info')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la generarea codului: {str(e)}', 'danger')
+
+    return redirect(request.referrer or url_for('dashboard'))
+
+@app.route('/view_access/deactivate/<int:code_id>', methods=['POST'], endpoint='deactivate_public_view_code')
+@login_required
+def deactivate_public_view_code(code_id):
+    code_to_deactivate = PublicViewCode.query.get_or_404(code_id)
+
+    # Security check
+    if current_user.role != 'admin' and code_to_deactivate.created_by_user_id != current_user.id:
+        flash('Nu aveți permisiunea să dezactivați acest cod.', 'danger')
+        return redirect(request.referrer or url_for('dashboard'))
+
+    code_to_deactivate.is_active = False
+    try:
+        db.session.commit()
+        flash(f'Codul {code_to_deactivate.code} a fost dezactivat.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la dezactivarea codului: {str(e)}', 'danger')
+
+    return redirect(request.referrer or url_for('dashboard'))
+
+@app.route('/public_view', methods=['GET', 'POST'], endpoint='public_view_login')
+def public_view_login():
+    if 'public_view_access' in session:
+        return redirect(url_for('public_dashboard'))
+
+    if request.method == 'POST':
+        code_str = request.form.get('code', '').strip()
+        if not code_str:
+            flash('Vă rugăm introduceți un cod de acces.', 'warning')
+            return redirect(url_for('public_view_login'))
+
+        now = get_localized_now()
+        access_code = PublicViewCode.query.filter_by(code=code_str, is_active=True).first()
+
+        if access_code and access_code.expires_at > now:
+            session['public_view_access'] = {
+                'scope_type': access_code.scope_type,
+                'scope_id': access_code.scope_id,
+                'expires_at': access_code.expires_at.isoformat()
+            }
+            return redirect(url_for('public_dashboard'))
+        else:
+            flash('Codul de acces este invalid, a expirat sau a fost dezactivat.', 'danger')
+            return redirect(url_for('public_view_login'))
+
+    return render_template('public_login.html')
+
+@app.route('/public_dashboard', endpoint='public_dashboard')
+def public_dashboard():
+    if 'public_view_access' not in session:
+        return redirect(url_for('public_view_login'))
+
+    access_info = session['public_view_access']
+
+    # Check expiry on every page load
+    if datetime.fromisoformat(access_info['expires_at']) < get_localized_now():
+        session.pop('public_view_access', None)
+        flash('Sesiunea de vizualizare a expirat.', 'info')
+        return redirect(url_for('public_view_login'))
+
+    scope_type = access_info['scope_type']
+    scope_id = access_info['scope_id']
+
+    students_in_scope = []
+    if scope_type == 'company':
+        students_in_scope = Student.query.filter_by(companie=scope_id).all()
+    elif scope_type == 'battalion':
+        students_in_scope = Student.query.filter_by(batalion=scope_id).all()
+
+    if not students_in_scope:
+        return render_template('public_dashboard.html',
+                               access_info=access_info,
+                               report_data=None,
+                               error="Niciun student găsit pentru unitatea specificată.")
+
+    now = get_localized_now()
+    report_data = _calculate_presence_data(students_in_scope, now)
+
+    return render_template('public_dashboard.html', access_info=access_info, report_data=report_data)
+
+@app.route('/public_view/logout', endpoint='public_view_logout')
+def public_view_logout():
+    session.pop('public_view_access', None)
+    flash('Ați fost deconectat din modulul de vizualizare publică.', 'success')
+    return redirect(url_for('public_view_login'))
+
+
 # Initialize DB (for admin user creation, etc.)
 # init_db() # This also needs app context if called outside a request or app setup
+
+# --- Student Profile Page ---
+@app.route('/student/profile/<int:student_id>')
+@login_required
+def student_profile(student_id):
+    student = db.session.get(Student, student_id)
+    if not student:
+        flash('Studentul nu a fost găsit.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Security Check
+    can_view = False
+    if current_user.role == 'admin':
+        can_view = True
+    elif current_user.role == 'gradat' and student.created_by_user_id == current_user.id:
+        can_view = True
+    elif current_user.role == 'comandant_companie':
+        company_id = _get_commander_unit_id(current_user.username, "CmdC")
+        if company_id and student.companie == company_id:
+            can_view = True
+    elif current_user.role == 'comandant_batalion':
+        battalion_id = _get_commander_unit_id(current_user.username, "CmdB")
+        if battalion_id and student.batalion == battalion_id:
+            can_view = True
+
+    if not can_view:
+        flash('Acces neautorizat la profilul acestui student.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Fetch all related data
+    permissions = Permission.query.filter_by(student_id=student_id).order_by(Permission.start_datetime.desc()).all()
+    daily_leaves = DailyLeave.query.filter_by(student_id=student_id).order_by(DailyLeave.leave_date.desc()).all()
+    weekend_leaves = WeekendLeave.query.filter_by(student_id=student_id).order_by(WeekendLeave.weekend_start_date.desc()).all()
+    services = ServiceAssignment.query.filter_by(student_id=student_id).order_by(ServiceAssignment.start_datetime.desc()).all()
+    volunteer_participations = ActivityParticipant.query.options(joinedload(ActivityParticipant.activity))\
+        .filter_by(student_id=student_id)\
+        .join(VolunteerActivity).order_by(VolunteerActivity.activity_date.desc()).all()
+
+    # Determine current status
+    now = get_localized_now()
+    # The _calculate_presence_data function expects a list of students
+    presence_data_list = _calculate_presence_data([student], now)
+
+    current_status = "Prezent" # Default status
+    if presence_data_list.get('smt_students_details'):
+        current_status = "Scutit Medical Total"
+    elif presence_data_list.get('exempt_other_students_details'):
+        current_status = f"Scutit: {student.exemption_details}"
+    elif presence_data_list.get('on_duty_students_details'):
+        # Extract more specific service detail if available
+        current_status = presence_data_list['on_duty_students_details'][0].split(' - ', 1)[1]
+    elif presence_data_list.get('absent_students_details'):
+         # Extract more specific leave detail if available
+        current_status = presence_data_list['absent_students_details'][0].split(' - ', 1)[1]
+    elif presence_data_list.get('platoon_graded_duty_count', 0) > 0 and student.is_platoon_graded_duty:
+        # Check if this student is the one counted as a present gradat
+        # This check is complex; for now, we simplify
+        is_present_leader = False
+        for detail in presence_data_list.get('platoon_graded_duty_students_details', []):
+            if student.nume in detail and "Absent" not in detail:
+                is_present_leader = True
+                break
+        if is_present_leader:
+            current_status = "Prezent (Gradat Pluton)"
+
+
+    return render_template('student_profile.html',
+                           student=student,
+                           current_status=current_status,
+                           permissions=permissions,
+                           daily_leaves=daily_leaves,
+                           weekend_leaves=weekend_leaves,
+                           services=services,
+                           volunteer_participations=volunteer_participations)
 
 # It's recommended to run the app within an if __name__ == '__main__': block.
 # The app.run() call is correctly placed within this block below.
