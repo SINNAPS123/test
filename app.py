@@ -3793,6 +3793,9 @@ def find_student_for_bulk_import(name_line, gradat_id):
             student_name_str_bulk = pattern.sub("", name_line).strip()
             break
 
+    # Clean up trailing time-like patterns from student_name_str_bulk
+    student_name_str_bulk = re.sub(r"\s+\d{1,2}:\d{2}(-\d{1,2}:\d{2})?$", "", student_name_str_bulk).strip()
+
     normalized_search_name_bulk = unidecode(student_name_str_bulk.lower())
 
     matched_students = []
@@ -3826,9 +3829,9 @@ def find_student_for_bulk_import(name_line, gradat_id):
             s_grad_norm = unidecode(s.grad_militar.lower())
 
             # Check if normalized_search_name_bulk (name from input without rank)
-            # matches student's full name in either order
-            name_match_direct = (normalized_search_name_bulk == s_fullname_norm)
-            name_match_reversed = (normalized_search_name_bulk == s_fullname_reversed_norm)
+            # is a substring of student's full name in either order
+            name_match_direct = (normalized_search_name_bulk in s_fullname_norm)
+            name_match_reversed = (normalized_search_name_bulk in s_fullname_reversed_norm)
 
             if name_match_direct or name_match_reversed:
                 if parsed_grad_bulk: # If rank was parsed from input
