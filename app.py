@@ -1532,29 +1532,19 @@ def _calculate_presence_data(student_list_for_platoon_view, check_datetime):
         }
 
     report_platoon_id = student_list_for_platoon_view[0].pluton
-
-    # `check_datetime` is assumed to be a naive datetime representing local time
-    now_naive_for_query = check_datetime
-
-    # Create an aware version for Python comparisons
-    if check_datetime.tzinfo is None:
-        now_aware_for_compare = EUROPE_BUCHAREST.localize(check_datetime, is_dst=None)
-    else:
-        # If it's somehow already aware, ensure it's in the correct timezone
-        now_aware_for_compare = check_datetime.astimezone(EUROPE_BUCHAREST)
+    now = check_datetime
 
     all_students_system = Student.query.all()
     all_student_ids_system = [s.id for s in all_students_system]
 
-    # Use naive datetime for queries against naive DB columns
     active_services_map_all = {sa.student_id: sa for sa in ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(all_student_ids_system),
-        ServiceAssignment.start_datetime <= now_naive_for_query, ServiceAssignment.end_datetime >= now_naive_for_query
+        ServiceAssignment.start_datetime <= now, ServiceAssignment.end_datetime >= now
     ).all()}
 
     active_permissions_map_all = {p.student_id: p for p in Permission.query.filter(
         Permission.student_id.in_(all_student_ids_system), Permission.status == 'Aprobată',
-        Permission.start_datetime <= now_naive_for_query, Permission.end_datetime >= now_naive_for_query
+        Permission.start_datetime <= now, Permission.end_datetime >= now
     ).all()}
 
     all_daily_leaves_system = DailyLeave.query.filter(
@@ -1562,11 +1552,9 @@ def _calculate_presence_data(student_list_for_platoon_view, check_datetime):
     ).all()
     active_daily_leaves_map_all = {}
     for dl in all_daily_leaves_system:
-        # dl.start_datetime and dl.end_datetime are naive properties representing local time
-        # Make them aware for comparison with now_aware_for_compare
-        dl_start_aware = EUROPE_BUCHAREST.localize(dl.start_datetime, is_dst=None)
-        dl_end_aware = EUROPE_BUCHAREST.localize(dl.end_datetime, is_dst=None)
-        if dl_start_aware <= now_aware_for_compare <= dl_end_aware:
+        dl_start_aware = EUROPE_BUCHAREST.localize(dl.start_datetime) if dl.start_datetime.tzinfo is None else dl.start_datetime.astimezone(EUROPE_BUCHAREST)
+        dl_end_aware = EUROPE_BUCHAREST.localize(dl.end_datetime) if dl.end_datetime.tzinfo is None else dl.end_datetime.astimezone(EUROPE_BUCHAREST)
+        if dl_start_aware <= now <= dl_end_aware:
             if dl.student_id not in active_daily_leaves_map_all: active_daily_leaves_map_all[dl.student_id] = dl
 
     all_weekend_leaves_system = WeekendLeave.query.filter(
@@ -1574,8 +1562,8 @@ def _calculate_presence_data(student_list_for_platoon_view, check_datetime):
     ).all()
     active_weekend_leaves_map_all = {}
     for wl in all_weekend_leaves_system:
-        for interval in wl.get_intervals(): # get_intervals() returns aware datetimes
-            if interval['start'] <= now_aware_for_compare <= interval['end']:
+        for interval in wl.get_intervals():
+            if interval['start'] <= now <= interval['end']:
                 if wl.student_id not in active_weekend_leaves_map_all: active_weekend_leaves_map_all[wl.student_id] = {"leave": wl, "interval": interval}
                 break
 
@@ -3828,6 +3816,9 @@ def export_permissions_word():
 
     document = Document()
     # General document heading (optional, could be removed if each table has a full title)
+    # General document heading (optional, could be removed if each table has a full title)
+    # document.add_heading('Raport Permisii Studenți', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+
     # User and date info
     user_info_text = f"Raport generat de: {current_user.username}\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}"
     p_user_info = document.add_paragraph()
@@ -3835,29 +3826,24 @@ def export_permissions_word():
     p_user_info.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph() # Spacer
 
-    # Column titles for each table
-    column_titles = ['Nr.crt', 'Grad', 'Nume și Prenume', 'Perioada', 'Grupa', 'Localitatea', 'Transport']
-    # Adjusted column widths for 7 columns
-    # Widths inspired by admin_export_permissions_word, adjusted for gradat context
-    # Nr.crt(0.4), Grad(0.7), Nume și Prenume(1.8), Perioada(2.0), Grupa(0.8), Localitate(1.3), Transport(1.0) = 8.0 inches.
-    # Let's try to keep it around 7.5 inches if possible.
-    # Nr.crt(0.4), Grad(0.7), Nume și Prenume(2.0), Perioada(1.8), Grupa(0.8), Localitate(1.2), Transport(1.1) = 8.0
-    # Trying: Nr.crt(0.4), Grad(0.7), Nume(1.8), Perioada(1.8), Grupa(0.7), Loc(1.3), Trans(1.3) = 8.0
-    # Let's use:
+    # Column titles for each table (Period column is removed)
+    column_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Grupa', 'Localitate', 'Transport']
+    # New column widths for 6 columns
     new_widths = {
-        0: Inches(0.4),  # Nr.crt
-        1: Inches(0.7),  # Grad
+        0: Inches(0.4),  # Nr. crt.
+        1: Inches(0.8),  # Grad
         2: Inches(2.0),  # Nume și Prenume
-        3: Inches(1.8),  # Perioada
-        4: Inches(0.7),  # Grupa
-        5: Inches(1.2),  # Localitatea
-        6: Inches(1.2)   # Transport
-    } # Total width: 8.0 inches. May need to adjust based on A4 paper width limits if portrait.
+        3: Inches(0.8),  # Grupa
+        4: Inches(1.5),  # Localitate
+        5: Inches(1.5)   # Transport
+    } # Total width approx 7.0 inches
 
     for period_key, permissions_in_period in sorted_grouped_permissions:
         start_dt_period = EUROPE_BUCHAREST.localize(period_key[0]) if period_key[0].tzinfo is None else period_key[0].astimezone(EUROPE_BUCHAREST)
         end_dt_period = EUROPE_BUCHAREST.localize(period_key[1]) if period_key[1].tzinfo is None else period_key[1].astimezone(EUROPE_BUCHAREST)
 
+        # Format period string for the title
+        # Example: Joi, 25.07.2024 (14:00) - Duminică, 28.07.2024 (22:00)
         period_title_str = (
             f"{get_day_name_ro(start_dt_period)}, {start_dt_period.strftime('%d.%m.%Y (%H:%M')}) - "
             f"{get_day_name_ro(end_dt_period)}, {end_dt_period.strftime('%d.%m.%Y (%H:%M)')}"
@@ -3865,78 +3851,42 @@ def export_permissions_word():
 
         document.add_heading(f"Tabel nominal cu studenții care pleacă in permisie în perioada {period_title_str}", level=2).alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        table = document.add_table(rows=1, cols=len(column_titles))
-        table.style = 'Table Grid' # Ensures horizontal lines
+        table = document.add_table(rows=1, cols=len(column_titles)) # Create table with 6 columns
+        table.style = 'Table Grid'
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
         hdr_cells = table.rows[0].cells
         for i, title in enumerate(column_titles):
             hdr_cells[i].text = title
             hdr_cells[i].paragraphs[0].runs[0].font.bold = True
-            # Headers can be centered, user asked for text (data) to be left-aligned
             hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-
+        # Sort permissions within this period group by student name for consistency
         permissions_in_period.sort(key=lambda p: (p.student.nume, p.student.prenume))
 
         for idx, p_item in enumerate(permissions_in_period):
             row_cells = table.add_row().cells
-
-            # Nr.crt
             row_cells[0].text = str(idx + 1)
-            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT # Left align
+            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-            # Grad
-            row_cells[1].text = p_item.student.grad_militar # Assuming this is already abbreviated
-            row_cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT # Left align
+            row_cells[1].text = p_item.student.grad_militar
+            row_cells[2].text = f"{p_item.student.nume} {p_item.student.prenume}" # Combined name
 
-            # Nume și Prenume
-            row_cells[2].text = f"{p_item.student.nume} {p_item.student.prenume}"
-            row_cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT # Left align
+            row_cells[3].text = p_item.student.pluton # Grupa/Pluton
+            row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-            # Perioada
-            start_dt_local = EUROPE_BUCHAREST.localize(p_item.start_datetime) if p_item.start_datetime.tzinfo is None else p_item.start_datetime.astimezone(EUROPE_BUCHAREST)
-            end_dt_local = EUROPE_BUCHAREST.localize(p_item.end_datetime) if p_item.end_datetime.tzinfo is None else p_item.end_datetime.astimezone(EUROPE_BUCHAREST)
-
-            period_display_str = ""
-            if start_dt_local.date() == end_dt_local.date():
-                # Single day: HH:MM - HH:MM
-                period_display_str = f"{start_dt_local.strftime('%H:%M')} - {end_dt_local.strftime('%H:%M')}"
-            else:
-                # Multi-day: DD.MM - DD.MM.YYYY
-                period_display_str = f"{start_dt_local.strftime('%d.%m')} - {end_dt_local.strftime('%d.%m.%Y')}"
-
-            row_cells[3].text = period_display_str
-            row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT # Left align
-
-            # Grupa
-            row_cells[4].text = p_item.student.pluton
-            row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT # Left align
-
-            # Localitatea
-            row_cells[5].text = p_item.destination if p_item.destination else "-"
-            row_cells[5].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT # Left align
-
-            # Transport
-            row_cells[6].text = p_item.transport_mode if p_item.transport_mode else "-"
-            row_cells[6].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT # Left align
+            row_cells[4].text = p_item.destination if p_item.destination else "-"
+            row_cells[5].text = p_item.transport_mode if p_item.transport_mode else "-"
 
         # Apply column widths to the current table
         for col_idx, width_val in new_widths.items():
-            # Set width for each cell in each column
-            for row in table.rows:
-                 if col_idx < len(row.cells): # Check if cell exists
-                    row.cells[col_idx].width = width_val
+            for row in table.rows: # Apply to all rows including header
+                if col_idx < len(row.cells):
+                     row.cells[col_idx].width = width_val
 
-        # Ensure all cells in the table have left-aligned content by default, except headers
-        for row_idx, row in enumerate(table.rows):
-            if row_idx == 0: continue # Skip header row for general data alignment
-            for cell in row.cells:
-                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+        document.add_paragraph() # Add some space between tables
 
-
-        document.add_paragraph()
-
+    # Change font for the whole document (optional)
     style = document.styles['Normal']
     font = style.font
     font.name = 'Calibri'
@@ -6436,18 +6386,18 @@ def admin_export_permissions_word():
 
     document = Document()
     document.add_heading('Raport General Permisii (Admin)', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
-    user_info_text = f"Raport generat de: {current_user.username} (Admin)\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}" # Changed datetime.now() to get_localized_now()
+    user_info_text = f"Raport generat de: {current_user.username} (Admin)\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
     p_user = document.add_paragraph()
     p_user.add_run(user_info_text).italic = True
     p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph()
 
-    table = document.add_table(rows=1, cols=7)
+    table = document.add_table(rows=1, cols=7) # Nr.crt, Grad, Nume și Prenume, Perioada, Grupa, Localitate, Transport
     table.style = 'Table Grid'
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
     hdr_cells = table.rows[0].cells
-    column_titles = ['Nr.crt', 'Grad', 'Nume și Prenume', 'Perioada', 'Grupa', 'Localitatea', 'Transport'] # Updated titles
+    column_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Perioada', 'Grupa', 'Localitate', 'Transport']
     for i, title in enumerate(column_titles):
         hdr_cells[i].text = title
         hdr_cells[i].paragraphs[0].runs[0].font.bold = True
@@ -6455,86 +6405,79 @@ def admin_export_permissions_word():
 
     for idx, p in enumerate(permissions_to_export):
         row_cells = table.add_row().cells
-
-        # Nr.crt
         row_cells[0].text = str(idx + 1)
-        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT # Left align
+        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        # Grad
         row_cells[1].text = p.student.grad_militar
-        row_cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT # Left align
-
-        # Nume și Prenume
         row_cells[2].text = f"{p.student.nume} {p.student.prenume}"
-        row_cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT # Left align
 
-        # Perioada
         start_dt_local = EUROPE_BUCHAREST.localize(p.start_datetime) if p.start_datetime.tzinfo is None else p.start_datetime.astimezone(EUROPE_BUCHAREST)
         end_dt_local = EUROPE_BUCHAREST.localize(p.end_datetime) if p.end_datetime.tzinfo is None else p.end_datetime.astimezone(EUROPE_BUCHAREST)
-
-        period_str = ""
         if start_dt_local.date() == end_dt_local.date():
-            period_str = f"{start_dt_local.strftime('%H:%M')} - {end_dt_local.strftime('%H:%M')}"
+            period_str = f"{start_dt_local.strftime('%d.%m.%Y %H:%M')} - {end_dt_local.strftime('%H:%M')}"
         else:
-            period_str = f"{start_dt_local.strftime('%d.%m')} - {end_dt_local.strftime('%d.%m.%Y')}"
+            period_str = f"{start_dt_local.strftime('%d.%m.%Y %H:%M')} - {end_dt_local.strftime('%d.%m.%Y %H:%M')}"
         row_cells[3].text = period_str
-        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT # Left align
+        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        # Grupa
         row_cells[4].text = p.student.pluton
-        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT # Left align
-
-        # Localitatea
+        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         row_cells[5].text = p.destination if p.destination else "-"
-        row_cells[5].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT # Left align
-
-        # Transport
         row_cells[6].text = p.transport_mode if p.transport_mode else "-"
-        row_cells[6].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT # Left align
 
-    # Column widths - using the ones from gradat export for consistency or can be fine-tuned
     new_widths = {
-        0: Inches(0.4), 1: Inches(0.7), 2: Inches(2.0), # Nume și Prenume
-        3: Inches(1.8), 4: Inches(0.7), 5: Inches(1.2), 6: Inches(1.2)
+        0: Inches(0.4), 1: Inches(0.7), 2: Inches(1.8),
+        3: Inches(2.5), 4: Inches(0.8), 5: Inches(1.2), 6: Inches(1.1)
     }
     for col_idx, width_val in new_widths.items():
         for row in table.rows:
             if col_idx < len(row.cells):
                  row.cells[col_idx].width = width_val
 
-    # Ensure all data cells are left-aligned (already done individually, but this is a fallback)
-    for row_idx, row_obj in enumerate(table.rows): # Use different var name to avoid conflict
-        if row_idx == 0: continue
-        for cell_obj in row_obj.cells:
-            for paragraph in cell_obj.paragraphs:
-                 paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-
     document.add_paragraph() # Spacer
 
     # --- Separate table for church attendees (Admin view) ---
-    # This part for church attendees seems to be for WeekendLeave, not Permission.
-    # The original admin_export_permissions_word had this block, but it was iterating over `leaves_to_export`
-    # which was actually `permissions_to_export`. This logic is incorrect for permissions.
-    # Permissions do not have a `duminica_biserica` attribute or `get_intervals()` method.
-    # This section should be removed or adapted if there's a new requirement for church attendance related to permissions.
-    # For now, I will remove this incorrect block.
-    #
-    # church_attendees_admin = []
-    # for leave in permissions_to_export: # This was 'leaves_to_export' but it's permissions
-    #     if hasattr(leave, 'duminica_biserica') and leave.duminica_biserica: # Check if attribute exists
-    #         is_sunday_selected_for_leave = False
-    #         if hasattr(leave, 'get_intervals'): # Check if method exists
-    #             for interval in leave.get_intervals():
-    #                 if interval['day_name'] == 'Duminica':
-    #                     is_sunday_selected_for_leave = True
-    #                     break
-    #         if is_sunday_selected_for_leave: # This condition might never be met for Permission objects
-    #             church_attendees_admin.append(leave.student)
+    church_attendees_admin = []
+    for leave in leaves_to_export: # leaves_to_export is already filtered for active/upcoming
+        if leave.duminica_biserica:
+            is_sunday_selected_for_leave = False
+            for interval in leave.get_intervals():
+                if interval['day_name'] == 'Duminica':
+                    is_sunday_selected_for_leave = True
+                    break
+            if is_sunday_selected_for_leave:
+                church_attendees_admin.append(leave.student)
 
-    # if church_attendees_admin:
-    #     document.add_heading('Studenți care participă la Biserică (Duminică 09:00-11:00)', level=2).alignment = WD_ALIGN_PARAGRAPH.CENTER
-    #     # ... rest of the church table code ...
-    #     document.add_paragraph()
+    if church_attendees_admin:
+        document.add_heading('Studenți care participă la Biserică (Duminică 09:00-11:00)', level=2).alignment = WD_ALIGN_PARAGRAPH.CENTER
+        church_table_admin = document.add_table(rows=1, cols=4) # Nr.crt, Grad, Nume și Prenume, Pluton
+        church_table_admin.style = 'Table Grid'
+        church_table_admin.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        church_hdr_cells_admin = church_table_admin.rows[0].cells
+        church_col_titles_admin = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)']
+        for i, title in enumerate(church_col_titles_admin):
+            church_hdr_cells_admin[i].text = title
+            church_hdr_cells_admin[i].paragraphs[0].runs[0].font.bold = True
+            church_hdr_cells_admin[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        church_attendees_admin.sort(key=lambda s: (s.batalion, s.companie, s.pluton, s.nume, s.prenume)) # Sort for admin view
+
+        for idx, student in enumerate(church_attendees_admin):
+            row_cells_admin = church_table_admin.add_row().cells
+            row_cells_admin[0].text = str(idx + 1)
+            row_cells_admin[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            row_cells_admin[1].text = student.grad_militar
+            row_cells_admin[2].text = f"{student.nume} {student.prenume}"
+            row_cells_admin[3].text = student.pluton # Admin might want to see Company/Battalion too, but Pluton is consistent
+            row_cells_admin[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        church_table_widths_admin = {0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.5), 3: Inches(1.0)}
+        for col_idx, width_val in church_table_widths_admin.items():
+            for row in church_table_admin.rows:
+                if col_idx < len(row.cells):
+                    row.cells[col_idx].width = width_val
+        document.add_paragraph()
 
     style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
     f = io.BytesIO(); document.save(f); f.seek(0)
