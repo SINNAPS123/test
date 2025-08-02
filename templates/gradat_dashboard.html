@@ -3,153 +3,123 @@
 {% block title %}Panou Gradat - {{ current_user.username }}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="mb-0">Panou de Control Gradat: {{ current_user.username }}</h2>
-        <div class="d-flex align-items-center">
-            <a href="{{ url_for('gradat_export_permissions_word') }}" class="btn btn-sm btn-outline-primary me-2" title="Exportă permisii active/viitoare">
-                <i class="fas fa-file-word icon-rotate-hover"></i> Export Permisii
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold">Panou de Control Gradat</h1>
+        <div class="flex items-center gap-2">
+            <a href="{{ url_for('gradat_export_permissions_word') }}" class="btn btn-sm btn-outline" title="Exportă permisii">
+                Export Permisii
             </a>
-            <a href="{{ url_for('gradat_export_weekend_leaves_word') }}" class="btn btn-sm btn-outline-primary me-2" title="Exportă învoiri de weekend active/viitoare">
-                <i class="fas fa-file-word icon-rotate-hover"></i> Export Învoiri Wk.
+            <a href="{{ url_for('gradat_export_weekend_leaves_word') }}" class="btn btn-sm btn-outline" title="Exportă învoiri weekend">
+                Export Învoiri Wk.
             </a>
-            <a href="{{ url_for('presence_report') }}" class="btn btn-info btn-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard2-data-fill me-1 icon-rotate-hover" viewBox="0 0 16 16">
-                    <path d="M10 .5a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5.5.5 0 0 1-.5.5H3a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a.5.5 0 0 1-.5-.5.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5.5.5 0 0 1-.5-.5Z"/>
-                    <path d="M4 4.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5Zm0 2a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5Zm0 2a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1-.5-.5Zm0 2a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5Z"/>
-                </svg>
+            <a href="{{ url_for('presence_report') }}" class="btn btn-primary btn-sm">
                 Raport Prezență
             </a>
         </div>
     </div>
 
-    <div class="row">
-        <!-- Card pentru Management Studenți -->
-        <div class="col-md-4 mb-4">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Management Studenți</h5>
-                    <p class="card-text">Adaugă, vizualizează, editează sau șterge studenții din subordine.</p>
-                    <p class="card-text"><small class="text-muted">Număr studenți în evidență: {{ student_count }}</small></p>
-                    <a href="{{ url_for('list_students') }}" class="btn btn-primary">Gestionează Studenți</a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Card pentru Permisii -->
-        <div class="col-md-4 mb-4">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Permisii</h5>
-                    <p class="card-text">Gestionează cererile de permisie ale studenților.</p>
-                    <p class="card-text"><small class="text-muted">Permisii active astăzi: <strong>{{ permissions_today_count }}</strong></small></p>
-                    <a href="{{ url_for('list_permissions') }}" class="btn btn-primary">Gestionează Permisii</a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Card pentru Învoiri -->
-        <div class="col-md-4 mb-4">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Învoiri</h5>
-                    <p class="card-text">Gestionează învoirile zilnice (L-J) și de weekend (V-D).</p>
-                    <p class="card-text"><small class="text-muted">Învoiri zilnice active astăzi: <strong>{{ daily_leaves_today_count }}</strong></small><br>
-                                         <small class="text-muted">Învoiri weekend active astăzi: <strong>{{ weekend_leaves_today_count }}</strong></small></p>
-                    <a href="{{ url_for('list_daily_leaves') }}" class="btn btn-primary mb-2 d-block">Învoiri Zilnice (L-J)</a>
-                    <a href="{{ url_for('list_weekend_leaves') }}" class="btn btn-primary d-block">Învoiri Weekend (V-D)</a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-     <div class="row">
-        <!-- Card pentru Servicii -->
-        <div class="col-md-4 mb-4">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Servicii</h5>
-                    <p class="card-text">Planifică și vizualizează serviciile studenților.</p>
-                    <p class="card-text"><small class="text-muted">Studenți în serviciu astăzi: <strong>{{ services_today_count }}</strong></small></p>
-                    <a href="{{ url_for('list_services') }}" class="btn btn-primary">Gestionează Servicii</a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Card pentru Voluntariate -->
-        <div class="col-md-4 mb-4">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Voluntariate</h5>
-                    <p class="card-text">Gestionează activitățile de voluntariat și punctele studenților.</p>
-                     <p class="card-text"><small class="text-muted">Total activități create: {{ total_volunteer_activities }}</small></p>
-                    <a href="{{ url_for('volunteer_home') }}" class="btn btn-primary">Gestionează Voluntariate</a>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Card pentru Generare Prezență -->
-        <div class="col-md-4 mb-4">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Generare Prezență</h5>
-                    <p class="card-text">Generează rapoartele de prezență și efective.</p>
-                    <a href="{{ url_for('presence_report') }}" class="btn btn-primary">Generează Raport</a>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Mini Situație Pluton (ACUM) -->
-    <div class="mt-4 p-3 border rounded bg-light shadow-sm">
-        <h4 class="mb-3"><i class="fas fa-street-view me-2"></i>Situație Pluton (ACUM) <span class="badge bg-info fs-6 align-middle">{{ get_localized_now().strftime('%d-%m-%Y %H:%M') }}</span></h4>
-        <div class="row">
-            <div class="col-lg-2 col-md-4 col-sm-6 mb-3">
-                <div class="card border-primary h-100 shadow-sm">
-                    <div class="card-body text-center p-2">
-                        <h6 class="card-title text-primary mb-1"><i class="fas fa-users me-1"></i>Total</h6>
-                        <p class="card-text display-6 fw-bold">{{ sit_total_studenti }}</p>
-                    </div>
+    <div class="mb-8 p-4 rounded-lg bg-base-200 shadow-lg">
+        <h2 class="text-xl font-semibold mb-4">Situație Pluton (ACUM) <div class="badge badge-primary">{{ get_localized_now().strftime('%d-%m-%Y %H:%M') }}</div></h2>
+        <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+            <div class="stat">
+                <div class="stat-title">Total Studenți</div>
+                <div class="stat-value text-primary">{{ sit_total_studenti }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-title">Prezenți în Formație</div>
+                <div class="stat-value text-success">{{ sit_prezenti_formatie }}</div>
+                {% if sit_gradat_pluton_prezent_acum > 0 %}
+                <div class="stat-desc">(+ {{ sit_gradat_pluton_prezent_acum }} gradat pluton)</div>
+                {% endif %}
+            </div>
+            <div class="stat">
+                <div class="stat-title">Total Învoiți/Absenți</div>
+                <div class="stat-value text-warning">{{ sit_total_invoiti_acum }}</div>
+                <div class="stat-actions">
+                    <a href="{{ url_for('list_permissions') }}" class="btn btn-xs">Permisii</a>
+                    <a href="{{ url_for('list_daily_leaves') }}" class="btn btn-xs">Zilnice</a>
+                    <a href="{{ url_for('list_weekend_leaves') }}" class="btn btn-xs">Weekend</a>
                 </div>
             </div>
-            <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
-                <div class="card border-success h-100 shadow-sm">
-                    <div class="card-body text-center p-2">
-                        <h6 class="card-title text-success mb-1"><i class="fas fa-user-check me-1"></i>Prezenți Formație</h6>
-                        <p class="card-text display-6 fw-bold">{{ sit_prezenti_formatie }}</p>
-                        {% if sit_gradat_pluton_prezent_acum > 0 %}
-                        <small class="text-muted d-block" style="font-size: 0.75rem;">(+ {{ sit_gradat_pluton_prezent_acum }} gradat pluton)</small>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-4 col-md-4 col-sm-12 mb-3"> <!-- Wider for more buttons -->
-                <div class="card border-warning h-100 shadow-sm">
-                    <div class="card-body text-center p-2">
-                        <h6 class="card-title text-warning mb-1"><i class="fas fa-user-clock me-1"></i>Total Învoiți/Absenți</h6>
-                        <p class="card-text display-6 fw-bold">{{ sit_total_invoiti_acum }}</p>
-                        <div class="btn-group btn-group-sm d-flex mt-1" role="group" aria-label="Detalii Invoiri">
-                            <a href="{{ url_for('list_permissions') }}" class="btn btn-outline-warning w-100" style="font-size: 0.75rem;">Permisii</a>
-                            <a href="{{ url_for('list_daily_leaves') }}" class="btn btn-outline-warning w-100" style="font-size: 0.75rem;">Zilnice</a>
-                            <a href="{{ url_for('list_weekend_leaves') }}" class="btn btn-outline-warning w-100" style="font-size: 0.75rem;">Weekend</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-3 col-md-12 col-sm-12 mb-3"> <!-- Full width on md if it's the last one on a row for md -->
-                <div class="card border-info h-100 shadow-sm">
-                    <div class="card-body text-center p-2">
-                        <h6 class="card-title text-info mb-1"><i class="fas fa-tools me-1"></i>În Serviciu</h6>
-                        <p class="card-text display-6 fw-bold">{{ sit_in_serviciu_acum }}</p>
-                        <a href="{{ url_for('list_services') }}" class="btn btn-outline-info btn-sm mt-1 d-block w-100" style="font-size: 0.75rem;">Detalii Servicii</a>
-                    </div>
+            <div class="stat">
+                <div class="stat-title">În Serviciu</div>
+                <div class="stat-value text-info">{{ sit_in_serviciu_acum }}</div>
+                 <div class="stat-actions">
+                    <a href="{{ url_for('list_services') }}" class="btn btn-xs">Detalii</a>
                 </div>
             </div>
         </div>
     </div>
 
-    <hr class="mt-4">
-    <p class="text-center"><a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">Panou General (Dashboard)</a></p>
+    <!-- Acțiuni Rapide -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Management Studenți</h2>
+                <p>Adaugă, vizualizează, editează sau șterge studenții din subordine.</p>
+                <div class="text-sm opacity-70">Număr studenți: {{ student_count }}</div>
+                <div class="card-actions justify-end">
+                    <a href="{{ url_for('list_students') }}" class="btn btn-primary">Gestionează</a>
+                </div>
+            </div>
+        </div>
 
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Permisii</h2>
+                <p>Gestionează cererile de permisie ale studenților.</p>
+                <div class="text-sm opacity-70">Active astăzi: {{ permissions_today_count }}</div>
+                <div class="card-actions justify-end">
+                    <a href="{{ url_for('list_permissions') }}" class="btn btn-primary">Gestionează</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Învoiri</h2>
+                <p>Gestionează învoirile zilnice (L-J) și de weekend (V-D).</p>
+                 <div class="text-sm opacity-70">Zilnice azi: {{ daily_leaves_today_count }} | Weekend azi: {{ weekend_leaves_today_count }}</div>
+                <div class="card-actions justify-end">
+                    <a href="{{ url_for('list_daily_leaves') }}" class="btn btn-secondary btn-sm">Zilnice</a>
+                    <a href="{{ url_for('list_weekend_leaves') }}" class="btn btn-accent btn-sm">Weekend</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Servicii</h2>
+                <p>Planifică și vizualizează serviciile studenților.</p>
+                <div class="text-sm opacity-70">În serviciu astăzi: {{ services_today_count }}</div>
+                <div class="card-actions justify-end">
+                    <a href="{{ url_for('list_services') }}" class="btn btn-primary">Gestionează</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Voluntariate</h2>
+                <p>Gestionează activitățile de voluntariat și punctele.</p>
+                <div class="text-sm opacity-70">Total activități: {{ total_volunteer_activities }}</div>
+                <div class="card-actions justify-end">
+                    <a href="{{ url_for('volunteer_home') }}" class="btn btn-primary">Gestionează</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Generare Prezență</h2>
+                <p>Generează rapoartele de prezență și efective.</p>
+                <div class="card-actions justify-end">
+                    <a href="{{ url_for('presence_report') }}" class="btn btn-info">Generează Raport</a>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}

@@ -1,0 +1,23 @@
+{% if current_user.is_authenticated %}
+    <li><a href="{{ url_for('dashboard') }}">Panou Principal</a></li>
+    <li><a href="{{ url_for('public_updates_page') }}">Anunțuri</a></li>
+
+    {% if current_user.role == 'gradat' %}
+        <li><a href="{{ url_for('list_students') }}">Studenți</a></li>
+        <li><a href="{{ url_for('list_permissions') }}">Permisii</a></li>
+        <li><a href="{{ url_for('list_daily_leaves') }}">Învoiri Zilnice</a></li>
+        <li><a href="{{ url_for('list_weekend_leaves') }}">Învoiri Weekend</a></li>
+        <li><a href="{{ url_for('list_services') }}">Servicii</a></li>
+        <li><a href="{{ url_for('volunteer_home') }}">Voluntariat</a></li>
+        <li><a href="{{ url_for('presence_report') }}">Raport Prezență</a></li>
+    {% elif current_user.role == 'admin' %}
+        <li><a href="{{ url_for('admin_dashboard_route') }}">Management Utilizatori</a></li>
+        <li><a href="{{ url_for('list_students') }}">Listă Studenți (Admin)</a></li>
+    {% elif current_user.role == 'comandant_companie' %}
+        <li><a href="{{ url_for('company_commander_dashboard') }}">Panou Companie</a></li>
+        <li><a href="{{ url_for('text_report_display_company') }}">Raport Text</a></li>
+    {% elif current_user.role == 'comandant_batalion' %}
+        <li><a href="{{ url_for('battalion_commander_dashboard') }}">Panou Batalion</a></li>
+        <li><a href="{{ url_for('text_report_display_battalion') }}">Raport Text</a></li>
+    {% endif %}
+{% endif %}
