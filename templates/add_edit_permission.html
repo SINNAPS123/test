@@ -3,92 +3,64 @@
 {% block title %}{{ form_title }} - Management Permisii{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2>{{ form_title }}</h2>
-    <hr>
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold">{{ form_title }}</h1>
+        <a href="{{ url_for('list_permissions') }}" class="btn btn-ghost">&laquo; Înapoi la Listă</a>
+    </div>
 
-    <div class="row justify-content-center">
-        <div class="col-md-8 col-lg-7">
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <form method="POST" action=""> {# Action-ul va fi setat de ruta Flask #}
-                        <div class="mb-3">
-                            <label for="student_id" class="form-label">Student <span class="text-danger">*</span></label>
-                            <select class="form-select" id="student_id" name="student_id" required>
-                                <option value="" disabled {% if not permission %}selected{% endif %}>Selectează un student...</option>
-                                {% for student in students %}
-                                    <option value="{{ student.id }}" {% if permission and permission.student_id == student.id %}selected{% endif %}>
-                                        {{ student.grad_militar }} {{ student.nume }} {{ student.prenume }} (Pluton: {{student.pluton }})
-                                    </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="start_datetime" class="form-label">Data și Ora de Început <span class="text-danger">*</span></label>
-                                <input type="datetime-local" class="form-control" id="start_datetime" name="start_datetime"
-                                       value="{{ permission.start_datetime.strftime('%Y-%m-%dT%H:%M') if permission and permission.start_datetime else '' }}" required>
-                                <small class="form-text text-muted">Ex: Vineri, ora 15:00</small>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="end_datetime" class="form-label">Data și Ora de Sfârșit <span class="text-danger">*</span></label>
-                                <input type="datetime-local" class="form-control" id="end_datetime" name="end_datetime"
-                                       value="{{ permission.end_datetime.strftime('%Y-%m-%dT%H:%M') if permission and permission.end_datetime else '' }}" required>
-                                <small class="form-text text-muted">Ex: Duminică, ora 22:00</small>
-                            </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="destination" class="form-label">Destinație</label>
-                            <input type="text" class="form-control" id="destination" name="destination"
-                                   value="{{ form_data.destination if form_data and form_data.destination is defined else (permission.destination if permission and permission.destination is defined else '') }}">
-                            <small class="form-text text-muted">Localitatea de destinație.</small>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="transport_mode" class="form-label">Mijloc de transport</label>
-                            <input type="text" class="form-control" id="transport_mode" name="transport_mode"
-                                   value="{{ form_data.transport_mode if form_data and form_data.transport_mode is defined else (permission.transport_mode if permission and permission.transport_mode is defined else '') }}">
-                            <small class="form-text text-muted">Ex: Auto personal, Tren, Autobuz.</small>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="reason" class="form-label">Motiv / Observații (Opțional)</label>
-                            <textarea class="form-control" id="reason" name="reason" rows="3">{{ form_data.reason if form_data and form_data.reason is defined else (permission.reason if permission and permission.reason is defined else '') }}</textarea>
-                            <small class="form-text text-muted">Scurt motiv, nr. auto, sau alte observații.</small>
-                        </div>
-
-                        {# Pentru editare, am putea adăuga și statusul, dar la adăugare e implicit 'Aprobată' #}
-                        {# {% if permission %}
-                        <div class="mb-3">
-                            <label for="status" class="form-label">Status</label>
-                            <select class="form-select" id="status" name="status">
-                                <option value="Aprobată" {% if permission.status == 'Aprobată' %}selected{% endif %}>Aprobată</option>
-                                <option value="Anulată" {% if permission.status == 'Anulată' %}selected{% endif %}>Anulată</option>
-                                <!-- Alte statusuri posibile -->
-                            </select>
-                        </div>
-                        {% endif %} #}
-
-                        <hr>
-                        <div class="d-flex justify-content-between">
-                            <a href="{{ url_for('list_permissions') }}" class="btn btn-outline-secondary">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-left-circle" viewBox="0 0 16 16">
-                                    <path fill-rule="evenodd" d="M1 8a7 7 0 1 0 14 0A7 7 0 0 0 1 8zm15 0A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-4.5-.5a.5.5 0 0 1 0 1H5.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L5.707 7.5H11.5z"/>
-                                </svg>
-                                Anulare
-                            </a>
-                            <button type="submit" class="btn btn-primary">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check-circle-fill" viewBox="0 0 16 16">
-                                    <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
-                                </svg>
-                                {% if permission %}Salvează Modificările{% else %}Adaugă Permisie{% endif %}
-                            </button>
-                        </div>
-                    </form>
+    <div class="card bg-base-100 shadow-xl max-w-2xl mx-auto">
+        <div class="card-body">
+            <form method="POST" action="">
+                <div class="form-control">
+                    <label class="label" for="student_id"><span class="label-text">Student <span class="text-error">*</span></span></label>
+                    <select class="select select-bordered" id="student_id" name="student_id" required>
+                        <option value="" disabled {% if not permission %}selected{% endif %}>Selectează un student...</option>
+                        {% for student in students %}
+                            <option value="{{ student.id }}" {% if permission and permission.student_id == student.id %}selected{% endif %}>
+                                {{ student.grad_militar }} {{ student.nume }} {{ student.prenume }} (Pluton: {{student.pluton }})
+                            </option>
+                        {% endfor %}
+                    </select>
                 </div>
-            </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div class="form-control">
+                        <label class="label" for="start_datetime"><span class="label-text">Data și Ora de Început <span class="text-error">*</span></span></label>
+                        <input type="datetime-local" class="input input-bordered" id="start_datetime" name="start_datetime"
+                               value="{{ permission.start_datetime.strftime('%Y-%m-%dT%H:%M') if permission and permission.start_datetime else '' }}" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="label" for="end_datetime"><span class="label-text">Data și Ora de Sfârșit <span class="text-error">*</span></span></label>
+                        <input type="datetime-local" class="input input-bordered" id="end_datetime" name="end_datetime"
+                               value="{{ permission.end_datetime.strftime('%Y-%m-%dT%H:%M') if permission and permission.end_datetime else '' }}" required>
+                    </div>
+                </div>
+
+                <div class="form-control mt-4">
+                    <label class="label" for="destination"><span class="label-text">Destinație</span></label>
+                    <input type="text" class="input input-bordered" id="destination" name="destination"
+                           value="{{ form_data.destination if form_data and form_data.destination is defined else (permission.destination if permission and permission.destination is defined else '') }}">
+                </div>
+
+                <div class="form-control mt-4">
+                    <label class="label" for="transport_mode"><span class="label-text">Mijloc de transport</span></label>
+                    <input type="text" class="input input-bordered" id="transport_mode" name="transport_mode"
+                           value="{{ form_data.transport_mode if form_data and form_data.transport_mode is defined else (permission.transport_mode if permission and permission.transport_mode is defined else '') }}">
+                </div>
+
+                <div class="form-control mt-4">
+                    <label class="label" for="reason"><span class="label-text">Motiv / Observații (Opțional)</span></label>
+                    <textarea class="textarea textarea-bordered" id="reason" name="reason" rows="3">{{ form_data.reason if form_data and form_data.reason is defined else (permission.reason if permission and permission.reason is defined else '') }}</textarea>
+                </div>
+
+                <div class="card-actions justify-between mt-6">
+                    <a href="{{ url_for('list_permissions') }}" class="btn btn-ghost">Anulare</a>
+                    <button type="submit" class="btn btn-primary">
+                        {% if permission %}Salvează Modificările{% else %}Adaugă Permisie{% endif %}
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

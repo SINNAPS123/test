@@ -3,47 +3,26 @@
 {% block title %}Autentificare Utilizator{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6 col-lg-4">
-        <h2 class="text-center mb-4">Autentificare Utilizator</h2>
-        <div class="card">
-            <div class="card-body">
-                <form method="POST" action="{{ url_for('user_login') }}">
-                    <div class="mb-3">
-                        <label for="login_code" class="form-label">Cod Unic / Cod Personal:</label>
-                        <input type="password" class="form-control" id="login_code" name="login_code" required>
-                        <div id="codeHelp" class="form-text">Introduceți codul unic primit de la administrator (dacă este prima autentificare) sau codul personal setat anterior.</div>
-                    </div>
-                    <div class="d-grid mb-3"> <!-- Added mb-3 -->
-                        <button type="submit" class="btn btn-primary">Autentificare</button>
-                    </div>
-                </form>
+<div class="flex justify-center items-center min-h-screen bg-base-200">
+    <div class="card w-full max-w-sm shadow-2xl bg-base-100">
+        <form class="card-body" method="POST" action="{{ url_for('user_login') }}">
+            <h2 class="card-title text-2xl mx-auto">Autentificare Utilizator</h2>
+            <div class="form-control">
+                <label class="label" for="login_code">
+                    <span class="label-text">Cod Unic / Cod Personal:</span>
+                </label>
+                <input type="password" id="login_code" name="login_code" placeholder="Introduceți codul" class="input input-bordered" required autofocus>
+                <label class="label">
+                    <span class="label-text-alt">Introduceți codul unic (prima logare) sau codul personal.</span>
+                </label>
             </div>
-        </div>
-        <p class="text-center mt-3">
-            <a href="{{ url_for('home') }}">Înapoi la pagina principală</a>
-        </p>
+            <div class="form-control mt-6">
+                <button type="submit" class="btn btn-primary">Autentificare</button>
+            </div>
+            <div class="text-center mt-4">
+                <a href="{{ url_for('home') }}" class="link link-hover">Înapoi la pagina principală</a>
+            </div>
+        </form>
     </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const loginCodeField = document.getElementById('login_code');
-        if (loginCodeField) {
-            // Explicitly ensure the field is not disabled or readonly
-            loginCodeField.disabled = false;
-            loginCodeField.readOnly = false;
-
-            // Attempt to focus the field.
-            // Using a small timeout can sometimes help if other scripts or browser autofill are interfering.
-            setTimeout(function() {
-                if (document.activeElement !== loginCodeField) { // Focus only if not already focused
-                    loginCodeField.focus();
-                }
-            }, 100); // 100ms delay
-        }
-    });
-</script>
 {% endblock %}

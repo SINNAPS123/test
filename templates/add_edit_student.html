@@ -1,142 +1,92 @@
 {% extends "base.html" %}
 
-{% block title %}
-    {{ form_title }}
-    {% if current_user.role == 'admin' %} (Admin)
-    {% elif current_user.role == 'gradat' and not student %} - Adăugare Student
-    {% elif current_user.role == 'gradat' and student %} - Editare {{ student.nume }} {{ student.prenume }}
-    {% else %} - Management Studenți
-    {% endif %}
-{% endblock %}
+{% block title %}{{ form_title }}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <h2>
-            {{ form_title }} 
-            {% if current_user.role == 'admin' %}<span class="badge bg-info">Admin</span>{% endif %}
-        </h2>
-        <a href="{{ url_for('list_students') }}" class="btn btn-sm btn-outline-secondary">
-            <i class="fas fa-arrow-left me-1"></i> Înapoi la Listă Studenți
-        </a>
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold">{{ form_title }}</h1>
+        <a href="{{ url_for('list_students') }}" class="btn btn-ghost">&laquo; Înapoi la Listă</a>
     </div>
-    <hr>
 
-    <div class="row justify-content-center">
-        <div class="col-md-8 col-lg-7">
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <form method="POST" action=""> {# Action-ul va fi setat de ruta Flask #}
-                        {# Campuri comune pentru adăugare și editare #}
-                        <div class="mb-3">
-                            <label for="nume" class="form-label">Nume <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="nume" name="nume" value="{{ student.nume if student else (form_data.nume if form_data else '') }}" required>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="prenume" class="form-label">Prenume <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="prenume" name="prenume" value="{{ student.prenume if student else (form_data.prenume if form_data else '') }}" required>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="grad_militar" class="form-label">Grad Militar <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="grad_militar" name="grad_militar" value="{{ student.grad_militar if student else (form_data.grad_militar if form_data else '') }}" placeholder="ex: Sdt., Cap., Plt.maj." required>
-                            <small class="form-text text-muted">Exemple: Sdt. (Soldat), Frt. (Fruntaș), Cap. (Caporal), Sg. (Sergent) etc.</small>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="id_unic_student" class="form-label">ID Unic Student (Opțional)</label>
-                            <input type="text" class="form-control" id="id_unic_student" name="id_unic_student" value="{{ student.id_unic_student if student and student.id_unic_student else (form_data.id_unic_student if form_data else '') }}" placeholder="ex: Număr matricol, CNP" title="Introduceți un ID unic pentru student, de exemplu, numărul matricol sau CNP. Acest câmp este opțional, dar dacă este completat, valoarea trebuie să fie unică în sistem.">
-                            <small class="form-text text-muted">Acest ID trebuie să fie unic în tot sistemul dacă este completat.</small>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="gender" class="form-label">Gen <span class="text-danger">*</span></label>
-                            <select class="form-select" id="gender" name="gender" required>
-                                <option value="" disabled {% if not student and not (form_data and form_data.gender) %}selected{% endif %}>Selectează genul...</option>
-                                {% for g_val in genders %} {# Presupunând că 'genders' este pasat din view #}
-                                <option value="{{ g_val }}" 
-                                        {% if student and student.gender == g_val %}selected
-                                        {% elif form_data and form_data.gender == g_val %}selected
-                                        {% endif %}>
-                                    {{ g_val }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-
-                        <h5 class="mt-4 mb-3">Detalii Încadrare</h5>
-                        <div class="row">
-                            <div class="col-md-4 mb-3">
-                                <label for="pluton" class="form-label">Pluton <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="pluton" name="pluton" value="{{ student.pluton if student else (form_data.pluton if form_data else (current_user.username.split('_')[0] if '_' in current_user.username and current_user.role == 'gradat' else '')) }}" required placeholder="ex: 1, 2, 3" title="Introduceți numărul plutonului (ex: 1, 21, 112).">
-                                <small class="form-text text-muted">Plutonul.</small>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label for="companie" class="form-label">Companie <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="companie" name="companie" value="{{ student.companie if student else (form_data.companie if form_data else '') }}" required placeholder="ex: 1, 2, 3" title="Introduceți numărul companiei (ex: 1, 11, 23).">
-                                 <small class="form-text text-muted">Compania.</small>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label for="batalion" class="form-label">Batalion <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="batalion" name="batalion" value="{{ student.batalion if student else (form_data.batalion if form_data else '') }}" required placeholder="ex: 1, 2, 3" title="Introduceți numărul batalionului (ex: 1, 2).">
-                                <small class="form-text text-muted">Batalionul.</small>
-                            </div>
-                        </div>
-                        
-                        {# Checkbox-ul va fi vizibil pentru gradat și admin (dacă adminul ajunge aici) #}
-                        {# Momentan, ne concentrăm pe funcționalitatea gradatului #}
-                        {% if current_user.role == 'gradat' or current_user.role == 'admin' %}
-                        <hr>
-                        <div class="mb-3">
-                            <label for="exemption_details" class="form-label">Detalii Scutire/Excepție (Opțional)</label>
-                            <input type="text" class="form-control" id="exemption_details" name="exemption_details" value="{{ student.exemption_details if student else (form_data.exemption_details if form_data else '') }}" placeholder="ex: Medicală parțială - efort fizic redus; Comisie examen">
-                            <small class="form-text text-muted">Dacă studentul este scutit SMT, bifați căsuța de mai jos. Pentru alte scutiri/excepții, completați aici.</small>
-                        </div>
-
-                        <div class="mb-3 form-check">
-                            <input type="checkbox" class="form-check-input" id="is_smt" name="is_smt" {% if student and student.is_smt %}checked{% elif form_data and form_data.is_smt %}checked{% endif %}>
-                            <label class="form-check-label" for="is_smt">
-                                <strong>SMT (Scutire Medicală Totală)</strong>
-                            </label>
-                            <small class="form-text text-muted d-block">
-                                Marchează acest student ca având scutire medicală totală. Nu va participa la activități. Acest status are prioritate.
-                            </small>
-                        </div>
-
-                        <hr>
-                        <h5 class="mt-3 mb-2">Statut Gradat</h5>
-                        <div class="mb-3 form-check">
-                            <input type="checkbox" class="form-check-input" id="is_platoon_graded_duty" name="is_platoon_graded_duty" {% if student and student.is_platoon_graded_duty %}checked{% elif form_data and form_data.is_platoon_graded_duty %}checked{% endif %}>
-                            <label class="form-check-label" for="is_platoon_graded_duty">
-                                Desemnat Gradat în Plutonul Propriu (<strong class="text-info">{{ student.pluton if student else (form_data.pluton if form_data else 'N/A') }}</strong>)
-                            </label>
-                            <small class="form-text text-muted d-block">
-                                Marchează dacă studentul are funcții de gradat în cadrul plutonului său de apartenență.
-                            </small>
-                        </div>
-                        <div class="mb-3">
-                            <label for="assigned_graded_platoon" class="form-label">Gradat la Alt Pluton (ID Pluton)</label>
-                            <input type="text" class="form-control form-control-sm" id="assigned_graded_platoon" name="assigned_graded_platoon" value="{{ student.assigned_graded_platoon if student and student.assigned_graded_platoon else (form_data.assigned_graded_platoon if form_data else '') }}" placeholder="ex: 2, 113 (lasă gol dacă nu e cazul)">
-                            <small class="form-text text-muted">
-                                Dacă studentul este desemnat gradat la un alt pluton decât cel de apartenență, introduceți aici ID-ul acelui pluton.
-                            </small>
-                        </div>
-                        {% endif %}
-
-                        <hr>
-                        <div class="d-flex justify-content-between">
-                            <a href="{{ url_for('list_students') }}" class="btn btn-outline-secondary">
-                                <i class="fas fa-times me-1"></i> Anulare
-                            </a>
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-save me-1"></i>
-                                {% if student %}Salvează Modificările{% else %}Adaugă Student{% endif %}
-                            </button>
-                        </div>
-                    </form>
+    <div class="card bg-base-100 shadow-xl max-w-2xl mx-auto">
+        <div class="card-body">
+            <form method="POST" action="">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-control">
+                        <label class="label" for="nume"><span class="label-text">Nume <span class="text-error">*</span></span></label>
+                        <input type="text" id="nume" name="nume" value="{{ student.nume if student else (form_data.nume if form_data else '') }}" class="input input-bordered w-full" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="label" for="prenume"><span class="label-text">Prenume <span class="text-error">*</span></span></label>
+                        <input type="text" id="prenume" name="prenume" value="{{ student.prenume if student else (form_data.prenume if form_data else '') }}" class="input input-bordered w-full" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="label" for="grad_militar"><span class="label-text">Grad Militar <span class="text-error">*</span></span></label>
+                        <input type="text" id="grad_militar" name="grad_militar" value="{{ student.grad_militar if student else (form_data.grad_militar if form_data else '') }}" placeholder="ex: Sdt." class="input input-bordered w-full" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="label" for="id_unic_student"><span class="label-text">ID Unic (Opțional)</span></label>
+                        <input type="text" id="id_unic_student" name="id_unic_student" value="{{ student.id_unic_student if student and student.id_unic_student else (form_data.id_unic_student if form_data else '') }}" class="input input-bordered w-full">
+                    </div>
+                    <div class="form-control">
+                        <label class="label" for="gender"><span class="label-text">Gen <span class="text-error">*</span></span></label>
+                        <select id="gender" name="gender" class="select select-bordered w-full" required>
+                            <option value="" disabled {% if not student and not (form_data and form_data.gender) %}selected{% endif %}>Selectează...</option>
+                            {% for g_val in genders %}
+                                <option value="{{ g_val }}" {% if (student and student.gender == g_val) or (form_data and form_data.gender == g_val) %}selected{% endif %}>{{ g_val }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
-            </div>
+
+                <div class="divider">Detalii Încadrare</div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-control">
+                        <label class="label" for="batalion"><span class="label-text">Batalion <span class="text-error">*</span></span></label>
+                        <input type="text" id="batalion" name="batalion" value="{{ student.batalion if student else (form_data.batalion if form_data else '') }}" class="input input-bordered w-full" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="label" for="companie"><span class="label-text">Companie <span class="text-error">*</span></span></label>
+                        <input type="text" id="companie" name="companie" value="{{ student.companie if student else (form_data.companie if form_data else '') }}" class="input input-bordered w-full" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="label" for="pluton"><span class="label-text">Pluton <span class="text-error">*</span></span></label>
+                        <input type="text" id="pluton" name="pluton" value="{{ student.pluton if student else (form_data.pluton if form_data else (current_user.username.split('_')[0] if '_' in current_user.username and current_user.role == 'gradat' else '')) }}" class="input input-bordered w-full" required>
+                    </div>
+                </div>
+
+                {% if current_user.role == 'gradat' or current_user.role == 'admin' %}
+                <div class="divider">Statut Medical și Funcție</div>
+                <div class="form-control">
+                    <label class="label" for="exemption_details"><span class="label-text">Detalii Scutire/Excepție (Opțional)</span></label>
+                    <input type="text" id="exemption_details" name="exemption_details" value="{{ student.exemption_details if student else (form_data.exemption_details if form_data else '') }}" class="input input-bordered w-full" placeholder="ex: Medicală parțială - efort fizic redus">
+                </div>
+                <div class="form-control">
+                    <label class="label cursor-pointer">
+                        <span class="label-text"><strong>SMT (Scutire Medicală Totală)</strong></span>
+                        <input type="checkbox" id="is_smt" name="is_smt" class="toggle toggle-error" {% if student and student.is_smt %}checked{% elif form_data and form_data.is_smt %}checked{% endif %} />
+                    </label>
+                </div>
+                <div class="form-control">
+                    <label class="label cursor-pointer">
+                        <span class="label-text">Desemnat Gradat în Plutonul Propriu</span>
+                        <input type="checkbox" id="is_platoon_graded_duty" name="is_platoon_graded_duty" class="toggle toggle-success" {% if student and student.is_platoon_graded_duty %}checked{% elif form_data and form_data.is_platoon_graded_duty %}checked{% endif %} />
+                    </label>
+                </div>
+                <div class="form-control">
+                    <label class="label" for="assigned_graded_platoon"><span class="label-text">Gradat la Alt Pluton (ID)</span></label>
+                    <input type="text" id="assigned_graded_platoon" name="assigned_graded_platoon" value="{{ student.assigned_graded_platoon if student and student.assigned_graded_platoon else (form_data.assigned_graded_platoon if form_data else '') }}" class="input input-bordered w-full" placeholder="Lasă gol dacă nu e cazul">
+                </div>
+                {% endif %}
+
+                <div class="card-actions justify-between mt-6">
+                    <a href="{{ url_for('list_students') }}" class="btn btn-ghost">Anulare</a>
+                    <button type="submit" class="btn btn-primary">
+                        {% if student %}Salvează Modificările{% else %}Adaugă Student{% endif %}
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

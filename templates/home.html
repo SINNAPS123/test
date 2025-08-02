@@ -3,59 +3,55 @@
 {% block title %}Acasă - Administrare Studenți{% endblock %}
 
 {% block content %}
-<div class="px-4 py-5 my-5 text-center">
-    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="UNAP Logo" class="main-page-logo">
-    <h2 class="fw-bold">
+<div class="hero min-h-screen bg-base-200">
+  <div class="hero-content text-center">
+    <div class="max-w-md">
+      <img src="{{ url_for('static', filename='images/logo.png') }}" alt="UNAP Logo" class="w-24 h-24 mx-auto mb-4">
+      <h1 class="text-5xl font-bold">
         {{ home_page_title | default("UNAP User Panel") }}
         {% if home_page_badge_text and home_page_badge_text.strip() and home_page_badge_text.lower() != 'none' %}
-            <span class="badge bg-info ms-2">{{ home_page_badge_text }}</span>
+            <div class="badge badge-info ml-2">{{ home_page_badge_text }}</div>
         {% endif %}
-    </h2>
-    {% if current_user.is_authenticated and current_user.role == 'admin' %}
-        <div class="mt-2 mb-3"> {# Added mb-3 for spacing before the stats cards #}
-            <a href="{{ url_for('admin_homepage_settings') }}" class="btn btn-outline-secondary btn-sm">
-                <i class="fas fa-pencil-alt me-1"></i> Editează Titlu/Badge Pagină
+      </h1>
+      {% if current_user.is_authenticated and current_user.role == 'admin' %}
+        <div class="mt-2 mb-3">
+            <a href="{{ url_for('admin_homepage_settings') }}" class="btn btn-ghost btn-sm">
+                Editează Titlu/Badge
             </a>
         </div>
-    {% endif %}
-    <div class="col-lg-6 mx-auto">
-        {# Textul "Panou centralizat..." a fost eliminat conform cerinței #}
+      {% endif %}
 
-        <div class="row justify-content-center mb-4">
-            <div class="col-auto">
-                <div class="stat-card p-3 border rounded shadow-sm text-center">
-                    <h4 class="mb-0">{{ total_students if total_students is not none else 'N/A' }}</h4>
-                    <small class="text-muted">Studenți Înregistrați</small>
-                </div>
-            </div>
-            <div class="col-auto">
-                <div class="stat-card p-3 border rounded shadow-sm text-center">
-                    <h4 class="mb-0">{{ total_users if total_users is not none else 'N/A' }}</h4>
-                    <small class="text-muted">Utilizatori Activi</small>
-                </div>
-            </div>
-            <div class="col-auto">
-                <div class="stat-card p-3 border rounded shadow-sm text-center">
-                    <h4 class="mb-0">{{ total_volunteer_activities if total_volunteer_activities is not none else 'N/A' }}</h4>
-                    <small class="text-muted">Activități Voluntariat</small>
-                </div>
-            </div>
+      <div class="stats shadow my-6">
+        <div class="stat">
+          <div class="stat-title">Studenți Înregistrați</div>
+          <div class="stat-value">{{ total_students if total_students is not none else 'N/A' }}</div>
         </div>
 
-        <hr class="my-4">
-        {% if current_user.is_authenticated %}
-            <p class="mb-3">Ești autentificat ca: <strong>{{ current_user.username }} ({{ current_user.role }})</strong></p>
-            <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
-                <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-lg px-4 gap-3">Panoul de Control</a>
-                <a href="{{ url_for('logout') }}" class="btn btn-outline-secondary btn-lg px-4">Deconectare</a>
-            </div>
-        {% else %}
-            <p class="lead mb-4">Selectează o opțiune de autentificare:</p>
-            <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
-                <a href="{{ url_for('user_login') }}" class="btn btn-primary btn-lg px-4 gap-3">Autentificare Utilizator</a>
-                <a href="{{ url_for('admin_login') }}" class="btn btn-outline-secondary btn-lg px-4">Autentificare Admin</a>
-            </div>
-        {% endif %}
+        <div class="stat">
+          <div class="stat-title">Utilizatori Activi</div>
+          <div class="stat-value">{{ total_users if total_users is not none else 'N/A' }}</div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-title">Activități Voluntariat</div>
+          <div class="stat-value">{{ total_volunteer_activities if total_volunteer_activities is not none else 'N/A' }}</div>
+        </div>
+      </div>
+
+      {% if current_user.is_authenticated %}
+        <p class="mb-4">Ești autentificat ca: <span class="font-bold">{{ current_user.username }} ({{ current_user.role }})</span></p>
+        <div class="space-x-2">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Panoul de Control</a>
+            <a href="{{ url_for('logout') }}" class="btn btn-ghost">Deconectare</a>
+        </div>
+      {% else %}
+        <p class="py-6">Selectează o opțiune de autentificare:</p>
+        <div class="space-x-2">
+            <a href="{{ url_for('user_login') }}" class="btn btn-primary">Autentificare Utilizator</a>
+            <a href="{{ url_for('admin_login') }}" class="btn btn-secondary">Autentificare Admin</a>
+        </div>
+      {% endif %}
     </div>
+  </div>
 </div>
 {% endblock %}
