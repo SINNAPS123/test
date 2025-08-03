@@ -3,116 +3,185 @@
 {% block title %}Panou Admin{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
-    <h1 class="text-3xl font-bold mb-6">Panou de Control Admin</h1>
+<div class="container mt-4">
+    <h2 class="mb-4">Panou de Control Admin</h2>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-                <h2 class="card-title">Creare Utilizator Nou</h2>
-                <form method="POST" action="{{ url_for('admin_create_user') }}">
-                    <div class="form-control">
-                        <label class="label" for="username"><span class="label-text">Nume utilizator:</span></label>
-                        <input type="text" id="username" name="username" class="input input-bordered w-full" required>
-                        <label class="label"><span class="label-text-alt">Ex: Popescu_V (gradat), CmdC1 (Cmd. Companie 1), CmdB1 (Cmd. Batalionul 1)</span></label>
-                    </div>
-                    <div class="form-control">
-                        <label class="label" for="role"><span class="label-text">Rol:</span></label>
-                        <select id="role" name="role" class="select select-bordered w-full" required>
-                            <option value="" disabled selected>Selectează rolul</option>
-                            <option value="gradat">Gradat (Comandant Pluton)</option>
-                            <option value="comandant_companie">Comandant Companie</option>
-                            <option value="comandant_batalion">Comandant Batalion</option>
-                        </select>
-                    </div>
-                    <div class="form-control mt-4">
-                        <button type="submit" class="btn btn-success">Creare Utilizator și Generare Cod</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <div class="card bg-base-100 shadow-xl">
-            <div class="card-body">
-                <h2 class="card-title">Informații Utile</h2>
-                <p>Utilizatorii creați vor primi un <strong>cod unic</strong>. Ei trebuie să folosească acest cod la prima autentificare.</p>
-                <p>După prima autentificare cu codul unic, li se va cere să își seteze un <strong>cod personal</strong>.</p>
-                <p>Logările ulterioare se vor face folosind codul personal.</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="card bg-base-100 shadow-xl mb-6">
-        <div class="card-body">
-            <h2 class="card-title">Funcționalități Administrative</h2>
-            <div class="flex flex-wrap gap-2">
-                <a href="{{ url_for('admin_change_self_password') }}" class="btn btn-warning btn-sm">Schimbă Parola</a>
-                <a href="{{ url_for('admin_action_logs') }}" class="btn btn-info btn-sm">Jurnal Acțiuni</a>
-                <a href="{{ url_for('list_students') }}" class="btn btn-secondary btn-sm">Listă Studenți</a>
-                <a href="{{ url_for('admin_list_permissions') }}" class="btn btn-secondary btn-sm">Listă Permisii</a>
-                <a href="{{ url_for('admin_list_daily_leaves') }}" class="btn btn-secondary btn-sm">Listă Învoiri Zilnice</a>
-                <a href="{{ url_for('admin_list_weekend_leaves') }}" class="btn btn-secondary btn-sm">Listă Învoiri Weekend</a>
-                <a href="{{ url_for('admin_list_services') }}" class="btn btn-secondary btn-sm">Listă Servicii</a>
-                <a href="{{ url_for('admin_list_updates') }}" class="btn btn-primary btn-sm">Management Anunțuri</a>
-                <a href="{{ url_for('admin_homepage_settings') }}" class="btn btn-info btn-sm">Setări Pagină Principală</a>
-            </div>
-            <div class="divider">Exporturi</div>
-            <div class="flex flex-wrap gap-2">
-                <a href="{{ url_for('admin_export_permissions_word') }}" class="btn btn-sm btn-outline" title="Exportă toate permisiile active/viitoare">Export Permisii (Word)</a>
-                <a href="{{ url_for('admin_export_weekend_leaves_word') }}" class="btn btn-sm btn-outline" title="Exportă toate învoirile de weekend active/viitoare">Export Învoiri Wk. (Word)</a>
-                <a href="{{ url_for('admin_export_studenti_text') }}" class="btn btn-sm btn-outline btn-ghost" title="Exportă toți studenții">Export Studenți (Text)</a>
-                <a href="{{ url_for('admin_export_permisii_text') }}" class="btn btn-sm btn-outline btn-ghost" title="Exportă toate permisiile">Export Permisii (Text)</a>
-                <a href="{{ url_for('admin_export_invoiri_text') }}" class="btn btn-sm btn-outline btn-ghost" title="Exportă toate învoirile">Export Învoiri (Text)</a>
-            </div>
-        </div>
-    </div>
-
-    <div class="card bg-base-100 shadow-xl mb-6">
-        <div class="card-body">
-            <h2 class="card-title">Acces Public (Doar Vizualizare)</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <h3 class="font-bold text-lg">Generează Cod Nou</h3>
-                    <p class="text-sm opacity-70">Generează un cod unic pentru a oferi acces de vizualizare la situația unei unități.</p>
-                    <form method="POST" action="{{ url_for('generate_public_view_code') }}" class="mt-4 space-y-4">
-                        <div class="form-control">
-                            <label class="label" for="scope_type"><span class="label-text">Tip Unitate:</span></label>
-                            <select class="select select-bordered" id="scope_type" name="scope_type" required>
-                                <option value="company" selected>Companie</option>
-                                <option value="battalion">Batalion</option>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4>Creare Utilizator Nou (Gradat/Comandant)</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin_create_user') }}">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Nume utilizator:</label>
+                            <input type="text" class="form-control" id="username" name="username" required>
+                            <small class="form-text text-muted">
+                                Ex: <strong>Popescu_V</strong> (gradat),
+                                <strong>CmdC1</strong> (Cmd. Compania 1),
+                                <strong>CmdB1</strong> (Cmd. Batalionul 1).
+                            </small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="role" class="form-label">Rol:</label>
+                            <select class="form-select" id="role" name="role" required>
+                                <option value="" disabled selected>Selectează rolul</option>
+                                <option value="gradat">Gradat (Comandant Pluton)</option>
+                                <option value="comandant_companie">Comandant Companie</option>
+                                <option value="comandant_batalion">Comandant Batalion</option>
                             </select>
                         </div>
-                        <div class="form-control">
-                            <label class="label" for="scope_id"><span class="label-text">ID Unitate:</span></label>
-                            <input type="text" class="input input-bordered" id="scope_id" name="scope_id" placeholder="Ex: 1, 12" required>
-                        </div>
-                        <div class="form-control">
-                            <label class="label" for="expiry_hours"><span class="label-text">Valabilitate Cod (ore):</span></label>
-                            <input type="number" class="input input-bordered" id="expiry_hours" name="expiry_hours" value="24" min="1" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-full">Generează Cod</button>
+                        <button type="submit" class="btn btn-success">Creare Utilizator și Generare Cod</button>
                     </form>
                 </div>
-                <div>
-                    <h3 class="font-bold text-lg">Coduri Active</h3>
-                    <div class="mt-4 space-y-2 max-h-60 overflow-y-auto">
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4>Informații Utile</h4>
+                </div>
+                <div class="card-body">
+                    <p>Utilizatorii creați vor primi un <strong>cod unic</strong>. Ei trebuie să folosească acest cod la prima autentificare.</p>
+                    <p>După prima autentificare cu codul unic, li se va cere să își seteze un <strong>cod personal</strong>.</p>
+                    <p>Logările ulterioare se vor face folosind codul personal.</p>
+                    <hr>
+                    <h5>Statistici (placeholder)</h5>
+                    <p>
+                        Secțiunea pentru managementul "Gradaților Speciali" (Useri) a fost eliminată.
+                        Noua funcționalitate de "Gradat Pluton" se va gestiona la nivel de Student.
+                    </p>
+                    <!-- Linkul către admin_manage_special_graded a fost eliminat -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Adăugat înainte de <hr class="my-4"> și "Listă Utilizatori" -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4>Funcționalități Administrative Suplimentare</h4>
+                </div>
+                <div class="card-body">
+                    <a href="{{ url_for('admin_change_self_password') }}" class="btn btn-warning me-2 mb-2">
+                        <i class="fas fa-key icon-rotate-hover"></i> Schimbă Propria Parolă (Admin)
+                    </a>
+                    <a href="{{ url_for('admin_action_logs') }}" class="btn btn-info me-2 mb-2">
+                        <i class="fas fa-history icon-spin-hover"></i> Jurnal Acțiuni Sistem
+                    </a>
+                    <a href="{{ url_for('list_students') }}" class="btn btn-secondary me-2 mb-2">
+                        <i class="fas fa-users icon-rotate-hover"></i> Listă Generală Studenți
+                    </a>
+                    <a href="{{ url_for('admin_list_permissions') }}" class="btn btn-secondary me-2">
+                        <i class="fas fa-calendar-check icon-rotate-hover"></i> Listă Generală Permisii
+                    </a>
+                    <a href="{{ url_for('admin_list_daily_leaves') }}" class="btn btn-secondary me-2">
+                        <i class="fas fa-person-walking-arrow-right icon-rotate-hover"></i> Listă Generală Învoiri Zilnice
+                    </a>
+                     <a href="{{ url_for('admin_list_weekend_leaves') }}" class="btn btn-secondary me-2">
+                        <i class="fas fa-calendar-week icon-rotate-hover"></i> Listă Generală Învoiri Weekend
+                    </a>
+                    <a href="{{ url_for('admin_list_services') }}" class="btn btn-secondary me-2 mb-2">
+                        <i class="fas fa-clipboard-user icon-rotate-hover"></i> Listă Generală Servicii
+                    </a>
+                    <a href="{{ url_for('admin_list_updates') }}" class="btn btn-primary me-2 mb-2">
+                        <i class="fas fa-bullhorn icon-rotate-hover"></i> Management Anunțuri
+                    </a>
+                    <a href="{{ url_for('admin_homepage_settings') }}" class="btn btn-info me-2 mb-2">
+                        <i class="fas fa-cog icon-spin-hover"></i> Setări Pagină Principală
+                    </a>
+
+                    <hr class="my-3">
+                    <h6 class="text-muted">Rapoarte Generale Word:</h6>
+                    <a href="{{ url_for('admin_export_permissions_word') }}" class="btn btn-sm btn-outline-primary mb-2" title="Exportă toate permisiile active/viitoare din sistem">
+                        <i class="fas fa-file-word icon-rotate-hover"></i> Export Permisii (Toate)
+                    </a>
+                    <a href="{{ url_for('admin_export_weekend_leaves_word') }}" class="btn btn-sm btn-outline-primary mb-2" title="Exportă toate învoirile de weekend active/viitoare din sistem">
+                        <i class="fas fa-file-word icon-rotate-hover"></i> Export Învoiri Weekend (Toate)
+                    </a>
+                    <!-- Alte link-uri admin pot fi adăugate aici -->
+
+                    <hr class="my-3">
+                    <h6 class="text-muted">Exporturi Generale (Text):</h6>
+                    <a href="{{ url_for('admin_export_studenti_text') }}" class="btn btn-sm btn-outline-secondary mb-2" title="Exportă toți studenții în format text simplu">
+                        <i class="fas fa-file-alt icon-rotate-hover"></i> Export Studenți (Text)
+                    </a>
+                    <a href="{{ url_for('admin_export_permisii_text') }}" class="btn btn-sm btn-outline-secondary mb-2" title="Exportă toate permisiile în format text simplu">
+                        <i class="fas fa-file-alt icon-rotate-hover"></i> Export Permisii (Text)
+                    </a>
+                    <a href="{{ url_for('admin_export_invoiri_text') }}" class="btn btn-sm btn-outline-secondary mb-2" title="Exportă toate învoirile (zilnice și weekend) în format text simplu">
+                        <i class="fas fa-file-alt icon-rotate-hover"></i> Export Învoiri (Text)
+                    </a>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr class="my-4">
+
+    <!-- Secțiunea de generare cod public -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h4>Acces Public (Doar Vizualizare)</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Generează Cod Nou</h5>
+                    <p class="small text-muted">Generează un cod unic pentru a oferi acces de vizualizare la situația unei companii sau a unui batalion.</p>
+                    <form method="POST" action="{{ url_for('generate_public_view_code') }}">
+                        <div class="row">
+                            <div class="col-sm-6 mb-3">
+                                <label for="scope_type" class="form-label">Tip Unitate:</label>
+                                <select class="form-select" id="scope_type" name="scope_type" required>
+                                    <option value="company" selected>Companie</option>
+                                    <option value="battalion">Batalion</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-6 mb-3">
+                                <label for="scope_id" class="form-label">ID Unitate:</label>
+                                <input type="text" class="form-control" id="scope_id" name="scope_id" placeholder="Ex: 1, 12" required>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="expiry_hours" class="form-label">Valabilitate Cod (în ore):</label>
+                            <input type="number" class="form-control" id="expiry_hours" name="expiry_hours" value="24" min="1" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-cogs me-1"></i> Generează Cod
+                        </button>
+                    </form>
+                </div>
+                <div class="col-md-6">
+                    <h5>Coduri Active</h5>
+                     <div class="list-group" style="max-height: 250px; overflow-y: auto;">
                         {% if active_public_codes %}
                             {% for code in active_public_codes %}
-                            <div class="p-2 border rounded-lg flex justify-between items-center">
+                            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
                                 <div>
-                                    <div class="font-mono font-bold">{{ code.code }}</div>
-                                    <div class="text-xs opacity-70">
-                                        Pentru: {{ code.scope_type|capitalize }} {{ code.scope_id }} | Expiră la: {{ code.expires_at|localdatetime }}
-                                    </div>
-                                    <div class="text-xs opacity-70">Creat de: {{ code.creator.username if code.creator else 'N/A' }}</div>
+                                    <strong class="font-monospace">{{ code.code }}</strong>
+                                    <small class="d-block text-muted">
+                                        Pentru: <strong>{{ code.scope_type|capitalize }} {{ code.scope_id }}</strong>
+                                    </small>
+                                    <small class="d-block text-muted">
+                                        Expiră la: {{ code.expires_at|localdatetime }}
+                                    </small>
+                                    <small class="d-block text-muted">
+                                        Creat de: {{ code.creator.username if code.creator else 'N/A' }}
+                                    </small>
                                 </div>
                                 <form method="POST" action="{{ url_for('deactivate_public_view_code', code_id=code.id) }}" onsubmit="return confirm('Sunteți sigur că doriți să dezactivați acest cod?');">
-                                    <button type="submit" class="btn btn-xs btn-warning">Dezactivează</button>
+                                    <button type="submit" class="btn btn-sm btn-outline-warning">Dezactivează</button>
                                 </form>
                             </div>
                             {% endfor %}
                         {% else %}
-                            <p class="text-sm opacity-70">Nu există coduri active.</p>
+                            <p class="text-muted p-2">Nu există coduri active.</p>
                         {% endif %}
                     </div>
                 </div>
@@ -120,16 +189,17 @@
         </div>
     </div>
 
-    <h2 class="text-2xl font-bold mb-4">Listă Utilizatori (Non-Admin)</h2>
-    <div class="overflow-x-auto">
-        <table class="table table-sm">
+    <h3 class="mb-3">Listă Utilizatori (Non-Admin)</h3>
+    {% if users %}
+    <div class="table-responsive shadow-sm"> <!-- Added shadow-sm -->
+        <table class="table table-striped table-hover table-sm"> <!-- Added table-sm -->
             <thead>
                 <tr>
                     <th>ID</th>
                     <th>Nume Utilizator</th>
                     <th>Rol</th>
-                    <th>Cod Unic</th>
-                    <th>Status</th>
+                    <th>Cod Unic (la creare/reset)</th>
+                    <th>Necesită Setare Cod Personal?</th>
                     <th>Acțiuni</th>
                 </tr>
             </thead>
@@ -141,28 +211,38 @@
                     <td>{{ user.role }}</td>
                     <td>
                         {% if user.unique_code %}
-                            <div class="badge badge-info">{{ user.unique_code }}</div>
+                            <span class="badge bg-info text-dark">{{ user.unique_code }}</span>
                         {% else %}
-                            <div class="badge badge-ghost">N/A</div>
+                            <span class="badge bg-secondary">N/A</span>
                         {% endif %}
                     </td>
                     <td>
                         {% if user.is_first_login %}
-                            <div class="badge badge-warning">Așteaptă activare</div>
+                            <span class="badge bg-warning text-dark">Da</span>
                         {% else %}
-                            <div class="badge badge-success">Activ</div>
+                            <span class="badge bg-success">Nu (Cod personal setat)</span>
                         {% endif %}
                     </td>
-                    <td class="space-x-1">
+                    <td>
                         {% if user.role != 'admin' %}
-                            <a href="{{ url_for('admin_edit_user', user_id=user.id) }}" class="btn btn-xs btn-outline" title="Modifică numele de utilizator">Editare</a>
-                            <a href="{{ url_for('admin_set_user_personal_code', user_id=user.id) }}" class="btn btn-xs btn-outline btn-info" title="Setează un nou cod personal">Setare Cod</a>
-                            <form method="POST" action="{{ url_for('admin_reset_user_code', user_id=user.id) }}" class="inline" onsubmit="return confirm('Ești sigur că vrei să resetezi codul pentru {{ user.username }}?');">
-                                <button type="submit" class="btn btn-xs btn-outline btn-warning" title="Generează un nou cod unic">Resetare Cod</button>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="User Actions for {{ user.username }}">
+                            <a href="{{ url_for('admin_edit_user', user_id=user.id) }}" class="btn btn-primary" title="Modifică numele de utilizator">
+                                <i class="fas fa-edit icon-rotate-hover me-1"></i>Editare User
+                            </a>
+                            <a href="{{ url_for('admin_set_user_personal_code', user_id=user.id) }}" class="btn btn-info" title="Setează un nou cod personal direct pentru utilizator">
+                                <i class="fas fa-shield-alt icon-rotate-hover me-1"></i>Setare Cod Personal
+                            </a>
+                            <form method="POST" action="{{ url_for('admin_reset_user_code', user_id=user.id) }}" class="d-inline" onsubmit="return confirm('Ești sigur că vrei să resetezi codul pentru {{ user.username }}? Acest lucru va genera un nou cod unic și va necesita ca utilizatorul să își seteze un nou cod personal la următoarea logare.');">
+                                <button type="submit" class="btn btn-warning" title="Generează un nou cod unic și forțează utilizatorul să seteze un nou cod personal la următoarea logare">
+                                    <i class="fas fa-key icon-rotate-hover me-1"></i>Resetare Cod Unic
+                                </button>
                             </form>
-                            <form method="POST" action="{{ url_for('admin_delete_user', user_id=user.id) }}" class="inline" onsubmit="return confirm('ATENȚIE! Ești sigur că vrei să ștergi utilizatorul {{ user.username }}?');">
-                                <button type="submit" class="btn btn-xs btn-outline btn-error" title="Șterge utilizatorul">Șterge</button>
+                            <form method="POST" action="{{ url_for('admin_delete_user', user_id=user.id) }}" class="d-inline" onsubmit="return confirm('ATENȚIE! Ești sigur că vrei să ștergi utilizatorul {{ user.username }}? Dacă este gradat, TOȚI studenții și datele asociate acestuia (permisii, învoiri, servicii, etc.) vor fi ȘTERSE DEFINITIV. Această acțiune este ireversibilă!');">
+                                <button type="submit" class="btn btn-danger" title="Șterge utilizatorul și toate datele asociate">
+                                    <i class="fas fa-trash-alt icon-rotate-hover me-1"></i>Șterge Utilizator
+                                </button>
                             </form>
+                        </div>
                         {% endif %}
                     </td>
                 </tr>
@@ -170,5 +250,8 @@
             </tbody>
         </table>
     </div>
+    {% else %}
+    <p>Nu există alți utilizatori în sistem.</p>
+    {% endif %}
 </div>
 {% endblock %}

@@ -4,6 +4,3 @@ Flask-Login
 bcrypt
 unidecode
 python-docx
-Flask-Migrate
-pytz
-alembic

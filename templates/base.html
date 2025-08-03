@@ -20,69 +20,139 @@
         })();
     </script>
     <title>{% block title %}Administrare Studenți{% endblock %}</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .unap-logo-text {
+            font-weight: 600; /* Ajustat font-weight */
+            font-size: 1.25rem; /* Redus font-size pentru compactare */
+            background: linear-gradient(45deg, #0033A0, #00BFFF);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-fill-color: transparent;
+            padding: 1px 0; /* Redus padding */
+        }
+        .navbar-brand.unap-brand {
+            padding-top: 0.2rem; /* Redus padding-top pentru compactare */
+            padding-bottom: 0.2rem; /* Redus padding-bottom pentru compactare */
+        }
+        /* Stilul pentru .navbar-brand img.logo-img a fost mutat în style.css */
+        .navbar { margin-bottom: 0.5rem !important; } /* Redus margin-bottom pentru navbar */
+        .footer { margin-top: 0.5rem !important; } /* Redus margin-top pentru footer */
+    </style>
 </head>
-<body data-theme="light">
-    <nav class="navbar bg-base-100 shadow-xl">
-        <div class="navbar-start">
-            <div class="dropdown">
-                <label tabindex="0" class="btn btn-ghost lg:hidden">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
-                </label>
-                <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
-                    {% include 'nav_links.html' %}
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light"> <!-- Eliminat mb-4 -->
+        <div class="container-fluid">
+            <a class="navbar-brand unap-brand" href="{{ url_for('home') }}" style="display: flex; align-items: center;">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="UNAP Logo" class="logo-img">
+                {# <span class="unap-logo-text">UNAP</span> #}
+                <span class="badge ms-2" style="padding: 0.2em 0.4em; font-size: 0.55em; color: white; background-image: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);">BETA</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    {% if current_user.is_authenticated %}
+                        <li class="nav-item">
+                            <span class="navbar-text me-2">
+                                Logat ca: {{ current_user.username }} ({{ current_user.role }})
+                            </span>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('dashboard') }}">Panou Principal</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('public_updates_page') }}">
+                                <i class="fas fa-bullhorn"></i> Anunțuri
+                            </a>
+                        </li>
+
+                        <!-- Dropdown pentru secțiuni specifice rolului -->
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarRoleSpecificLinks" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                Navigare Rapidă
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarRoleSpecificLinks">
+                                {% if current_user.role == 'gradat' %}
+                                    <li><a class="dropdown-item" href="{{ url_for('list_students') }}">Studenți</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('list_permissions') }}">Permisii</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('list_daily_leaves') }}">Învoiri Zilnice</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('list_weekend_leaves') }}">Învoiri Weekend</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('list_services') }}">Servicii</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('volunteer_home') }}">Voluntariat</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('presence_report') }}">Raport Prezență</a></li>
+                                {% elif current_user.role == 'admin' %}
+                                    <li><a class="dropdown-item" href="{{ url_for('admin_dashboard_route') }}">Management Utilizatori</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('list_students') }}">Listă Studenți (Admin)</a></li>
+                                    {# Adaugă alte linkuri specifice adminului aici dacă e cazul #}
+                                {% elif current_user.role == 'comandant_companie' %}
+                                    <li><a class="dropdown-item" href="{{ url_for('company_commander_dashboard') }}">Panou Comandant Companie</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('text_report_display_company') }}">Raport Text Companie</a></li>
+                                     {# Alte linkuri pentru comandant companie #}
+                                {% elif current_user.role == 'comandant_batalion' %}
+                                    <li><a class="dropdown-item" href="{{ url_for('battalion_commander_dashboard') }}">Panou Comandant Batalion</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('text_report_display_battalion') }}">Raport Text Batalion</a></li>
+                                     {# Alte linkuri pentru comandant batalion #}
+                                {% endif %}
+                                 <li><hr class="dropdown-divider"></li>
+                                 <li><a class="dropdown-item" href="{{ url_for('dashboard') }}">Panou Principal Rol</a></li>
+                            </ul>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('logout') }}">Deconectare</a>
+                        </li>
+                    {% endif %}
+                    <li class="nav-item d-flex align-items-center ms-lg-2"> <!-- Eliminat me-2 care putea cauza dubla spațiere dacă ultimul element -->
+                        <button class="btn btn-outline-secondary btn-sm" id="darkModeToggle" type="button" title="Comută între tema luminoasă și întunecată">
+                            <i class="fas fa-moon icon-rotate-hover"></i> <!-- Icon will be updated by JS, added class -->
+                        </button>
+                    </li>
+                    {% if not current_user.is_authenticated %}
+                        <li class="nav-item ms-2"> <!-- Adăugat ms-2 pentru spațiere dacă e vizibil -->
+                        <a class="nav-link" href="{{ url_for('user_login') }}">Autentificare Utilizator</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('admin_login') }}">Autentificare Admin</a>
+                        </li>
+                    {% endif %}
                 </ul>
             </div>
-            <a class="btn btn-ghost text-xl" href="{{ url_for('home') }}">
-                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="UNAP Logo" class="w-8 h-8">
-                <span class="unap-logo-text">UNAP</span>
-            </a>
-        </div>
-        <div class="navbar-center hidden lg:flex">
-            <ul class="menu menu-horizontal px-1">
-                {% include 'nav_links.html' %}
-            </ul>
-        </div>
-        <div class="navbar-end">
-            <button class="btn btn-ghost btn-circle" id="darkModeToggle" type="button" title="Comută între tema luminoasă și întunecată">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
-            </button>
-            {% if current_user.is_authenticated %}
-                <span class="text-sm mx-4">Logat ca: {{ current_user.username }} ({{ current_user.role }})</span>
-                <a href="{{ url_for('logout') }}" class="btn btn-outline btn-sm">Deconectare</a>
-            {% else %}
-                <a href="{{ url_for('user_login') }}" class="btn btn-ghost">Autentificare</a>
-                <a href="{{ url_for('admin_login') }}" class="btn btn-ghost">Admin</a>
-            {% endif %}
         </div>
     </nav>
 
-    <main class="p-4">
+    <div class="container mt-4">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                <div class="container mx-auto">
                 {% for category, message in messages %}
-                    <div role="alert" class="alert alert-{{ category }} mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        <span>{{ message }}</span>
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
                 {% endfor %}
-                </div>
             {% endif %}
         {% endwith %}
 
-        <div class="container mx-auto">
+        <div class="content-wrapper-animated"> <!-- Added wrapper for animation -->
             {% block content %}
             {% endblock %}
         </div>
-    </main>
+    </div>
 
-    <footer class="footer footer-center p-4 bg-base-300 text-base-content">
-        <aside>
-            <p>Made with <span class="text-red-500">&hearts;</span> by Rent Francisc</p>
-        </aside>
+    <footer class="footer mt-auto py-3">
+        <div class="container text-center">
+            <span class="text-muted">Made with <span class="heartbeat">&hearts;</span> by Rent Francisc</span>
+        </div>
     </footer>
 
+    <!-- Bootstrap JS Bundle (Popper.js inclus) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
     {% block extra_js %}{% endblock %}
 </body>

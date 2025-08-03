@@ -2,188 +2,288 @@
 
 {% block title %}Panou Comandant Batalion {{ battalion_id }}{% endblock %}
 
-{% macro display_presence_details(data, id_prefix) %}
-    <div class="collapse bg-base-200">
-        <input type="checkbox" id="details-{{ id_prefix }}" />
-        <div class="collapse-title text-sm font-medium">
-            Vezi detalii...
-        </div>
-        <div class="collapse-content">
-            {% if data.in_formation_students_details %}
-                <h4 class="font-bold">Prezenți în Formație ({{ data.in_formation_count }})</h4>
-                <ul class="list-disc pl-5">
-                    {% for item in data.in_formation_students_details %}<li>{{ item }}</li>{% endfor %}
-                </ul>
-            {% endif %}
-            {% if data.on_duty_students_details %}
-                <h4 class="font-bold mt-2">La Servicii ({{ data.on_duty_count }})</h4>
-                <ul class="list-disc pl-5">
-                    {% for item in data.on_duty_students_details %}<li>{{ item }}</li>{% endfor %}
-                </ul>
-            {% endif %}
-            {% if data.platoon_graded_duty_students_details %}
-                <h4 class="font-bold mt-2">Gradați Pluton ({{ data.platoon_graded_duty_count }})</h4>
-                <ul class="list-disc pl-5">
-                    {% for item in data.platoon_graded_duty_students_details %}<li>{{ item }}</li>{% endfor %}
-                </ul>
-            {% endif %}
-            {% if data.absent_students_details %}
-                <h4 class="font-bold mt-2">Absenți Motivat ({{ data.efectiv_absent_total }})</h4>
-                 <ul class="list-disc pl-5">
-                    {% for item in data.absent_students_details %}<li>{{ item }}</li>{% endfor %}
-                </ul>
-            {% endif %}
-        </div>
-    </div>
-{% endmacro %}
+{% block styles %}
+{{ super() }}
+<style>
+    .details-list {
+        display: none;
+        font-size: 0.85em;
+        padding-left: 1.5rem; /* Indentare pentru liste */
+    }
+    .list-group-item-sm {
+        padding-top: 0.25rem;
+        padding-bottom: 0.25rem;
+    }
+    .toggle-details-btn {
+        font-size: 0.8em;
+        padding: 0.1rem 0.4rem;
+        margin-left: 10px;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
-    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <h1 class="text-3xl font-bold">Panou Comandant Batalionul {{ battalion_id }}</h1>
-        <div class="flex flex-wrap items-center gap-2">
-            <a href="{{ url_for('battalion_commander_export_permissions_word') }}" class="btn btn-sm btn-outline">Export Permisii</a>
-            <a href="{{ url_for('battalion_commander_export_weekend_leaves_word') }}" class="btn btn-sm btn-outline">Export Învoiri Wk.</a>
-            <a href="{{ url_for('battalion_commander_logs') }}" class="btn btn-sm btn-outline btn-info">Jurnal Acțiuni</a>
-            <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-ghost">&laquo; Panou Principal</a>
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <h2 class="mb-3">Panou Comandant Batalionul {{ battalion_id }}</h2>
+        <div class="d-flex align-items-center">
+            <a href="{{ url_for('battalion_commander_export_permissions_word') }}" class="btn btn-sm btn-outline-primary me-2" title="Exportă raportul de permisii active/viitoare pentru batalion">
+                <i class="fas fa-file-word icon-rotate-hover"></i> Export Permisii
+            </a>
+            <a href="{{ url_for('battalion_commander_export_weekend_leaves_word') }}" class="btn btn-sm btn-outline-primary me-2" title="Exportă raportul de învoiri de weekend active/viitoare pentru batalion">
+                <i class="fas fa-file-word icon-rotate-hover"></i> Export Învoiri Wk.
+            </a>
+            <a href="{{ url_for('battalion_commander_logs') }}" class="btn btn-sm btn-outline-info me-2" title="Vezi jurnalul de acțiuni pentru batalionul tău">
+                <i class="fas fa-history icon-spin-hover"></i> Jurnal Acțiuni Batalion
+            </a>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm ms-2"> <!-- Adăugat ms-2 pentru separare -->
+                &laquo; Înapoi la Panoul Principal
+            </a>
+        </div>
+    </div>
+    <hr>
+
+    <h4 class="mb-3">Situația Batalionului <span class="text-primary">Astăzi</span> (pentru ziua de {{ get_localized_now()|localdatetime('%d-%m-%Y') }})</h4>
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Total Studenți</h5>
+                    <p class="card-text fs-4 fw-bold">{{ total_students_battalion }}</p>
+                     <a href="{{ url_for('list_students') }}" class="btn btn-sm btn-outline-secondary">Vezi Lista Generală</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Permisii <span class="text-muted small">(în ziua de azi)</span></h5>
+                    <p class="card-text fs-4 fw-bold">{{ permissions_today_count }}</p>
+                    <a href="{{ url_for('view_scoped_permissions') }}" class="btn btn-sm btn-outline-secondary">Vezi Detalii Permisii</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Învoiri <span class="text-muted small">(în ziua de azi)</span></h5>
+                    <p class="card-text fs-4 fw-bold">{{ total_leaves_today_count }}</p>
+                     <small>(Zilnice: {{ daily_leaves_today_battalion }}, Weekend: {{ weekend_leaves_today_battalion }})</small><br>
+                    <a href="{{ url_for('view_scoped_daily_leaves') }}" class="btn btn-sm btn-outline-secondary mt-1">Vezi Detalii Învoiri Zilnice</a>
+                    <a href="{{ url_for('view_scoped_weekend_leaves') }}" class="btn btn-sm btn-outline-secondary mt-1">Vezi Detalii Învoiri Weekend</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title">În Serviciu <span class="text-muted small">(în ziua de azi)</span></h5>
+                    <p class="card-text fs-4 fw-bold">{{ services_today_count }}</p>
+                    <a href="{{ url_for('view_scoped_services') }}" class="btn btn-sm btn-outline-secondary">Vezi Detalii Servicii</a>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="divider">Situația de Astăzi ({{ get_localized_now()|localdatetime('%d-%m-%Y') }})</div>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div class="card bg-base-100 shadow-lg text-center">
-            <div class="card-body">
-                <h2 class="text-lg font-semibold">Total Studenți</h2>
-                <p class="text-4xl font-bold">{{ total_students_battalion }}</p>
-                <a href="{{ url_for('list_students') }}" class="btn btn-xs btn-outline mt-2">Vezi Lista</a>
+    <hr>
+    <h4 class="mb-3">Situația Batalionului <span class="text-danger">ACUM</span> (Timp Real: {{ current_time_for_display|localdatetime('%H:%M:%S') }})</h4>
+     <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-center shadow-sm bg-light">
+                <div class="card-body">
+                    <h5 class="card-title text-danger">Total Plecați ACUM</h5>
+                    <p class="card-text fs-3 fw-bold text-danger">{{ total_on_leave_now_battalion }}</p>
+                </div>
             </div>
         </div>
-        <div class="card bg-base-100 shadow-lg text-center">
-            <div class="card-body">
-                <h2 class="text-lg font-semibold">Permisii</h2>
-                <p class="text-4xl font-bold">{{ permissions_today_count }}</p>
-                <a href="{{ url_for('view_scoped_permissions') }}" class="btn btn-xs btn-outline mt-2">Vezi Detalii</a>
+        <div class="col-md-4">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">În Permisie ACUM</h5>
+                    <p class="card-text fs-4 fw-bold">{{ permissions_active_now_battalion }}</p>
+                </div>
             </div>
         </div>
-        <div class="card bg-base-100 shadow-lg text-center">
-            <div class="card-body">
-                <h2 class="text-lg font-semibold">Învoiri</h2>
-                <p class="text-4xl font-bold">{{ total_leaves_today_count }}</p>
-                <p class="text-xs">(Z: {{ daily_leaves_today_battalion }}, W: {{ weekend_leaves_today_battalion }})</p>
+        <div class="col-md-4">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">În Serviciu ACUM</h5>
+                    <p class="card-text fs-4 fw-bold">{{ services_active_now_battalion }}</p>
+                </div>
             </div>
         </div>
-        <div class="card bg-base-100 shadow-lg text-center">
-            <div class="card-body">
-                <h2 class="text-lg font-semibold">În Serviciu</h2>
-                <p class="text-4xl font-bold">{{ services_today_count }}</p>
-                <a href="{{ url_for('view_scoped_services') }}" class="btn btn-xs btn-outline mt-2">Vezi Detalii</a>
-            </div>
+         <div class="col-12 mt-2">
+             <small class="text-muted">Detaliu plecați acum: Învoiri Zilnice: {{ daily_leaves_active_now_battalion }}, Învoiri Weekend: {{ weekend_leaves_active_now_battalion }}</small>
         </div>
     </div>
 
-    <div class="divider">Situația ACUM <span class="badge badge-error">{{ current_time_for_display|localdatetime('%H:%M:%S') }}</span></div>
-    <div class="stats stats-vertical lg:stats-horizontal shadow w-full mb-8">
-        <div class="stat">
-            <div class="stat-title">Total Plecați ACUM</div>
-            <div class="stat-value text-error">{{ total_on_leave_now_battalion }}</div>
-            <div class="stat-desc">Permisii + Învoiri</div>
-        </div>
-        <div class="stat">
-            <div class="stat-title">În Permisie ACUM</div>
-            <div class="stat-value">{{ permissions_active_now_battalion }}</div>
-        </div>
-        <div class="stat">
-            <div class="stat-title">În Serviciu ACUM</div>
-            <div class="stat-value">{{ services_active_now_battalion }}</div>
-        </div>
+    <hr class="my-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <h4 class="mb-3">Situația la Apelul de Seară (<span class="text-muted">{{ roll_call_time_str }}</span>)</h4>
+        <a href="{{ url_for('text_report_display_battalion') }}" class="btn btn-sm btn-outline-secondary" title="Vezi raportul text complet pentru apelul de seară">
+            <i class="fas fa-file-alt icon-rotate-hover"></i> Raport Text Apel
+        </a>
     </div>
 
-    <div class="divider">Situația la Apelul de Seară ({{ roll_call_time_str }})</div>
-    <div class="flex justify-end mb-4">
-        <a href="{{ url_for('text_report_display_battalion') }}" class="btn btn-sm btn-outline">Raport Text Apel</a>
-    </div>
+    {% macro display_presence_details(data, id_prefix) %}
+        {% if data.in_formation_students_details %}
+            <h6 class="mt-2 mb-1">
+                Prezenți în Formație (<span class="count-formation">{{ data.in_formation_count }}</span>)
+                <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-formation-details" aria-expanded="false" aria-controls="{{ id_prefix }}-formation-details">Detalii</button>
+            </h6>
+            <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-formation-details">
+                {% for item in data.in_formation_students_details %}
+                    <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        {% if data.on_duty_students_details %}
+            <h6 class="mt-2 mb-1">
+                La Servicii ({{ data.on_duty_count }})
+                <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-onduty-details" aria-expanded="false" aria-controls="{{ id_prefix }}-onduty-details">Detalii</button>
+            </h6>
+            <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-onduty-details">
+                {% for item in data.on_duty_students_details %}
+                    <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        {% if data.platoon_graded_duty_students_details %}
+            <h6 class="mt-2 mb-1">
+                Gradați Pluton ({{ data.platoon_graded_duty_count }})
+                <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-platoon-graded-details" aria-expanded="false" aria-controls="{{ id_prefix }}-platoon-graded-details">Detalii</button>
+            </h6>
+            <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-platoon-graded-details">
+                {% for item in data.platoon_graded_duty_students_details %}
+                    <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        
+        {% if data.absent_students_details %}
+            <h6 class="mt-2 mb-1">
+                Absenți Motivat ({{ data.efectiv_absent_total }})
+                <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-absent-details" aria-expanded="false" aria-controls="{{ id_prefix }}-absent-details">Detalii</button>
+            </h6>
+            <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-absent-details">
+                {% for item in data.absent_students_details %}
+                    <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                {% endfor %}
+            </ul>
+        {% elif data.efectiv_absent_total == 0 and data.efectiv_control > 0 and data.efectiv_prezent_total == data.efectiv_control %}
+             <p class="text-success mt-2 mb-0"><small>Niciun student absent motivat.</small></p>
+        {% endif %}
+    {% endmacro %}
+
 
     {% if total_battalion_presence %}
-    <div class="card bg-base-200 shadow-xl mb-6">
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-success text-white" style="background-color: var(--bs-success) !important;">
+            <h4 class="mb-0">Efective Totale Batalionul {{ battalion_id }}</h4>
+        </div>
         <div class="card-body">
-            <h2 class="card-title">Efective Totale Batalionul {{ battalion_id }}</h2>
-            <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
-                <div class="stat">
-                    <div class="stat-title">Efectiv Control</div>
-                    <div class="stat-value">{{ total_battalion_presence.efectiv_control }}</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-title">Efectiv Prezent</div>
-                    <div class="stat-value text-success">{{ total_battalion_presence.efectiv_prezent_total }}</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-title">Efectiv Absent</div>
-                    <div class="stat-value text-error">{{ total_battalion_presence.efectiv_absent_total }}</div>
-                </div>
-            </div>
+            <p>
+                <strong>Efectiv Control (EC):</strong> <span class="badge bg-dark fs-6">{{ total_battalion_presence.efectiv_control }}</span><br>
+                <strong>Efectiv Prezent (Ep):</strong> <span class="badge bg-success fs-6">{{ total_battalion_presence.efectiv_prezent_total }}</span>
+                <small class="d-block ms-3">(Din care: În formație: {{total_battalion_presence.in_formation_count}}, La servicii: {{total_battalion_presence.on_duty_count}}, Gradați Pluton: {{total_battalion_presence.platoon_graded_duty_count}})</small><br>
+                <strong>Efectiv Absent Motivat (Ea):</strong> <span class="badge bg-danger fs-6">{{ total_battalion_presence.efectiv_absent_total }}</span>
+            </p>
             {{ display_presence_details(total_battalion_presence, "total-battalion") }}
         </div>
     </div>
+    {% else %}
+    <div class="alert alert-warning">Nu s-au putut încărca datele de prezență pentru batalion.</div>
     {% endif %}
 
-    <h2 class="text-2xl font-bold mb-4">Detalii pe Companii</h2>
-    <div class="space-y-4">
+    <h3 class="mt-5 mb-3">Detalii Efective pe Companii:</h3>
     {% if companies_data %}
         {% for company_name, data in companies_data.items()|sort %}
-        <div class="card bg-base-100 shadow-lg collapse collapse-arrow">
-            <input type="checkbox" />
-            <div class="collapse-title text-xl font-medium">
-                {{ company_name }} (EC: {{ data.efectiv_control }}, EP: {{ data.efectiv_prezent_total }}, EA: {{ data.efectiv_absent_total }})
+        <div class="card shadow-sm mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">{{ company_name }}</h5>
             </div>
-            <div class="collapse-content">
+            <div class="card-body">
+                <p>
+                    EC: <span class="badge bg-dark">{{ data.efectiv_control }}</span> |
+                    Ep: <span class="badge bg-success">{{ data.efectiv_prezent_total }}</span>
+                    <small>(Formație: {{data.in_formation_count}}, Serviciu: {{data.on_duty_count}}, Gradat Pluton: {{data.platoon_graded_duty_count}})</small> |
+                    Ea: <span class="badge bg-danger">{{ data.efectiv_absent_total }}</span>
+                </p>
                 {{ display_presence_details(data, "company-" ~ loop.index) }}
+
+                {% if data.efectiv_control == 0 %}
+                     <p class="text-muted mb-0 mt-2"><small>Nu există studenți înregistrați pentru {{ company_name }}.</small></p>
+                {% elif data.efectiv_absent_total == 0 and data.efectiv_prezent_total == data.efectiv_control %}
+                     <p class="text-success mt-2 mb-0"><small>Toți studenții din {{ company_name }} sunt prezenți sau în serviciu.</small></p>
+                {% endif %}
             </div>
         </div>
         {% endfor %}
     {% else %}
-        <div class="alert alert-info">Nu există companii cu studenți în acest batalion.</div>
+        <div class="alert alert-info">Nu există companii cu studenți în acest batalion sau datele nu au putut fi încărcate.</div>
     {% endif %}
-    </div>
 
-    <div class="divider">Acces Public</div>
-    <div class="card bg-base-200 shadow-xl mt-6">
-        <div class="card-body">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <h3 class="font-bold text-lg">Generează Cod Nou</h3>
-                    <p class="text-sm opacity-70">Oferă acces de vizualizare la situația batalionului.</p>
-                    <form method="POST" action="{{ url_for('generate_public_view_code') }}" class="mt-4 space-y-4">
+    <hr class="my-4">
+    <!-- Secțiune Cod Public de Vizualizare -->
+    <h4 class="mb-3">Acces Public (Doar Vizualizare)</h4>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5>Generează Cod Nou</h5>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">Generează un cod unic pentru a oferi acces de vizualizare la situația batalionului.</p>
+                    <form method="POST" action="{{ url_for('generate_public_view_code') }}">
                         <input type="hidden" name="scope_type" value="battalion">
                         <input type="hidden" name="scope_id" value="{{ battalion_id }}">
-                        <div class="form-control">
-                            <label class="label" for="expiry_hours-bn"><span class="label-text">Valabilitate (ore):</span></label>
-                            <input type="number" class="input input-bordered" id="expiry_hours-bn" name="expiry_hours" value="24" min="1" required>
+                        <div class="mb-3">
+                            <label for="expiry_hours" class="form-label">Valabilitate Cod (în ore):</label>
+                            <input type="number" class="form-control" id="expiry_hours" name="expiry_hours" value="24" min="1" required>
                         </div>
-                        <button type="submit" class="btn btn-primary w-full">Generează Cod</button>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-cogs me-1"></i> Generează Cod
+                        </button>
                     </form>
                 </div>
-                <div>
-                    <h3 class="font-bold text-lg">Coduri Active</h3>
-                    <div class="mt-4 space-y-2 max-h-48 overflow-y-auto">
-                        {% if active_public_codes %}
-                            {% for code in active_public_codes %}
-                            <div class="p-2 border rounded-lg flex justify-between items-center">
-                                <div>
-                                    <div class="font-mono font-bold">{{ code.code }}</div>
-                                    <div class="text-xs opacity-70">Expiră la: {{ code.expires_at|localdatetime }}</div>
-                                </div>
-                                <form method="POST" action="{{ url_for('deactivate_public_view_code', code_id=code.id) }}" onsubmit="return confirm('Sunteți sigur?');">
-                                    <button type="submit" class="btn btn-xs btn-warning">Dezactivează</button>
-                                </form>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5>Coduri Active</h5>
+                </div>
+                <div class="card-body" style="max-height: 250px; overflow-y: auto;">
+                    {% if active_public_codes %}
+                    <ul class="list-group list-group-flush">
+                        {% for code in active_public_codes %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong class="font-monospace">{{ code.code }}</strong>
+                                <br>
+                                <small class="text-muted">Expiră la: {{ code.expires_at|localdatetime }}</small>
                             </div>
-                            {% endfor %}
-                        {% else %}
-                            <p class="text-sm opacity-70">Nu există coduri active.</p>
-                        {% endif %}
-                    </div>
+                            <form method="POST" action="{{ url_for('deactivate_public_view_code', code_id=code.id) }}" onsubmit="return confirm('Sunteți sigur că doriți să dezactivați acest cod?');">
+                                <button type="submit" class="btn btn-sm btn-outline-warning">Dezactivează</button>
+                            </form>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted">Nu există coduri active.</p>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{# Scriptul pentru toggle este implicit gestionat de Bootstrap 5 Collapse, nu e nevoie de JS custom simplu. #}
+{# Asigură-te că ai Bootstrap JS inclus în base.html sau global. #}
+{# Exemplu: <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"><\/script> #}
 {% endblock %}

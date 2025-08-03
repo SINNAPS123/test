@@ -3,29 +3,29 @@
 {% block title %}Autentificare Admin{% endblock %}
 
 {% block content %}
-<div class="flex justify-center items-center min-h-screen bg-base-200">
-    <div class="card w-full max-w-sm shadow-2xl bg-base-100">
-        <form class="card-body" method="POST" action="{{ url_for('admin_login') }}">
-            <h2 class="card-title text-2xl mx-auto">Autentificare Admin</h2>
-            <div class="form-control">
-                <label class="label" for="username">
-                    <span class="label-text">Nume utilizator (admin):</span>
-                </label>
-                <input type="text" id="username" name="username" value="admin" class="input input-bordered" required autofocus>
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-4">
+        <h2 class="text-center mb-4">Autentificare Admin</h2>
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin_login') }}">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Nume utilizator (admin):</label>
+                        <input type="text" class="form-control" id="username" name="username" value="admin" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Parolă:</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    <div class="d-grid mb-3"> <!-- Added mb-3 -->
+                        <button type="submit" class="btn btn-primary">Autentificare</button>
+                    </div>
+                </form>
             </div>
-            <div class="form-control">
-                <label class="label" for="password">
-                    <span class="label-text">Parolă:</span>
-                </label>
-                <input type="password" id="password" name="password" placeholder="Parolă" class="input input-bordered" required>
-            </div>
-            <div class="form-control mt-6">
-                <button type="submit" class="btn btn-primary">Autentificare</button>
-            </div>
-            <div class="text-center mt-4">
-                <a href="{{ url_for('home') }}" class="link link-hover">Înapoi la pagina principală</a>
-            </div>
-        </form>
+        </div>
+        <p class="text-center mt-3">
+            <a href="{{ url_for('home') }}">Înapoi la pagina principală</a>
+        </p>
     </div>
 </div>
 {% endblock %}
