@@ -182,8 +182,11 @@
 
     {% if total_company_presence %}
     <div class="card shadow-sm mb-4">
-        <div class="card-header bg-primary text-white" style="background-color: var(--bs-primary) !important;">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center" style="background-color: var(--bs-primary) !important;">
             <h4 class="mb-0">Efective Totale Compania {{ company_id }}</h4>
+            <button class="btn btn-light btn-sm copy-btn" data-target="#raport-apel-companie">
+                <i class="fas fa-copy"></i> Copiază
+            </button>
         </div>
         <div class="card-body">
             <p>
@@ -193,6 +196,23 @@
                 <strong>Efectiv Absent Motivat (Ea):</strong> <span class="badge bg-danger fs-6">{{ total_company_presence.efectiv_absent_total }}</span>
             </p>
             {{ display_presence_details(total_company_presence, "total-company") }}
+            <pre id="raport-apel-companie" class="report-text-block" style="display: none;">
+RAPORT OPERATIV - COMPANIA {{ company_id }}
+Data și ora raportului: {{ roll_call_time_str }}
+------------------------------
+Efectiv control (Ec): {{ total_company_presence.efectiv_control }}
+Efectiv prezent (Ep): {{ total_company_presence.efectiv_prezent_total }}
+  - În formație: {{ total_company_presence.in_formation_count }}
+  - La Servicii: {{ total_company_presence.on_duty_count }}
+  - Gradat Pluton (prezent): {{ total_company_presence.platoon_graded_duty_count }}
+Efectiv absent (Ea): {{ total_company_presence.efectiv_absent_total }}
+------------------------------
+{% if total_company_presence.absent_students_details %}
+ABSENȚI MOTIVAT:
+{% for detail in total_company_presence.absent_students_details %}  - {{ detail }}
+{% endfor %}
+{% endif %}
+            </pre>
         </div>
     </div>
     {% else %}
@@ -207,18 +227,30 @@
                 <h5 class="mb-0">{{ platoon_name }}</h5>
             </div>
             <div class="card-body">
-                <p>
-                    EC: <span class="badge bg-dark">{{ data.efectiv_control }}</span> |
-                    Ep: <span class="badge bg-success">{{ data.efectiv_prezent_total }}</span> 
-                    <small>(Formație: {{data.in_formation_count}}, Serviciu: {{data.on_duty_count}}, Gradat Pluton: {{data.platoon_graded_duty_count}})</small> |
-                    Ea: <span class="badge bg-danger">{{ data.efectiv_absent_total }}</span>
-                </p>
-                {{ display_presence_details(data, "platoon-" ~ loop.index) }}
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Situație Apel ({{ roll_call_time_str }})</h6>
+                        <p>
+                            EC: <span class="badge bg-dark">{{ data.efectiv_control }}</span> |
+                            Ep: <span class="badge bg-success">{{ data.efectiv_prezent_total }}</span> |
+                            Ea: <span class="badge bg-danger">{{ data.efectiv_absent_total }}</span>
+                        </p>
+                        {{ display_presence_details(data, "platoon-roll-call-" ~ loop.index) }}
+                    </div>
+                    <div class="col-md-6 border-start">
+                        <h6>Situație ACUM <span class="text-danger">({{ current_time_for_display|localdatetime('%H:%M') }})</span></h6>
+                        {% set data_now = platoons_data_now[platoon_name] %}
+                        <p>
+                            EC: <span class="badge bg-dark">{{ data_now.efectiv_control }}</span> |
+                            Ep: <span class="badge bg-success">{{ data_now.efectiv_prezent_total }}</span> |
+                            Ea: <span class="badge bg-danger">{{ data_now.efectiv_absent_total }}</span>
+                        </p>
+                        {{ display_presence_details(data_now, "platoon-now-" ~ loop.index) }}
+                    </div>
+                </div>
                 
                 {% if data.efectiv_control == 0 %}
                      <p class="text-muted mb-0 mt-2"><small>Nu există studenți înregistrați pentru {{ platoon_name }}.</small></p>
-                {% elif data.efectiv_absent_total == 0 and data.efectiv_prezent_total == data.efectiv_control %}
-                     <p class="text-success mt-2 mb-0"><small>Toți studenții din {{ platoon_name }} sunt prezenți sau în serviciu.</small></p>
                 {% endif %}
             </div>
         </div>

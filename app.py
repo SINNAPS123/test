@@ -841,7 +841,7 @@ def admin_dashboard_route():
 
     # Fetch all active public codes for the admin view
     now = get_localized_now()
-    active_public_codes = PublicViewCode.query.filter(
+    active_public_codes = PublicViewCode.query.options(joinedload(PublicViewCode.creator)).filter(
         PublicViewCode.is_active == True,
         PublicViewCode.expires_at > now
     ).order_by(PublicViewCode.created_at.desc()).all()
@@ -942,7 +942,10 @@ def dashboard():
                                sit_prezenti_formatie=current_platoon_situation.get("in_formation_count", 0),
                                sit_total_invoiti_acum=current_platoon_situation.get("efectiv_absent_total", 0),
                                sit_in_serviciu_acum=current_platoon_situation.get("on_duty_count", 0),
-                               sit_gradat_pluton_prezent_acum=current_platoon_situation.get("platoon_graded_duty_count",0)
+                               sit_gradat_pluton_prezent_acum=current_platoon_situation.get("platoon_graded_duty_count",0),
+                               # Quick Stats
+                               students_with_high_points=Student.query.filter(Student.created_by_user_id==current_user.id, Student.volunteer_points > 10).count(),
+                               upcoming_birthdays=0 # Placeholder for now
                                )
     elif current_user.role == 'comandant_companie':
         return redirect(url_for('company_commander_dashboard'))
@@ -2209,11 +2212,13 @@ def company_commander_dashboard():
 
 
     platoons_data_roll_call = {}
+    platoons_data_now = {} # New dictionary for current data
     platoons_in_company = sorted(list(set(s.pluton for s in students_in_company_all if s.pluton)))
     for pluton_id_str in platoons_in_company:
         students_in_pluton = [s for s in students_in_company_all if s.pluton == pluton_id_str]
         platoon_name = f"Plutonul {pluton_id_str}"
         platoons_data_roll_call[platoon_name] = _calculate_presence_data(students_in_pluton, roll_call_datetime)
+        platoons_data_now[platoon_name] = _calculate_presence_data(students_in_pluton, now_localized) # Calculate for now
 
     active_public_codes = PublicViewCode.query.filter_by(
         created_by_user_id=current_user.id, 
@@ -2227,6 +2232,7 @@ def company_commander_dashboard():
                            roll_call_time_str=roll_call_time_str,
                             total_company_presence=total_company_presence_roll_call,
                             platoons_data=platoons_data_roll_call,
+                            platoons_data_now=platoons_data_now, # Pass new data to template
                             # Statistici "Astăzi"
                             permissions_today_count=permissions_today_company_count,
                             daily_leaves_today_company=daily_leaves_today_company_count, # Nume nou pentru claritate
@@ -2514,11 +2520,13 @@ def battalion_commander_dashboard():
     ).count()
 
     companies_data_roll_call = {}
+    companies_data_now = {} # New dictionary for current data
     companies_in_battalion = sorted(list(set(s.companie for s in students_in_battalion_all if s.companie)))
     for company_id_str_loop in companies_in_battalion:
         students_in_company_loop = [s for s in students_in_battalion_all if s.companie == company_id_str_loop]
         company_name = f"Compania {company_id_str_loop}"
         companies_data_roll_call[company_name] = _calculate_presence_data(students_in_company_loop, roll_call_datetime)
+        companies_data_now[company_name] = _calculate_presence_data(students_in_company_loop, now_localized_b) # Calculate for now
 
     active_public_codes = PublicViewCode.query.filter_by(
         created_by_user_id=current_user.id,
@@ -2532,6 +2540,7 @@ def battalion_commander_dashboard():
                            roll_call_time_str=roll_call_time_str,
                            total_battalion_presence=total_battalion_presence_roll_call,
                            companies_data=companies_data_roll_call,
+                           companies_data_now=companies_data_now, # Pass new data to template
                            # Statistici "Astăzi"
                            permissions_today_count=permissions_today_battalion_count,
                            daily_leaves_today_battalion=daily_leaves_today_battalion_count, # Nume nou
@@ -3183,7 +3192,7 @@ def list_students():
     page = request.args.get('page', 1, type=int)
     per_page = 15
 
-    students_query = Student.query
+    students_query = Student.query.options(joinedload(Student.creator))
     # For populating filter dropdowns - consider optimizing if it becomes slow
     # These filters are primarily for admin view.
     batalioane, companii, plutoane = [], [], []
@@ -3209,7 +3218,6 @@ def list_students():
 
 
     if is_admin_view:
-        students_query = students_query.options(joinedload(Student.creator)) # Admin might want to see creator info
         if filter_batalion: students_query = students_query.filter(Student.batalion == filter_batalion)
         if filter_companie: students_query = students_query.filter(Student.companie == filter_companie)
         if filter_pluton: students_query = students_query.filter(Student.pluton == filter_pluton)
@@ -3610,7 +3618,7 @@ def list_permissions():
         return render_template('list_permissions.html', active_permissions=[], upcoming_permissions=[], past_permissions=[], title="Listă Permisii")
 
     now = get_localized_now() # Folosim ora localizată
-    base_query = Permission.query.options(joinedload(Permission.student)).filter(Permission.student_id.in_(student_ids_managed_by_gradat))
+    base_query = Permission.query.options(joinedload(Permission.student), joinedload(Permission.creator)).filter(Permission.student_id.in_(student_ids_managed_by_gradat))
 
     active_permissions = base_query.filter(
         Permission.status == 'Aprobată',
@@ -3629,7 +3637,7 @@ def list_permissions():
     # but let's be explicit if we construct a new query.
     active_upcoming_ids = [p.id for p in active_permissions] + [p.id for p in upcoming_permissions]
 
-    past_permissions_query = Permission.query.options(joinedload(Permission.student)).filter(Permission.student_id.in_(student_ids_managed_by_gradat))
+    past_permissions_query = Permission.query.options(joinedload(Permission.student), joinedload(Permission.creator)).filter(Permission.student_id.in_(student_ids_managed_by_gradat))
     if active_upcoming_ids:
         past_permissions_query = past_permissions_query.filter(Permission.id.notin_(active_upcoming_ids))
 
@@ -4291,7 +4299,7 @@ def list_daily_leaves():
     if not student_ids:
         return render_template('list_daily_leaves.html', active_leaves=[], upcoming_leaves=[], past_leaves=[], title="Listă Învoiri Zilnice", today_str=today_string_for_form)
 
-    all_relevant_leaves = DailyLeave.query.options(joinedload(DailyLeave.student))\
+    all_relevant_leaves = DailyLeave.query.options(joinedload(DailyLeave.student), joinedload(DailyLeave.creator))\
                                       .filter(DailyLeave.student_id.in_(student_ids))\
                                       .order_by(DailyLeave.leave_date.desc(), DailyLeave.start_time.desc()).all()
     active_leaves = []; upcoming_leaves = []; past_leaves = []
@@ -4725,7 +4733,7 @@ def list_weekend_leaves():
     if not student_ids:
         return render_template('list_weekend_leaves.html', active_or_upcoming_leaves=[], past_leaves=[], title="Listă Învoiri Weekend")
 
-    all_relevant_leaves = WeekendLeave.query.options(joinedload(WeekendLeave.student))\
+    all_relevant_leaves = WeekendLeave.query.options(joinedload(WeekendLeave.student), joinedload(WeekendLeave.creator))\
                                           .filter(WeekendLeave.student_id.in_(student_ids))\
                                           .order_by(WeekendLeave.weekend_start_date.desc()).all()
     active_or_upcoming_leaves = []; past_leaves = []
@@ -5281,13 +5289,13 @@ def list_services():
 
     now = get_localized_now() # Folosim ora localizată
 
-    upcoming_services = ServiceAssignment.query.options(joinedload(ServiceAssignment.student))\
+    upcoming_services = ServiceAssignment.query.options(joinedload(ServiceAssignment.student), joinedload(ServiceAssignment.creator))\
                             .filter(
                                 ServiceAssignment.student_id.in_(student_ids),
                                 ServiceAssignment.end_datetime >= now
                             ).order_by(ServiceAssignment.start_datetime.asc()).all()
 
-    past_services = ServiceAssignment.query.options(joinedload(ServiceAssignment.student))\
+    past_services = ServiceAssignment.query.options(joinedload(ServiceAssignment.student), joinedload(ServiceAssignment.creator))\
                         .filter(
                             ServiceAssignment.student_id.in_(student_ids),
                             ServiceAssignment.end_datetime < now
@@ -8420,11 +8428,11 @@ def student_profile(student_id):
         return redirect(url_for('dashboard'))
 
     # Fetch all related data
-    permissions = Permission.query.filter_by(student_id=student_id).order_by(Permission.start_datetime.desc()).all()
-    daily_leaves = DailyLeave.query.filter_by(student_id=student_id).order_by(DailyLeave.leave_date.desc()).all()
-    weekend_leaves = WeekendLeave.query.filter_by(student_id=student_id).order_by(WeekendLeave.weekend_start_date.desc()).all()
-    services = ServiceAssignment.query.filter_by(student_id=student_id).order_by(ServiceAssignment.start_datetime.desc()).all()
-    volunteer_participations = ActivityParticipant.query.options(joinedload(ActivityParticipant.activity))\
+    permissions = Permission.query.options(joinedload(Permission.creator)).filter_by(student_id=student_id).order_by(Permission.start_datetime.desc()).all()
+    daily_leaves = DailyLeave.query.options(joinedload(DailyLeave.creator)).filter_by(student_id=student_id).order_by(DailyLeave.leave_date.desc()).all()
+    weekend_leaves = WeekendLeave.query.options(joinedload(WeekendLeave.creator)).filter_by(student_id=student_id).order_by(WeekendLeave.weekend_start_date.desc()).all()
+    services = ServiceAssignment.query.options(joinedload(ServiceAssignment.creator)).filter_by(student_id=student_id).order_by(ServiceAssignment.start_datetime.desc()).all()
+    volunteer_participations = ActivityParticipant.query.options(joinedload(ActivityParticipant.activity).joinedload(VolunteerActivity.creator))\
         .filter_by(student_id=student_id)\
         .join(VolunteerActivity).order_by(VolunteerActivity.activity_date.desc()).all()
 

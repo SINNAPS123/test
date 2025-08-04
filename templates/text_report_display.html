@@ -10,57 +10,15 @@
     </div>
 
     <div class="card shadow-sm">
-        <div class="card-body">
-            <h5 class="card-title">Conținut Raport:</h5>
-            <textarea class="form-control" rows="15" readonly id="reportTextArea">{{ report_content }}</textarea>
-            <button class="btn btn-primary mt-3" onclick="copyReportToClipboard()">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-clipboard-check" viewBox="0 0 16 16">
-                    <path fill-rule="evenodd" d="M10.854 2.146a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 1 1 .708-.708L7.5 4.793l2.646-2.647a.5.5 0 0 1 .708 0z"/>
-                    <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
-                    <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
-                  </svg>
-                Copiază Raportul
+        <div class="card-header d-flex justify-content-between align-items-center">
+            Conținut Raport
+            <button class="btn btn-primary btn-sm copy-btn" data-target="#reportTextContent">
+                <i class="fas fa-copy"></i> Copiază
             </button>
+        </div>
+        <div class="card-body">
+            <pre id="reportTextContent" class="report-text-block">{{ report_content }}</pre>
         </div>
     </div>
 </div>
-
-<script>
-function copyReportToClipboard() {
-    const reportText = document.getElementById('reportTextArea');
-
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(reportText.value).then(function() {
-            alert('Raportul a fost copiat în clipboard!');
-        }, function(err) {
-            console.error('Async: Could not copy text: ', err);
-            alert('Eroare la copierea raportului (navigator). Încercați manual.');
-        });
-    } else if (document.queryCommandSupported && document.queryCommandSupported('copy')) {
-        reportText.select();
-        // reportText.setSelectionRange(0, 99999); // Pentru compatibilitate mobilă, select() ar trebui să fie suficient pe textarea
-        try {
-            document.execCommand('copy');
-            alert('Raportul a fost copiat în clipboard! (fallback)');
-        } catch (err) {
-            console.error('Fallback: Oops, unable to copy: ', err);
-            alert('Eroare la copierea raportului (fallback). Încercați manual.');
-        }
-        // Deselectează textul după copiere prin fallback
-        if (window.getSelection) {
-            if (window.getSelection().empty) {  // Chrome
-                window.getSelection().empty();
-            } else if (window.getSelection().removeAllRanges) {  // Firefox
-                window.getSelection().removeAllRanges();
-            }
-        } else if (document.selection) {  // IE?
-            document.selection.empty();
-        }
-    } else {
-        alert('Copierea automată în clipboard nu este suportată de browserul dvs. Vă rugăm selectați și copiați manual textul.');
-    }
-    // Deselectarea generală nu mai este necesară aici dacă navigator.clipboard a fost folosit,
-    // deoarece nu implică o selecție vizibilă persistentă.
-}
-</script>
 {% endblock %}

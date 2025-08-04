@@ -179,22 +179,25 @@
                     </td>
                     {% endif %} {# end is_admin_view for creator column #}
                     <td>
-                        {% if is_admin_view %}
-                        <a href="{{ url_for('admin_edit_student', student_id=student.id) }}" class="btn btn-info btn-sm py-0 px-1 me-1" title="Editează detaliile acestui student (mod Admin)">
-                            <i class="fas fa-user-shield icon-rotate-hover"></i> Edit
-                        </a>
-                        {% else %}
-                        <a href="{{ url_for('edit_student', student_id=student.id) }}" class="btn btn-warning btn-sm py-0 px-1 me-1" title="Editează detaliile acestui student">
-                            <i class="fas fa-edit icon-rotate-hover"></i>
-                        </a>
-                        {% endif %}
-                        {# Butonul de ștergere student rămâne la fel, dar poate fi condiționat de rol dacă e necesar (deja este, ruta delete_student verifică rolul) #}
-                        <form action="{{ url_for('delete_student', student_id=student.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Sigur doriți să ștergeți studentul {{ student.nume }} {{ student.prenume }} și toate datele asociate?');">
-                            <button type="submit" class="btn btn-danger btn-sm py-0 px-1" title="Șterge acest student și toate datele asociate (acțiune ireversibilă!)">
-                                <i class="fas fa-trash-alt icon-rotate-hover"></i>
-                            </button>
-                        </form>
-                        {# Funcționalitatea de toggle 'gradat de companie' a fost eliminată #}
+                        <div class="btn-group">
+                            <a href="{{ url_for('student_profile', student_id=student.id) }}" class="btn btn-primary btn-sm py-0 px-1" title="Vezi Profilul Complet">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            {% if is_admin_view %}
+                            <a href="{{ url_for('admin_edit_student', student_id=student.id) }}" class="btn btn-info btn-sm py-0 px-1" title="Editează (Admin)">
+                                <i class="fas fa-user-shield"></i>
+                            </a>
+                            {% else %}
+                            <a href="{{ url_for('edit_student', student_id=student.id) }}" class="btn btn-warning btn-sm py-0 px-1" title="Editează">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            {% endif %}
+                            <form action="{{ url_for('delete_student', student_id=student.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Sigur doriți să ștergeți studentul {{ student.nume }} {{ student.prenume }} și toate datele asociate?');">
+                                <button type="submit" class="btn btn-danger btn-sm py-0 px-1" title="Șterge">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
@@ -253,4 +256,27 @@
 </div>
 
 <!-- Modal pentru Bulk Import a fost eliminat. Funcționalitatea este pe o pagină separată. -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const searchInput = document.getElementById('search');
+    const tableRows = document.querySelectorAll('tbody tr');
+
+    if (searchInput) {
+        searchInput.addEventListener('keyup', function () {
+            const searchTerm = this.value.toLowerCase();
+            tableRows.forEach(row => {
+                const rowText = row.innerText.toLowerCase();
+                if (rowText.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    }
+});
+</script>
 {% endblock %}

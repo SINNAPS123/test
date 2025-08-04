@@ -180,8 +180,11 @@
 
     {% if total_battalion_presence %}
     <div class="card shadow-sm mb-4">
-        <div class="card-header bg-success text-white" style="background-color: var(--bs-success) !important;">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
             <h4 class="mb-0">Efective Totale Batalionul {{ battalion_id }}</h4>
+            <button class="btn btn-light btn-sm copy-btn" data-target="#raport-apel-batalion">
+                <i class="fas fa-copy"></i> Copiază
+            </button>
         </div>
         <div class="card-body">
             <p>
@@ -191,6 +194,29 @@
                 <strong>Efectiv Absent Motivat (Ea):</strong> <span class="badge bg-danger fs-6">{{ total_battalion_presence.efectiv_absent_total }}</span>
             </p>
             {{ display_presence_details(total_battalion_presence, "total-battalion") }}
+            <pre id="raport-apel-batalion" class="report-text-block" style="display: none;">
+RAPORT OPERATIV - BATALIONUL {{ battalion_id }}
+Data și ora raportului: {{ roll_call_time_str }}
+========================================
+SITUAȚIE CENTRALIZATOARE BATALION:
+  Efectiv control (Ec): {{ total_battalion_presence.efectiv_control }}
+  Efectiv prezent (Ep): {{ total_battalion_presence.efectiv_prezent_total }}
+    - În formație: {{ total_battalion_presence.in_formation_count }}
+    - La Servicii: {{ total_battalion_presence.on_duty_count }}
+    - Gradat Pluton (prezent): {{ total_battalion_presence.platoon_graded_duty_count }}
+  Efectiv absent (Ea): {{ total_battalion_presence.efectiv_absent_total }}
+========================================
+{% for company_name, company_data in companies_data.items()|sort %}
+SITUAȚIE {{ company_name }}:
+  Ec: {{ company_data.efectiv_control }}, Ep: {{ company_data.efectiv_prezent_total }}, Ea: {{ company_data.efectiv_absent_total }}
+    În formație: {{ company_data.in_formation_count }}
+    La Servicii: {{ company_data.on_duty_count }}
+    Gradat Pluton (prezent): {{ company_data.platoon_graded_duty_count }}
+{% if company_data.absent_students_details %}    Absenți motivat:
+{% for detail in company_data.absent_students_details %}      - {{ detail }}
+{% endfor %}{% endif %}----------------------------------------
+{% endfor %}
+            </pre>
         </div>
     </div>
     {% else %}
@@ -205,18 +231,30 @@
                 <h5 class="mb-0">{{ company_name }}</h5>
             </div>
             <div class="card-body">
-                <p>
-                    EC: <span class="badge bg-dark">{{ data.efectiv_control }}</span> |
-                    Ep: <span class="badge bg-success">{{ data.efectiv_prezent_total }}</span>
-                    <small>(Formație: {{data.in_formation_count}}, Serviciu: {{data.on_duty_count}}, Gradat Pluton: {{data.platoon_graded_duty_count}})</small> |
-                    Ea: <span class="badge bg-danger">{{ data.efectiv_absent_total }}</span>
-                </p>
-                {{ display_presence_details(data, "company-" ~ loop.index) }}
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Situație Apel ({{ roll_call_time_str }})</h6>
+                        <p>
+                            EC: <span class="badge bg-dark">{{ data.efectiv_control }}</span> |
+                            Ep: <span class="badge bg-success">{{ data.efectiv_prezent_total }}</span> |
+                            Ea: <span class="badge bg-danger">{{ data.efectiv_absent_total }}</span>
+                        </p>
+                        {{ display_presence_details(data, "company-roll-call-" ~ loop.index) }}
+                    </div>
+                    <div class="col-md-6 border-start">
+                        <h6>Situație ACUM <span class="text-danger">({{ current_time_for_display|localdatetime('%H:%M') }})</span></h6>
+                        {% set data_now = companies_data_now[company_name] %}
+                        <p>
+                            EC: <span class="badge bg-dark">{{ data_now.efectiv_control }}</span> |
+                            Ep: <span class="badge bg-success">{{ data_now.efectiv_prezent_total }}</span> |
+                            Ea: <span class="badge bg-danger">{{ data_now.efectiv_absent_total }}</span>
+                        </p>
+                        {{ display_presence_details(data_now, "company-now-" ~ loop.index) }}
+                    </div>
+                </div>
 
                 {% if data.efectiv_control == 0 %}
                      <p class="text-muted mb-0 mt-2"><small>Nu există studenți înregistrați pentru {{ company_name }}.</small></p>
-                {% elif data.efectiv_absent_total == 0 and data.efectiv_prezent_total == data.efectiv_control %}
-                     <p class="text-success mt-2 mb-0"><small>Toți studenții din {{ company_name }} sunt prezenți sau în serviciu.</small></p>
                 {% endif %}
             </div>
         </div>
