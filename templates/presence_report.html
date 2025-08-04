@@ -44,7 +44,7 @@
         <div class="card-header bg-primary text-white">
             <div class="d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">{{ report_data.title }}</h4>
-                <button class="btn btn-sm btn-light" onclick="copyReportToClipboard()" title="Copiază raportul în format text">
+                <button class="btn btn-sm btn-light copy-btn" data-target="#reportTextForCopy" title="Copiază raportul în format text">
                     <i class="fas fa-copy"></i> Copiază Raport Text
                 </button>
             </div>
@@ -135,7 +135,7 @@
                  <p class="text-info mt-1 ms-3"><small>Nu există studenți în evidență.</small></p>
             {% endif %}
         </div>
-        <div id="reportTextForCopy" class="d-none">
+        <pre id="reportTextForCopy" class="report-text-block" style="display: none;">
 {{- report_data.title }}
 Data raport: {{ report_data.datetime_checked }}
 
@@ -177,7 +177,7 @@ ABSENȚI MOTIVAT ({{ report_data.absent_students_details | length }}): {# Count 
   - {{ absent_student }}
 {% endfor %}
 {% endif %}
-        </div>
+        </pre>
     </div>
     {% endif %}
 </div>

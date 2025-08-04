@@ -45,7 +45,7 @@
         <div class="card-header bg-info text-white">
             <div class="d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">{{ report_data.title }}</h4>
-                 <button class="btn btn-sm btn-light" onclick="copyReportToClipboardInvigoration()" title="Copiază raportul în format text">
+                 <button class="btn btn-sm btn-light copy-btn" data-target="#reportTextForCopyInvigoration" title="Copiază raportul în format text">
                     <i class="fas fa-copy"></i> Copiază Raport Text
                 </button>
             </div>
@@ -145,7 +145,7 @@
                  <p class="text-success mt-1 ms-3"><small>Niciun alt student absent motivat.</small></p>
             {% endif %}
         </div>
-        <div id="reportTextForCopyInvigoration" class="d-none">
+        <pre id="reportTextForCopyInvigoration" class="report-text-block" style="display: none;">
 {{- report_data.title }}
 Data raport: {{ report_data.datetime_checked }}
 {% if not report_data.platoon_3_participated_fully and report_data.platoon_3_non_participants_count > 0 -%}Notă: Plutonul 3 NU a participat.{% elif report_data.platoon_3_participated_fully -%}Notă: Plutonul 3 A participat.{% endif %}
@@ -195,7 +195,7 @@ ALȚI ABSENȚI MOTIVAT (Permisii, Învoiri) ({{ report_data.absent_students_deta
   - {{ absent_student }}
 {% endfor %}
 {% endif %}
-        </div>
+        </pre>
     </div>
     {% endif %}
 </div>
