@@ -991,7 +991,6 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
     height: 100%;
     background-color: rgba(255, 255, 255, 0.7); /* Fundal alb semi-transparent */
     z-index: 9999;
-    display: flex;
     justify-content: center;
     align-items: center;
     flex-direction: column;
@@ -1012,6 +1011,7 @@ body.dark-mode #loading-overlay {
 #loading-overlay .spinner-container {
     text-align: center;
     color: #333;
+    margin: auto;
 }
 
 body.dark-mode #loading-overlay .spinner-container {

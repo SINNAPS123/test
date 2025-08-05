@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Adăugare Servicii în Masă{% endblock %}
+
+{% block head_extra %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Adăugare Servicii în Masă</h2>
+        <a href="{{ url_for('list_services') }}" class="btn btn-outline-secondary btn-sm">&laquo; Înapoi la Lista Servicii</a>
+    </div>
+
+    {% if not students_to_prepare %}
+    <!-- ====================================================== -->
+    <!-- PASUL 1: Selectarea Studenților                        -->
+    <!-- ====================================================== -->
+    <p class="text-muted">Selectați studenții pentru care doriți să adăugați servicii, apoi apăsați "Pregătește Servicii".</p>
+    <hr>
+    <form method="GET" action="{{ url_for('bulk_add_service') }}" id="studentSelectionForm">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>1. Selectează Studenții</h5>
+            </div>
+            <div class="card-body">
+                <select class="form-select" id="student_ids" name="student_ids" multiple required>
+                    {% for student in students %}
+                        <option value="{{ student.id }}">
+                            {{ student.grad_militar }} {{ student.nume }} {{ student.prenume }} (Pl. {{ student.pluton }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary btn-lg">
+                Pregătește Servicii <i class="fas fa-arrow-right"></i>
+            </button>
+        </div>
+    </form>
+
+    {% else %}
+    <!-- ====================================================== -->
+    <!-- PASUL 2: Completarea Detaliilor                        -->
+    <!-- ====================================================== -->
+    <p class="text-muted">Completați detaliile pentru fiecare serviciu. Puteți folosi secțiunea "Date Comune" pentru a completa rapid toate câmpurile.</p>
+    <hr>
+    <form method="POST" action="{{ url_for('bulk_add_service') }}" id="serviceDetailsForm">
+        <!-- Common Data Section -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header">
+                <h5>Date Comune (Opțional - pentru completare rapidă)</h5>
+            </div>
+            <div class="card-body">
+                <div class="row align-items-end">
+                    <div class="col-md-3">
+                        <label for="common_service_type" class="form-label">Tip Serviciu</label>
+                        <select class="form-select" id="common_service_type">
+                            <option value="" disabled selected>Alege tipul...</option>
+                            {% for type in service_types %}
+                                <option value="{{ type }}">{{ type }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="common_service_date" class="form-label">Data</label>
+                        <input type="date" class="form-control" id="common_service_date" value="{{ today_str }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="common_start_time" class="form-label">Ora Început</label>
+                        <input type="time" class="form-control" id="common_start_time">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="common_end_time" class="form-label">Ora Sfârșit</label>
+                        <input type="time" class="form-control" id="common_end_time">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-info w-100" id="fillAllButton">
+                            <i class="fas fa-fill-drip"></i> Umple Tot
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Details Table -->
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h5>2. Detalii Servicii pentru Studenții Selectați ({{ students_to_prepare|length }})</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Tip Serviciu <span class="text-danger">*</span></th>
+                                <th>Data <span class="text-danger">*</span></th>
+                                <th>Ora Început <span class="text-danger">*</span></th>
+                                <th>Ora Sfârșit <span class="text-danger">*</span></th>
+                                <th>Participă Apel</th>
+                                <th>Observații</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for student in students_to_prepare %}
+                            <tr>
+                                <input type="hidden" name="student_id_{{ student.id }}" value="{{ student.id }}">
+                                <td>{{ student.grad_militar }} {{ student.nume }} {{ student.prenume }}</td>
+                                <td>
+                                    <select name="service_type_{{ student.id }}" class="form-select form-select-sm common-type" required>
+                                        <option value="" disabled selected>Alege...</option>
+                                        {% for type in service_types %}
+                                            <option value="{{ type }}">{{ type }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td><input type="date" name="service_date_{{ student.id }}" class="form-control form-control-sm common-date" value="{{ today_str }}" required></td>
+                                <td><input type="time" name="start_time_{{ student.id }}" class="form-control form-control-sm common-start" required></td>
+                                <td><input type="time" name="end_time_{{ student.id }}" class="form-control form-control-sm common-end" required></td>
+                                <td>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" name="participates_{{ student.id }}" checked>
+                                    </div>
+                                </td>
+                                <td><input type="text" name="notes_{{ student.id }}" class="form-control form-control-sm"></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <hr>
+        <div class="d-grid gap-2 d-md-flex justify-content-md-between">
+            <a href="{{ url_for('bulk_add_service') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Modifică Selecția Studenților
+            </a>
+            <button type="submit" class="btn btn-success btn-lg">
+                <i class="fas fa-check-double"></i> Salvează Toate Serviciile
+            </button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- Logic for Step 1: Student Selection ---
+    const studentSelectionForm = document.getElementById('studentSelectionForm');
+    if (studentSelectionForm) {
+        $('#student_ids').select2({
+            theme: 'bootstrap-5',
+            placeholder: 'Selectează unul sau mai mulți studenți',
+            allowClear: true
+        });
+    }
+
+    // --- Logic for Step 2: Service Details ---
+    const serviceDetailsForm = document.getElementById('serviceDetailsForm');
+    if (serviceDetailsForm) {
+        const defaultTimes = JSON.parse('{{ default_times_json|safe|default("{}") }}');
+
+        // Autocomplete times when service type changes
+        serviceDetailsForm.addEventListener('change', function(event) {
+            if (event.target.classList.contains('common-type')) {
+                const selectedType = event.target.value;
+                const row = event.target.closest('tr');
+                if (defaultTimes[selectedType]) {
+                    row.querySelector('.common-start').value = defaultTimes[selectedType][0];
+                    row.querySelector('.common-end').value = defaultTimes[selectedType][1];
+                }
+            }
+        });
+
+        // Fill all button logic
+        const fillAllButton = document.getElementById('fillAllButton');
+        fillAllButton.addEventListener('click', function() {
+            const commonType = document.getElementById('common_service_type').value;
+            const commonDate = document.getElementById('common_service_date').value;
+            const commonStart = document.getElementById('common_start_time').value;
+            const commonEnd = document.getElementById('common_end_time').value;
+
+            document.querySelectorAll('.common-type').forEach(input => input.value = commonType);
+            document.querySelectorAll('.common-date').forEach(input => input.value = commonDate);
+            document.querySelectorAll('.common-start').forEach(input => input.value = commonStart);
+            document.querySelectorAll('.common-end').forEach(input => input.value = commonEnd);
+        });
+
+        // Common type change updates common times
+        document.getElementById('common_service_type').addEventListener('change', function() {
+            const selectedType = this.value;
+            if (defaultTimes[selectedType]) {
+                document.getElementById('common_start_time').value = defaultTimes[selectedType][0];
+                document.getElementById('common_end_time').value = defaultTimes[selectedType][1];
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

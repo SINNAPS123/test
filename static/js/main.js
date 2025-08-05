@@ -101,22 +101,59 @@ document.addEventListener('DOMContentLoaded', function() {
         button.addEventListener('click', function() {
             const targetSelector = this.dataset.target;
             const targetElement = document.querySelector(targetSelector);
-            if (targetElement) {
-                const textToCopy = targetElement.innerText || targetElement.textContent;
+            if (!targetElement) return;
+
+            const textToCopy = targetElement.innerText || targetElement.textContent;
+
+            const showSuccess = (btn) => {
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check"></i> Copiat!';
+                btn.classList.remove('btn-outline-secondary');
+                btn.classList.add('btn-success');
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.remove('btn-success');
+                    btn.classList.add('btn-outline-secondary');
+                }, 2000);
+            };
+
+            if (navigator.clipboard && window.isSecureContext) {
+                // Modern, secure method
                 navigator.clipboard.writeText(textToCopy).then(() => {
-                    const originalText = this.innerHTML;
-                    this.innerHTML = '<i class="fas fa-check"></i> Copiat!';
-                    this.classList.remove('btn-outline-secondary');
-                    this.classList.add('btn-success');
-                    setTimeout(() => {
-                        this.innerHTML = originalText;
-                        this.classList.remove('btn-success');
-                        this.classList.add('btn-outline-secondary');
-                    }, 2000);
+                    showSuccess(this);
                 }).catch(err => {
-                    console.error('Eroare la copierea textului: ', err);
-                    alert('Eroare la copierea textului. Este posibil ca browserul dvs. să nu suporte această funcționalitate.');
+                    console.error('Eroare la copierea textului cu navigator.clipboard: ', err);
+                    alert('Eroare la copierea textului. Contactați administratorul.');
                 });
+            } else {
+                // Fallback for non-secure contexts (e.g., HTTP)
+                const textArea = document.createElement("textarea");
+                textArea.value = textToCopy;
+                textArea.style.position = "fixed"; // Prevent scrolling to bottom of page in MS Edge.
+                textArea.style.top = "0";
+                textArea.style.left = "0";
+                textArea.style.width = "2em";
+                textArea.style.height = "2em";
+                textArea.style.padding = "0";
+                textArea.style.border = "none";
+                textArea.style.outline = "none";
+                textArea.style.boxShadow = "none";
+                textArea.style.background = "transparent";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    const successful = document.execCommand('copy');
+                    if (successful) {
+                        showSuccess(this);
+                    } else {
+                        throw new Error('Fallback copy was unsuccessful');
+                    }
+                } catch (err) {
+                    console.error('Eroare la copierea textului (fallback): ', err);
+                    alert('Eroare la copierea textului. Browserul dvs. este posibil să nu suporte această funcționalitate.');
+                }
+                document.body.removeChild(textArea);
             }
         });
     });
