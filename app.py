@@ -943,6 +943,21 @@ def dashboard():
                                sit_total_invoiti_acum=current_platoon_situation.get("efectiv_absent_total", 0),
                                sit_in_serviciu_acum=current_platoon_situation.get("on_duty_count", 0),
                                sit_gradat_pluton_prezent_acum=current_platoon_situation.get("platoon_graded_duty_count",0),
+                               # Statistici Servicii
+                               total_services_count = ServiceAssignment.query.filter(ServiceAssignment.student_id.in_(student_ids_managed)).count(),
+                               upcoming_services_count = ServiceAssignment.query.filter(
+                                   ServiceAssignment.student_id.in_(student_ids_managed),
+                                   ServiceAssignment.start_datetime > get_localized_now(),
+                                   ServiceAssignment.start_datetime <= get_localized_now() + timedelta(days=7)
+                               ).count(),
+                               service_ranking = db.session.query(
+                                       Student.grad_militar, Student.nume, Student.prenume,
+                                       func.count(ServiceAssignment.id).label('service_count')
+                                   ).join(ServiceAssignment, Student.id == ServiceAssignment.student_id)\
+                                   .filter(Student.id.in_(student_ids_managed))\
+                                   .group_by(Student.id)\
+                                   .order_by(func.count(ServiceAssignment.id).desc())\
+                                   .limit(5).all(),
                                # Quick Stats
                                students_with_high_points=Student.query.filter(Student.created_by_user_id==current_user.id, Student.volunteer_points > 10).count(),
                                upcoming_birthdays=0 # Placeholder for now
@@ -2210,6 +2225,23 @@ def company_commander_dashboard():
         ServiceAssignment.end_datetime >= now_localized
     ).count()
 
+    # New service stats for company
+    seven_days_ago = get_localized_now().date() - timedelta(days=7)
+    services_last_7_days_count = ServiceAssignment.query.filter(
+        ServiceAssignment.student_id.in_(student_ids_in_company),
+        ServiceAssignment.service_date > seven_days_ago,
+        ServiceAssignment.service_date <= get_localized_now().date()
+    ).count()
+
+    services_today_breakdown = dict(db.session.query(
+        ServiceAssignment.service_type,
+        func.count(ServiceAssignment.id)
+    ).filter(
+        ServiceAssignment.student_id.in_(student_ids_in_company),
+        ServiceAssignment.start_datetime <= today_end,
+        ServiceAssignment.end_datetime >= today_start
+    ).group_by(ServiceAssignment.service_type).all())
+
 
     platoons_data_roll_call = {}
     platoons_data_now = {} # New dictionary for current data
@@ -2247,7 +2279,10 @@ def company_commander_dashboard():
                             total_on_leave_now_company=total_on_leave_now_company,
                             services_active_now_company=services_active_now_company,
                             current_time_for_display=now_localized,
-                            active_public_codes=active_public_codes
+                            active_public_codes=active_public_codes,
+                            # New service stats
+                            services_last_7_days_count=services_last_7_days_count,
+                            services_today_breakdown=services_today_breakdown
                            )
 
 @app.route('/company_commander/logs', endpoint='company_commander_logs')
@@ -2519,6 +2554,23 @@ def battalion_commander_dashboard():
         ServiceAssignment.end_datetime >= now_localized_b
     ).count()
 
+    # New service stats for battalion
+    seven_days_ago = get_localized_now().date() - timedelta(days=7)
+    services_last_7_days_count = ServiceAssignment.query.filter(
+        ServiceAssignment.student_id.in_(student_ids_in_battalion),
+        ServiceAssignment.service_date > seven_days_ago,
+        ServiceAssignment.service_date <= get_localized_now().date()
+    ).count()
+
+    services_today_breakdown = dict(db.session.query(
+        ServiceAssignment.service_type,
+        func.count(ServiceAssignment.id)
+    ).filter(
+        ServiceAssignment.student_id.in_(student_ids_in_battalion),
+        ServiceAssignment.start_datetime <= today_end,
+        ServiceAssignment.end_datetime >= today_start
+    ).group_by(ServiceAssignment.service_type).all())
+
     companies_data_roll_call = {}
     companies_data_now = {} # New dictionary for current data
     companies_in_battalion = sorted(list(set(s.companie for s in students_in_battalion_all if s.companie)))
@@ -2555,7 +2607,10 @@ def battalion_commander_dashboard():
                            total_on_leave_now_battalion=total_on_leave_now_battalion,
                            services_active_now_battalion=services_active_now_battalion,
                            current_time_for_display=now_localized_b,
-                           active_public_codes=active_public_codes
+                           active_public_codes=active_public_codes,
+                           # New service stats
+                           services_last_7_days_count=services_last_7_days_count,
+                           services_today_breakdown=services_today_breakdown
                            )
 
 # --- Volunteer Module ---
@@ -3776,11 +3831,15 @@ def add_edit_permission(permission_id=None):
                            form_data=form_data_on_get if request.method == 'GET' and permission else request.form if request.method == 'POST' else {})
 
 
-def find_student_for_bulk_import(name_line, students_managed):
+def find_student_for_bulk_import(name_line, students_or_user_id):
     """
-    Optimized helper function to find a student from a pre-fetched list.
-    Uses unidecode for accent-insensitive matching.
+    Optimized helper function to find a student.
+    It can accept a pre-fetched list of students OR a user_id to fetch them.
     """
+    if isinstance(students_or_user_id, int):
+        students_managed = Student.query.filter_by(created_by_user_id=students_or_user_id).all()
+    else:
+        students_managed = students_or_user_id
     name_line_norm = unidecode(name_line.lower().strip())
     if not name_line_norm:
         return None, "Linie nume goală."
@@ -4508,7 +4567,7 @@ def process_daily_leaves_text():
     if apply_date_obj.weekday() > 3: flash('Învoirile din text pot fi aplicate doar pentru zile de Luni până Joi.', 'warning'); return redirect(url_for('list_daily_leaves'))
 
     lines = leave_list_text.strip().splitlines()
-    # students_managed_by_gradat = Student.query.filter_by(created_by_user_id=current_user.id).all() # Nu mai este necesar aici
+    students_managed = Student.query.filter_by(created_by_user_id=current_user.id).all()
 
     default_start_time_obj = time(15, 0)
     default_end_time_obj = time(19, 0)
@@ -4858,6 +4917,7 @@ def process_weekend_leaves_text():
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
 
+    students_managed = Student.query.filter_by(created_by_user_id=current_user.id).all()
     leave_list_text = request.form.get('weekend_leave_list_text', '').strip() # Assuming this will be the form field name
     if not leave_list_text:
         flash('Lista de învoiri este goală.', 'warning')
@@ -7756,6 +7816,8 @@ def gradat_page_import_permissions():
         error_details = []
         processed_students_details = []
 
+        students_managed = Student.query.filter_by(created_by_user_id=current_user.id).all()
+
         i = 0
         while i < len(lines):
             name_line_from_block = lines[i].strip()
@@ -7787,7 +7849,7 @@ def gradat_page_import_permissions():
             transport_mode_line = current_block_lines[3] if len(current_block_lines) > 3 else ""
             reason_car_plate_line = current_block_lines[4] if len(current_block_lines) > 4 else ""
 
-            student_obj, student_error = find_student_for_bulk_import(name_line_parsed, current_user.id)
+            student_obj, student_error = find_student_for_bulk_import(name_line_parsed, students_managed)
             if student_error:
                 app.logger.warning(f"Bulk Permission Page Import: Student find error for '{name_line_parsed}': {student_error}")
                 error_details.append({"line_content": name_line_parsed, "error_message": student_error})
@@ -7901,6 +7963,8 @@ def gradat_page_import_weekend_leaves():
         error_details_list = []
         success_details_list = []
 
+        students_managed = Student.query.filter_by(created_by_user_id=current_user.id).all()
+
         for line_raw in lines:
             line_content = line_raw.strip()
             if not line_content:
@@ -7919,7 +7983,7 @@ def gradat_page_import_weekend_leaves():
                 error_count +=1
                 continue
 
-            student_obj, student_error = find_student_for_bulk_import(student_name_str, current_user.id)
+            student_obj, student_error = find_student_for_bulk_import(student_name_str, students_managed)
             if student_error:
                 error_details_list.append({"line": line_content, "error": f"Student '{student_name_str}': {student_error}"})
                 error_count += 1
