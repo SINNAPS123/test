@@ -75,10 +75,27 @@ Total Învoiți/Absenți: {{ sit_total_invoiti_acum }}
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-6">
-                            <p class="mb-1">Studenți cu peste 10 puncte de voluntariat: <strong>{{ students_with_high_points }}</strong></p>
+                            <h6 class="card-title"><i class="fas fa-info-circle me-2"></i>Diverse</h6>
+                            <p class="mb-1"><i class="fas fa-hands-helping text-primary me-2"></i>Studenți cu peste 10p voluntariat: <strong>{{ students_with_high_points }}</strong></p>
+                            <p class="mb-1"><i class="fas fa-shield-alt text-info me-2"></i>Total servicii planificate: <strong>{{ total_services_count }}</strong></p>
+                            <p class="mb-1"><i class="fas fa-calendar-check text-success me-2"></i>Servicii în următoarele 7 zile: <strong>{{ upcoming_services_count }}</strong></p>
                         </div>
                         <div class="col-md-6">
-                            <p class="mb-1">Zile de naștere în următoarele 30 de zile: <strong>{{ upcoming_birthdays }}</strong> <small class="text-muted">(funcționalitate în dezvoltare)</small></p>
+                            <h6 class="card-title"><i class="fas fa-trophy text-warning me-2"></i>Top 5 Studenți la Servicii</h6>
+                            {% if service_ranking %}
+                                <ol class="list-group list-group-flush list-group-numbered">
+                                {% for student in service_ranking %}
+                                    <li class="list-group-item d-flex justify-content-between align-items-start ps-2 pe-1 py-1 border-0">
+                                        <div class="ms-2 me-auto">
+                                            <div class="small">{{ student.grad_militar }} {{ student.nume }} {{ student.prenume }}</div>
+                                        </div>
+                                        <span class="badge bg-primary rounded-pill">{{ student.service_count }}</span>
+                                    </li>
+                                {% endfor %}
+                                </ol>
+                            {% else %}
+                                <p class="text-muted small mt-2">Nu sunt date despre servicii.</p>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
