@@ -21,12 +21,16 @@ document.addEventListener('DOMContentLoaded', function() {
     // Show loader for navigation clicks
     document.querySelectorAll('a').forEach(link => {
         link.addEventListener('click', function(e) {
-            // Don't show loader for links opening in a new tab, or for javascript:void(0) links
-            if (this.target === '_blank' || this.href.startsWith('javascript:')) {
+            // Don't show loader for links opening in a new tab, for javascript:void(0) links, or for elements with .no-loader class
+            if (this.target === '_blank' || this.href.startsWith('javascript:') || this.classList.contains('no-loader')) {
                 return;
             }
             // Also don't show for anchor links on the same page
             if (this.hash && (this.pathname === window.location.pathname)) {
+                return;
+            }
+            // Do not show loader for Bootstrap dropdown toggles
+            if (this.getAttribute('data-bs-toggle') === 'dropdown') {
                 return;
             }
             showLoader();

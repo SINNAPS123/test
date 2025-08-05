@@ -3776,20 +3776,17 @@ def add_edit_permission(permission_id=None):
                            form_data=form_data_on_get if request.method == 'GET' and permission else request.form if request.method == 'POST' else {})
 
 
-def find_student_for_bulk_import(name_line, gradat_id):
+def find_student_for_bulk_import(name_line, students_managed):
     """
-    Helper function to find a student based on a name line (Grad Nume Prenume).
+    Optimized helper function to find a student from a pre-fetched list.
     Uses unidecode for accent-insensitive matching.
-    Prioritizes exact matches on (Grad, Nume, Prenume).
-    Then tries partial matches on (Nume, Prenume) if Grad is also similar or not specified.
     """
     name_line_norm = unidecode(name_line.lower().strip())
     if not name_line_norm:
         return None, "Linie nume goală."
 
-    students_managed = Student.query.filter_by(created_by_user_id=gradat_id).all()
     if not students_managed:
-        return None, "Niciun student gestionat de acest gradat."
+        return None, "Lista de studenți pre-încărcată este goală."
 
     # Try to extract rank for more precise matching
     parsed_grad_bulk = None
@@ -3888,6 +3885,9 @@ def bulk_import_permissions():
     error_count = 0
     error_details = []
 
+    # Optimization: Fetch all managed students once
+    students_managed = Student.query.filter_by(created_by_user_id=current_user.id).all()
+
     i = 0
     while i < len(lines):
         name_line = lines[i].strip()
@@ -3895,18 +3895,7 @@ def bulk_import_permissions():
             i += 1
             continue
 
-        # We need at least 3 lines for a valid entry (Name, Date, Destination)
-        # but we will try to be more flexible.
-
-        # Line 1: Student Name (mandatory)
-        # Line 2: Datetime interval (mandatory)
-        # Line 3: Destination (mandatory)
-        # Line 4: Transport Mode (optional)
-        # Line 5: Reason/Car Plate (optional)
-
         lines_for_this_entry = []
-
-        # Consume lines until an empty line or end of input
         temp_i = i
         while temp_i < len(lines) and lines[temp_i].strip():
             lines_for_this_entry.append(lines[temp_i].strip())
@@ -3914,59 +3903,46 @@ def bulk_import_permissions():
 
         num_actual_lines_for_entry = len(lines_for_this_entry)
 
+        i = temp_i
+        if temp_i < len(lines) and not lines[temp_i].strip():
+            i += 1
+
         if num_actual_lines_for_entry < 3:
-            if num_actual_lines_for_entry > 0: # If there was at least one line before running out
+            if num_actual_lines_for_entry > 0:
                  error_details.append(f"Intrare incompletă începând cu '{lines_for_this_entry[0]}'. Necesită cel puțin Nume, Interval, Destinație.")
                  error_count += 1
-            # If num_actual_lines_for_entry is 0, it means we hit multiple empty lines, which is fine.
-            i = temp_i # Advance past the consumed (or non-existent) lines
-            if num_actual_lines_for_entry > 0 : i+=1 # also advance past the empty line that terminated the block
             continue
-
 
         name_line = lines_for_this_entry[0]
         datetime_line = lines_for_this_entry[1]
         destination_line = lines_for_this_entry[2]
-
         transport_mode_line = lines_for_this_entry[3] if num_actual_lines_for_entry > 3 else ""
         reason_car_plate_line = lines_for_this_entry[4] if num_actual_lines_for_entry > 4 else ""
 
-        # Advance main loop counter by the number of non-empty lines processed for this entry + 1 for the empty separator line (if any)
-        i = temp_i
-        if temp_i < len(lines) and not lines[temp_i].strip(): # If terminated by an empty line
-            i += 1
-
-
-        student_obj, student_error = find_student_for_bulk_import(name_line, current_user.id)
+        # Use the pre-fetched list of students
+        student_obj, student_error = find_student_for_bulk_import(name_line, students_managed)
         if student_error:
             error_details.append(f"Linia '{name_line}': {student_error}")
             error_count += 1
-            # i already advanced by num_actual_lines_for_entry + possible empty line
             continue
 
-        # Parse datetime
         try:
-            # Regex to find DD.MM.YYYY HH:MM - DD.MM.YYYY HH:MM or DD.MM.YYYY HH:MM - HH:MM
-            # This regex is more robust for variations in date specification for end time.
             dt_match = re.search(
                 r"(\d{1,2}\.\d{1,2}\.\d{4})\s+(\d{1,2}:\d{2})\s*-\s*(?:(\d{1,2}\.\d{1,2}\.\d{4})\s+)?(\d{1,2}:\d{2})",
                 datetime_line
             )
             if not dt_match:
-                # Log the actual datetime_line that failed parsing for easier debugging
-                app.logger.warning(f"Bulk Permission Import: Invalid datetime format for student '{name_line}'. Input: '{datetime_line}'. Expected 'DD.MM.YYYY HH:MM - [DD.MM.YYYY] HH:MM'.")
-                raise ValueError("Format interval datetime invalid.") # Mesaj mai scurt pentru flash
+                app.logger.warning(f"Bulk Permission Import: Invalid datetime format for student '{name_line}'. Input: '{datetime_line}'.")
+                raise ValueError("Format interval datetime invalid.")
 
             start_date_str, start_time_str, end_date_str_opt, end_time_str = dt_match.groups()
-
             start_dt = datetime.strptime(f"{start_date_str} {start_time_str}", '%d.%m.%Y %H:%M')
 
-            if end_date_str_opt: # If end date is explicitly provided
+            if end_date_str_opt:
                 end_dt = datetime.strptime(f"{end_date_str_opt} {end_time_str}", '%d.%m.%Y %H:%M')
-            else: # End date not provided, assume same day as start_dt or next day if end_time < start_time
+            else:
                 end_time_obj_parsed = datetime.strptime(end_time_str, '%H:%M').time()
                 end_date_assumed = start_dt.date()
-                # If end_time is on the next day (e.g. 22:00 - 02:00)
                 if end_time_obj_parsed < start_dt.time():
                     end_date_assumed += timedelta(days=1)
                 end_dt = datetime.combine(end_date_assumed, end_time_obj_parsed)
@@ -3976,22 +3952,17 @@ def bulk_import_permissions():
                 raise ValueError("Data/ora de sfârșit trebuie să fie după data/ora de început.")
 
         except ValueError as ve:
-            # Log original error if not one of the custom messages above
             if str(ve) not in ["Format interval datetime invalid.", "Data/ora de sfârșit trebuie să fie după data/ora de început."]:
                  app.logger.error(f"Bulk Permission Import: ValueError parsing datetime for student '{name_line}', line '{datetime_line}': {str(ve)}")
             error_details.append(f"Student '{name_line}': Eroare format dată/oră în '{datetime_line}' - {str(ve)}")
             error_count += 1
-            # i already advanced
             continue
 
         parsed_destination = destination_line.strip()
         parsed_transport_mode = transport_mode_line.strip() if transport_mode_line else None
         parsed_reason = reason_car_plate_line.strip() if reason_car_plate_line else None
 
-
-        # Conflict Checking
-        # Ensure student_obj is not None before accessing student_obj.id
-        if not student_obj: # Should have been caught by student_error, but as a safe guard
+        if not student_obj:
             error_details.append(f"Eroare internă: student_obj este None pentru linia '{name_line}' după ce student_error a fost None.")
             error_count += 1
             continue
@@ -4000,37 +3971,22 @@ def bulk_import_permissions():
         if conflict:
             error_details.append(f"Student '{name_line}': Conflict - {conflict}.")
             error_count += 1
-            i += lines_this_entry
             continue
 
-        # Create and add permission
         new_permission = Permission(
-            student_id=student_obj.id,
-            start_datetime=start_dt,
-            end_datetime=end_dt,
-            destination=parsed_destination,
-            transport_mode=parsed_transport_mode, # Now supported
-            reason=parsed_reason,
-            status='Aprobată',
-            created_by_user_id=current_user.id
+            student_id=student_obj.id, start_datetime=start_dt, end_datetime=end_dt,
+            destination=parsed_destination, transport_mode=parsed_transport_mode,
+            reason=parsed_reason, status='Aprobată', created_by_user_id=current_user.id
         )
 
         try:
             db.session.add(new_permission)
-            # Defer flush and commit until the end of the loop for bulk operations
             added_count += 1
-        except Exception as e_add: # Should ideally not happen if just adding to session
-            # If db.session.add() itself can fail, then a rollback might be needed here,
-            # but typically it's the commit that fails.
-            # For safety, if an unexpected error occurs here:
-            db.session.rollback() # Rollback the current transaction if add fails.
+        except Exception as e_add:
+            db.session.rollback()
             error_details.append(f"Student '{name_line}': Eroare la adăugare în sesiune DB - {str(e_add)}")
             error_count += 1
-            # i is already advanced by the logic at the start of the loop iteration
             continue
-
-        # i is advanced at the beginning of the loop iteration.
-
 
     if added_count > 0:
         try:
@@ -4046,11 +4002,11 @@ def bulk_import_permissions():
         flash(f'{error_count} intrări nu au putut fi procesate sau au generat erori.', 'danger')
         if error_details:
             flash_detail_msg = "Detalii erori:<br>" + "<br>".join(error_details)
-            if len(flash_detail_msg) > 1000: # Limit flash message length further
+            if len(flash_detail_msg) > 1000:
                 flash_detail_msg = flash_detail_msg[:997] + "..."
             flash(flash_detail_msg, 'warning')
 
-    if added_count > 0 or error_count > 0: # If anything was processed or attempted
+    if added_count > 0 or error_count > 0:
         try:
             log_action("BULK_IMPORT_PERMISSIONS_COMPLETED",
                        description=f"User {current_user.username} ran bulk permission import. Added: {added_count}, Errors: {error_count}. First 3 errors: {error_details[:3]}",
@@ -4595,7 +4551,7 @@ def process_daily_leaves_text():
             not_found_or_ambiguous.append(f"Linia '{line_raw.strip()}': Nume student lipsă.")
             continue
 
-        found_student, student_error = find_student_for_bulk_import(student_name_grad_part, current_user.id)
+        found_student, student_error = find_student_for_bulk_import(student_name_grad_part, students_managed)
 
         if student_error:
             app.logger.warning(f"Daily Leave Text Import: Student find error for line '{line_raw}' (name part: '{student_name_grad_part}'). Error: {student_error}")
@@ -4934,7 +4890,7 @@ def process_weekend_leaves_text():
             error_count +=1
             continue
 
-        student_obj, student_error = find_student_for_bulk_import(student_name_str, current_user.id)
+        student_obj, student_error = find_student_for_bulk_import(student_name_str, students_managed)
         if student_error:
             error_details_list.append({"line": line_content, "error": f"Student '{student_name_str}': {student_error}"})
             error_count += 1
@@ -5444,8 +5400,102 @@ def assign_multiple_services():
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
 
-    students = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.nume).all()
-    if not students:
+    # POST request handles the submission from the details form (Step 2)
+    if request.method == 'POST':
+        student_ids_to_process = [key.split('_')[2] for key in request.form if key.startswith('student_id_')]
+        added_count = 0
+        error_count = 0
+        conflict_details_messages = []
+
+        for student_id_str in student_ids_to_process:
+            student_id = int(student_id_str)
+
+            # Retrieve all data for this student from the form
+            service_type = request.form.get(f'service_type_{student_id}')
+            service_date_str = request.form.get(f'service_date_{student_id}')
+            start_time_str = request.form.get(f'start_time_{student_id}')
+            end_time_str = request.form.get(f'end_time_{student_id}')
+            participates = f'participates_{student_id}' in request.form
+            notes = request.form.get(f'notes_{student_id}', '').strip()
+
+            student_obj = db.session.get(Student, student_id)
+            if not student_obj or student_obj.created_by_user_id != current_user.id:
+                error_count += 1
+                conflict_details_messages.append(f"Studentul cu ID {student_id} este invalid sau nu vă aparține.")
+                continue
+
+            if not all([service_type, service_date_str, start_time_str, end_time_str]):
+                error_count += 1
+                conflict_details_messages.append(f"Datele de serviciu sunt incomplete pentru {student_obj.nume}.")
+                continue
+
+            try:
+                service_date_obj = datetime.strptime(service_date_str, '%Y-%m-%d').date()
+                start_time_obj = datetime.strptime(start_time_str, '%H:%M').time()
+                end_time_obj = datetime.strptime(end_time_str, '%H:%M').time()
+
+                start_dt = datetime.combine(service_date_obj, start_time_obj)
+                effective_end_date = service_date_obj
+                if end_time_obj < start_time_obj or (service_type == "GSS" and end_time_obj == start_time_obj):
+                    effective_end_date += timedelta(days=1)
+                end_dt = datetime.combine(effective_end_date, end_time_obj)
+
+                if end_dt <= start_dt:
+                    raise ValueError("Data de sfârșit trebuie să fie după data de început.")
+            except ValueError as e:
+                error_count += 1
+                conflict_details_messages.append(f"Format dată/oră invalid pentru {student_obj.nume}: {e}")
+                continue
+
+            conflict_msg = check_service_conflict_for_student(student_id, start_dt, end_dt, service_type, None)
+            if conflict_msg:
+                error_count += 1
+                conflict_details_messages.append(f"{student_obj.nume} {student_obj.prenume}: Conflict ({conflict_msg}).")
+                continue
+
+            new_assignment = ServiceAssignment(
+                student_id=student_id, service_type=service_type, service_date=service_date_obj,
+                start_datetime=start_dt, end_datetime=end_dt,
+                participates_in_roll_call=participates, notes=notes, created_by_user_id=current_user.id
+            )
+            db.session.add(new_assignment)
+            added_count += 1
+
+        if added_count > 0:
+            try:
+                db.session.commit()
+                flash(f'{added_count} servicii au fost adăugate cu succes.', 'success')
+            except Exception as e:
+                db.session.rollback()
+                added_count = 0
+                error_count = len(student_ids_to_process)
+                flash(f'Eroare majoră la salvarea serviciilor: {str(e)}', 'danger')
+
+        if error_count > 0:
+            flash(f'{error_count} servicii nu au putut fi adăugate din cauza erorilor sau conflictelor.', 'danger')
+            for msg in conflict_details_messages:
+                flash(msg, 'warning')
+
+        return redirect(url_for('list_services'))
+
+    # GET request handles both Step 1 (selection) and Step 2 (details form)
+    student_ids_selected = request.args.getlist('student_ids', type=int)
+    students_to_prepare = None
+
+    if student_ids_selected:
+        # This is Step 2: Prepare the details table
+        students_to_prepare = Student.query.filter(
+            Student.id.in_(student_ids_selected),
+            Student.created_by_user_id == current_user.id
+        ).order_by(Student.pluton, Student.nume).all()
+
+        if len(students_to_prepare) != len(student_ids_selected):
+            flash('Unii studenți selectați nu au putut fi găsiți sau nu vă aparțin.', 'warning')
+            return redirect(url_for('assign_multiple_services'))
+
+    # This is Step 1: Show the student selection list
+    all_students_managed = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.pluton, Student.nume).all()
+    if not all_students_managed:
         flash('Nu aveți studenți în evidență pentru a le asigna servicii.', 'warning')
         return redirect(url_for('list_services'))
 
@@ -5455,95 +5505,13 @@ def assign_multiple_services():
         "Planton 1": ("22:00", "00:00"), "Planton 2": ("00:00", "02:00"),
         "Planton 3": ("02:00", "04:00"), "Altul": ("", "")
     }
-    today_iso_str_get = get_localized_now().date().isoformat()
-
-    if request.method == 'POST':
-        student_ids = request.form.getlist('student_ids')
-        service_type = request.form.get('service_type')
-        service_date_str = request.form.get('service_date')
-        start_time_str = request.form.get('start_time')
-        end_time_str = request.form.get('end_time')
-        participates = 'participates_in_roll_call' in request.form
-        notes = request.form.get('notes', '').strip()
-
-        if not student_ids:
-            flash('Trebuie să selectați cel puțin un student.', 'warning')
-            return redirect(url_for('assign_multiple_services'))
-
-        if not all([service_type, service_date_str, start_time_str, end_time_str]):
-            flash('Toate detaliile serviciului (tip, dată, ore) sunt obligatorii.', 'warning')
-            return redirect(url_for('assign_multiple_services'))
-
-        try:
-            service_date_obj = datetime.strptime(service_date_str, '%Y-%m-%d').date()
-            start_time_obj = datetime.strptime(start_time_str, '%H:%M').time()
-            end_time_obj = datetime.strptime(end_time_str, '%H:%M').time()
-        except ValueError:
-            flash('Format dată sau oră invalid.', 'danger')
-            return redirect(url_for('assign_multiple_services'))
-
-        start_dt_obj = datetime.combine(service_date_obj, start_time_obj)
-        effective_end_date = service_date_obj
-        if end_time_obj < start_time_obj:
-            effective_end_date += timedelta(days=1)
-        elif service_type == "GSS" and end_time_obj == start_time_obj:
-            effective_end_date += timedelta(days=1)
-        end_dt_obj = datetime.combine(effective_end_date, end_time_obj)
-
-        if end_dt_obj <= start_dt_obj:
-            flash('Intervalul orar al serviciului este invalid.', 'danger')
-            return redirect(url_for('assign_multiple_services'))
-
-        added_count = 0
-        error_count = 0
-        conflict_messages = []
-
-        for student_id_str in student_ids:
-            stud_id = int(student_id_str)
-            stud = db.session.get(Student, stud_id)
-
-            if not stud or stud.created_by_user_id != current_user.id:
-                error_count += 1
-                conflict_messages.append(f"Studentul cu ID {stud_id} este invalid sau nu vă aparține.")
-                continue
-
-            conflict_msg = check_service_conflict_for_student(stud.id, start_dt_obj, end_dt_obj, service_type, None)
-            if conflict_msg:
-                error_count += 1
-                conflict_messages.append(f"Conflict pentru {stud.nume} {stud.prenume}: are deja {conflict_msg}.")
-                continue
-
-            new_assignment = ServiceAssignment(
-                student_id=stud.id, service_type=service_type, service_date=service_date_obj,
-                start_datetime=start_dt_obj, end_datetime=end_dt_obj,
-                participates_in_roll_call=participates, notes=notes,
-                created_by_user_id=current_user.id
-            )
-            db.session.add(new_assignment)
-            added_count += 1
-
-        if error_count > 0:
-            for msg in conflict_messages:
-                flash(msg, 'danger')
-
-        if added_count > 0:
-            try:
-                db.session.commit()
-                flash(f'{added_count} servicii au fost adăugate cu succes.', 'success')
-            except Exception as e:
-                db.session.rollback()
-                flash(f'Eroare la salvarea serviciilor: {str(e)}', 'danger')
-
-        if added_count == 0 and error_count == 0:
-             flash('Niciun serviciu nu a fost adăugat.', 'info')
-
-        return redirect(url_for('list_services'))
 
     return render_template('assign_multiple_services.html',
-                           students=students,
+                           students=all_students_managed,
+                           students_to_prepare=students_to_prepare,
                            service_types=SERVICE_TYPES,
                            default_times_json=json.dumps(default_times_for_js),
-                           today_str=today_iso_str_get)
+                           today_str=get_localized_now().date().isoformat())
 
 
 @app.route('/gradat/services/delete/<int:assignment_id>', methods=['POST'])
