@@ -183,53 +183,15 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // ---- Floating Utilities: Export CSV & Print ----
+    // ---- Floating Utilities: Print ----
     function hasTableOnPage() {
         return document.querySelector('.table') !== null;
-    }
-
-    function exportTableToCSV() {
-        const table = document.querySelector('.table');
-        if (!table) return;
-        const selected = Array.from(table.querySelectorAll('tbody tr.row-selected'));
-        const rows = selected.length ? selected : Array.from(table.querySelectorAll('tr'));
-        const csv = rows.map(row => {
-            const cells = Array.from(row.querySelectorAll('th,td'));
-            return cells.map(cell => {
-                // Extract text without inner button/link labels duplication
-                let text = cell.innerText || '';
-                text = text.replace(/\s+/g, ' ').trim();
-                // Escape quotes
-                if (text.includes('"') || text.includes(',') || text.includes('\n')) {
-                    text = '"' + text.replace(/"/g, '""') + '"';
-                }
-                return text;
-            }).join(',');
-        }).join('\n');
-
-        const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const title = (document.title || 'export').replace(/[^a-z0-9\-_]+/gi, '_').toLowerCase();
-        const ts = new Date().toISOString().replace(/[:.]/g, '-');
-        a.href = url;
-        a.download = `${title}_${ts}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
     }
 
     function createFloatingActions() {
         if (!hasTableOnPage()) return;
         const container = document.createElement('div');
         container.className = 'fab-container';
-
-        const exportBtn = document.createElement('button');
-        exportBtn.className = 'btn btn-primary fab-button no-loader';
-        exportBtn.type = 'button';
-        exportBtn.title = 'Exportă tabelul în CSV (Shift+E)';
-        exportBtn.innerHTML = '<i class="fas fa-file-csv"></i>';
-        exportBtn.addEventListener('click', exportTableToCSV);
 
         const printBtn = document.createElement('button');
         printBtn.className = 'btn btn-secondary fab-button no-loader';
@@ -245,7 +207,6 @@ document.addEventListener('DOMContentLoaded', function() {
         topBtn.innerHTML = '<i class="fas fa-arrow-up"></i>';
         topBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 
-        container.appendChild(exportBtn);
         container.appendChild(printBtn);
         container.appendChild(topBtn);
         document.body.appendChild(container);
@@ -259,9 +220,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.key.toLowerCase() === 'd') {
                 // Toggle theme
                 if (toggleButton) toggleButton.click();
-            } else if (e.key.toLowerCase() === 'e') {
-                // Export CSV
-                exportTableToCSV();
             } else if (e.key.toLowerCase() === 'p') {
                 // Print
                 window.print();

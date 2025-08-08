@@ -676,7 +676,10 @@ def admin_insights():
     def add_evt(sid, label, start, end): per_student.setdefault(sid, []).append((start, end, label))
     for p in perm_up: add_evt(p.student_id, f"Permisie ({p.status})", p.start_datetime, p.end_datetime)
     for s in serv_up: add_evt(s.student_id, f"Serviciu ({s.service_type})", s.start_datetime, s.end_datetime)
-    for w in wl_up: add_evt(w.student_id, f"Weekend ({w.status})", w.start_datetime, w.end_datetime)
+    for w in wl_all:
+        for it in w.get_intervals():
+            if it['end'] >= now: # Only consider active/upcoming for conflicts
+                 add_evt(w.student_id, f"Weekend ({w.status})", it['start'], it['end'])
     for d in dl_up:
         sd = datetime.combine(now.date(), d.start_time); ed = datetime.combine(now.date(), d.end_time)
         add_evt(d.student_id, "Învoire Zilnică", sd, ed)
@@ -6975,201 +6978,6 @@ def gradat_invoiri_istoric():
                            )
 
 
-# --- Admin Text Export Routes ---
-@app.route('/admin/export/text/studenti', endpoint='admin_export_studenti_text')
-@login_required
-def admin_export_studenti_text():
-    if current_user.role != 'admin':
-        flash('Acces neautorizat.', 'danger')
-        return redirect(url_for('admin_dashboard_route'))
-
-    students = Student.query.order_by(Student.grad_militar, Student.nume, Student.prenume).all()
-    if not students:
-        flash('Niciun student în baza de date pentru export.', 'info')
-        return redirect(url_for('admin_dashboard_route'))
-
-    output_lines = []
-    # Format: Grad Nume Prenume Gen Pluton Companie Batalion
-    # Example: M.m.IV Renț Francisc M 1 1 1
-    for s in students:
-        line = f"{s.grad_militar} {s.nume} {s.prenume} {s.gender} {s.pluton} {s.companie} {s.batalion}"
-        output_lines.append(line)
-
-    text_content = "\n".join(output_lines)
-
-    # Create a BytesIO object to hold the text data
-    text_file = io.BytesIO()
-    text_file.write(text_content.encode('utf-8'))
-    text_file.seek(0) # Reset stream position
-
-    filename = f"studenti_export_{get_localized_now().strftime('%Y%m%d_%H%M%S')}.txt"
-
-    return send_file(
-        text_file,
-        as_attachment=True,
-        download_name=filename,
-        mimetype='text/plain; charset=utf-8'
-    )
-
-@app.route('/admin/export/text/permisii', endpoint='admin_export_permisii_text')
-@login_required
-def admin_export_permisii_text():
-    if current_user.role != 'admin':
-        flash('Acces neautorizat.', 'danger')
-        return redirect(url_for('admin_dashboard_route'))
-
-    permissions = Permission.query.join(Student).options(joinedload(Permission.student)).order_by(Student.nume, Student.prenume, Permission.start_datetime).all()
-    if not permissions:
-        flash('Nicio permisie în baza de date pentru export.', 'info')
-        return redirect(url_for('admin_dashboard_route'))
-
-    output_lines = []
-    # Format based on bulk import for permissions:
-    # Line 1: Student Name (Grad Nume Prenume)
-    # Line 2: Datetime interval (DD.MM.YYYY HH:MM - DD.MM.YYYY HH:MM or DD.MM.YYYY HH:MM - HH:MM)
-    # Line 3: Destination
-    # Line 4: Transport Mode (optional)
-    # Line 5: Reason/Car Plate (optional)
-    # --- Empty line separator ---
-
-    for p in permissions:
-        student_name_line = f"{p.student.grad_militar} {p.student.nume} {p.student.prenume}"
-
-        # Formatare datetime pentru export: DD.MM.YYYY HH:MM - [DD.MM.YYYY ]HH:MM
-        # Datetime-urile sunt stocate ca naive, reprezentând ora locală.
-        start_date_str_export = p.start_datetime.strftime('%d.%m.%Y')
-        start_time_str_export = p.start_datetime.strftime('%H:%M')
-
-        end_date_str_export = p.end_datetime.strftime('%d.%m.%Y')
-        end_time_str_export = p.end_datetime.strftime('%H:%M')
-
-        if start_date_str_export == end_date_str_export:
-            # Dacă datele sunt identice, se omite a doua dată
-            datetime_line = f"{start_date_str_export} {start_time_str_export} - {end_time_str_export}"
-        else:
-            datetime_line = f"{start_date_str_export} {start_time_str_export} - {end_date_str_export} {end_time_str_export}"
-
-        destination_line = p.destination if p.destination else "-" # "-" dacă lipsește, conform așteptărilor implicite
-
-        # Pentru transport_mode și reason, dacă sunt goale, nu se adaugă linii vide,
-        # ci se omit acele linii, conform structurii de import unde sunt opționale.
-        transport_mode_line = p.transport_mode if p.transport_mode else None
-        reason_line = p.reason if p.reason else None
-
-        output_lines.append(student_name_line)
-        output_lines.append(datetime_line)
-        output_lines.append(destination_line)
-
-        if transport_mode_line is not None:
-            output_lines.append(transport_mode_line)
-            # Reason line is only added if transport mode was also present and then reason itself is present
-            if reason_line is not None:
-                 output_lines.append(reason_line)
-        elif reason_line is not None:
-            # If transport is None, but reason is not, add an empty line for transport to maintain structure for reason
-            output_lines.append("")
-            output_lines.append(reason_line)
-
-        output_lines.append("") # Empty line separator între intrări
-
-    text_content = "\n".join(output_lines)
-    text_file = io.BytesIO(text_content.encode('utf-8'))
-    text_file.seek(0)
-
-    filename = f"permisii_export_{get_localized_now().strftime('%Y%m%d_%H%M%S')}.txt"
-    return send_file(text_file, as_attachment=True, download_name=filename, mimetype='text/plain; charset=utf-8')
-
-@app.route('/admin/export/text/invoiri', endpoint='admin_export_invoiri_text')
-@login_required
-def admin_export_invoiri_text():
-    if current_user.role != 'admin':
-        flash('Acces neautorizat.', 'danger')
-        return redirect(url_for('admin_dashboard_route'))
-
-    output_lines = []
-
-    # Export Daily Leaves
-    # Format pentru exportul învoirilor zilnice:
-    # Similar cu formatul de procesare text: NumeStudent Grad [HH:MM-HH:MM] (data se subînțelege din contextul listei)
-    # Pentru un export general, vom include și data.
-    # Format: Grad Nume Prenume HH:MM-HH:MM (pentru o anumită dată, grupate)
-    # Sau, mai simplu, fiecare învoire pe o linie separată:
-    # Grad Nume Prenume, Data (DD.MM.YYYY), OrăStart-OrăStop, [Motiv]
-
-    daily_leaves_by_date = {}
-    all_daily_leaves = DailyLeave.query.join(Student).options(joinedload(DailyLeave.student)).order_by(DailyLeave.leave_date, Student.nume, DailyLeave.start_time).all()
-
-    for dl in all_daily_leaves:
-        date_str = dl.leave_date.strftime('%d.%m.%Y')
-        if date_str not in daily_leaves_by_date:
-            daily_leaves_by_date[date_str] = []
-
-        student_name_part = f"{dl.student.grad_militar} {dl.student.nume} {dl.student.prenume}"
-        time_part = f"{dl.start_time.strftime('%H:%M')}-{dl.end_time.strftime('%H:%M')}"
-        # Format pentru importul de învoiri zilnice din text pare a fi:
-        # Nume Prenume Grad HH:MM-HH:MM (fără dată explicită per linie, data e globală)
-        # Sau Nume Prenume Grad (folosește ore implicite)
-        # Pentru export, vom face: Grad Nume Prenume HH:MM-HH:MM
-        # Motivul nu pare a fi parte din formatul de import din text.
-        daily_leaves_by_date[date_str].append(f"{student_name_part} {time_part}")
-
-    if daily_leaves_by_date:
-        output_lines.append("--- ÎNVOIRI ZILNICE (grupate pe dată) ---")
-        for date_group, leaves_in_group in sorted(daily_leaves_by_date.items()):
-            output_lines.append(f"\nData: {date_group}")
-            for leave_entry in leaves_in_group:
-                output_lines.append(leave_entry)
-        output_lines.append("\n")
-
-
-    # Format export învoiri weekend:
-    # Similar cu formatul de import:
-    # NumeStudent Grad, DD.MM.YYYY HH:MM-HH:MM, DD.MM.YYYY HH:MM-HH:MM, [biserica]
-    # Motivul nu pare a fi parte din formatul de import.
-    all_weekend_leaves = WeekendLeave.query.join(Student).options(joinedload(WeekendLeave.student)).order_by(WeekendLeave.weekend_start_date, Student.nume).all()
-    if all_weekend_leaves:
-        output_lines.append("--- ÎNVOIRI WEEKEND ---")
-        for wl in all_weekend_leaves:
-            student_info = f"{wl.student.grad_militar} {wl.student.nume} {wl.student.prenume}"
-            intervals_str_parts = []
-            # Folosim get_intervals() care returnează intervalele sortate și corecte ca datetime-uri aware
-            leave_intervals = wl.get_intervals()
-
-            for interval in leave_intervals:
-                # Formatăm data și ora pentru export ca naive (așa cum ar fi introduse)
-                # get_intervals() returnează start/end ca aware, le convertim la Europe/Bucharest și apoi formatăm
-                date_str = interval['start'].astimezone(EUROPE_BUCHAREST).strftime('%d.%m.%Y')
-                start_time_str = interval['start'].astimezone(EUROPE_BUCHAREST).strftime('%H:%M')
-                end_time_str = interval['end'].astimezone(EUROPE_BUCHAREST).strftime('%H:%M')
-                intervals_str_parts.append(f"{date_str} {start_time_str}-{end_time_str}")
-
-            intervals_full_str = ", ".join(intervals_str_parts)
-
-            # Verificăm dacă "Duminica" este printre zilele selectate efectiv pentru învoire
-            duminica_selectata_efectiv = False
-            if wl.day3_selected == "Duminica" and wl.day3_date and wl.day3_start_time and wl.day3_end_time:
-                duminica_selectata_efectiv = True
-            elif wl.day2_selected == "Duminica" and wl.day2_date and wl.day2_start_time and wl.day2_end_time:
-                 duminica_selectata_efectiv = True
-            elif wl.day1_selected == "Duminica" and wl.day1_date and wl.day1_start_time and wl.day1_end_time:
-                 duminica_selectata_efectiv = True
-
-            biserica_str = ", biserica" if wl.duminica_biserica and duminica_selectata_efectiv else ""
-            # Motivul nu este inclus în formatul de import, deci nu îl adăugăm nici la export.
-            output_lines.append(f"{student_info}, {intervals_full_str}{biserica_str}")
-        output_lines.append("\n")
-
-
-    if not output_lines:
-        flash('Nicio învoire (zilnică sau weekend) în baza de date pentru export.', 'info')
-        return redirect(url_for('admin_dashboard_route'))
-
-    text_content = "\n".join(output_lines)
-    text_file = io.BytesIO(text_content.encode('utf-8'))
-    text_file.seek(0)
-
-    filename = f"invoiri_export_{get_localized_now().strftime('%Y%m%d_%H%M%S')}.txt"
-    return send_file(text_file, as_attachment=True, download_name=filename, mimetype='text/plain; charset=utf-8')
 
 # --- Admin Word Export Routes ---
 @app.route('/admin/permissions/export_word', endpoint='admin_export_permissions_word')
@@ -8667,6 +8475,167 @@ def presence_report():
     return render_template('presence_report.html',
                            current_datetime_str=current_dt_str_for_form,
                            report_data=report_data_to_render)
+
+
+# --- Admin Data Management (Import/Export) ---
+@app.route('/admin/data_management', endpoint='admin_data_management')
+@login_required
+def admin_data_management():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+    return render_template('admin_data_management.html')
+
+@app.route('/admin/data/export', methods=['POST'], endpoint='admin_export_data')
+@login_required
+def admin_export_data():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Log the export action
+    log_action("ADMIN_EXPORT_DATA_START", description=f"Admin {current_user.username} initiated a full data export.")
+    db.session.commit()
+
+    # A dictionary to hold all the data
+    full_data = {}
+
+    # List of all models to export
+    # Order doesn't matter for export, but good to be consistent
+    models_to_export = [
+        User, Student, Permission, DailyLeave, WeekendLeave, ServiceAssignment,
+        VolunteerActivity, ActivityParticipant, VolunteerSession, ActionLog,
+        UpdateTopic, SiteSetting, PublicViewCode
+    ]
+
+    # Using the existing model_to_dict utility
+    # We might need to adjust it if it doesn't handle all cases well (e.g., relationships)
+    # For a simple JSON dump, excluding relationships and just storing IDs is often safest.
+    # The existing model_to_dict excludes _sa_instance_state, which is good.
+
+    for model in models_to_export:
+        model_name = model.__tablename__
+        records = model.query.all()
+        full_data[model_name] = [model_to_dict(r) for r in records]
+
+    # Also export association table data if any (e.g., volunteer_session_participants)
+    # This is a bit more manual as it's not a model with a __dict__
+    try:
+        session_participants = db.session.execute(text("SELECT * FROM volunteer_session_participants")).fetchall()
+        full_data['volunteer_session_participants'] = [dict(row._mapping) for row in session_participants]
+    except Exception as e:
+        app.logger.error(f"Could not export volunteer_session_participants association table: {e}")
+        full_data['volunteer_session_participants'] = []
+
+
+    # Create a JSON file in memory
+    json_string = json.dumps(full_data, ensure_ascii=False, indent=4, default=str)
+    json_bytes = json_string.encode('utf-8')
+
+    f = io.BytesIO(json_bytes)
+    f.seek(0)
+
+    filename = f"full_export_{get_localized_now().strftime('%Y-%m-%d_%H-%M')}.json"
+
+    return send_file(f,
+                     download_name=filename,
+                     as_attachment=True,
+                     mimetype='application/json')
+
+
+@app.route('/admin/data/import', methods=['POST'], endpoint='admin_import_data')
+@login_required
+def admin_import_data():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    if 'import_file' not in request.files:
+        flash('Niciun fișier selectat pentru import.', 'warning')
+        return redirect(url_for('admin_data_management'))
+
+    file = request.files['import_file']
+    if file.filename == '':
+        flash('Niciun fișier selectat pentru import.', 'warning')
+        return redirect(url_for('admin_data_management'))
+
+    if file and file.filename.endswith('.json'):
+        try:
+            # Load data from file
+            json_data = json.load(io.TextIOWrapper(file.stream, encoding='utf-8'))
+
+            # --- DELETION PHASE ---
+            # Order is crucial to respect foreign key constraints
+            # Start with many-to-many tables, then models that depend on others.
+            db.session.execute(text("DELETE FROM volunteer_session_participants"))
+            MODELS_TO_DELETE = [
+                ActivityParticipant, Permission, DailyLeave, WeekendLeave, ServiceAssignment,
+                ActionLog, PublicViewCode, VolunteerActivity, VolunteerSession,
+                UpdateTopic, Student, User, SiteSetting
+            ]
+            for model in MODELS_TO_DELETE:
+                # This is a simple but potentially slow way. For large dbs, raw SQL is faster.
+                model.query.delete()
+
+            db.session.commit()
+            flash('Baza de date a fost ștearsă cu succes. Se începe importul...', 'info')
+
+            # --- INSERTION PHASE ---
+            # Order is the reverse of deletion
+            MODELS_TO_INSERT = {
+                'sitesetting': SiteSetting,
+                'user': User,
+                'student': Student,
+                'updatetopic': UpdateTopic,
+                'volunteer_session': VolunteerSession,
+                'volunteer_activity': VolunteerActivity,
+                'public_view_code': PublicViewCode,
+                'actionlog': ActionLog,
+                'permission': Permission,
+                'daily_leave': DailyLeave,
+                'weekend_leave': WeekendLeave,
+                'service_assignment': ServiceAssignment,
+                'activity_participant': ActivityParticipant,
+            }
+
+            # Disable foreign key checks for SQLite during import
+            # This is DB specific. For others like PostgreSQL, this is different.
+            if db.engine.dialect.name == 'sqlite':
+                db.session.execute(text('PRAGMA foreign_keys=OFF'))
+
+            for table_name, model_class in MODELS_TO_INSERT.items():
+                if table_name in json_data:
+                    # Use bulk_insert_mappings for efficiency
+                    db.session.bulk_insert_mappings(model_class, json_data[table_name])
+
+            # Handle the many-to-many association table separately
+            if 'volunteer_session_participants' in json_data:
+                # Since we use bulk insert, we need to use the table object directly
+                participants_table = db.metadata.tables['volunteer_session_participants']
+                db.session.execute(participants_table.insert(), json_data['volunteer_session_participants'])
+
+            db.session.commit()
+
+            if db.engine.dialect.name == 'sqlite':
+                db.session.execute(text('PRAGMA foreign_keys=ON'))
+
+
+            flash('Importul datelor a fost finalizat cu succes!', 'success')
+            log_action("ADMIN_IMPORT_DATA_SUCCESS", description=f"Admin {current_user.username} successfully imported data from {file.filename}.")
+            db.session.commit()
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Eroare la importul datelor: {str(e)}', 'danger')
+            app.logger.error(f"Data import failed: {str(e)}")
+            log_action("ADMIN_IMPORT_DATA_FAIL", description=f"Admin {current_user.username} failed to import data. Error: {str(e)}")
+            db.session.commit()
+
+        return redirect(url_for('admin_data_management'))
+
+    else:
+        flash('Format fișier invalid. Vă rugăm încărcați un fișier .json.', 'warning')
+        return redirect(url_for('admin_data_management'))
 
 
 # This block seems to be intended for main execution,

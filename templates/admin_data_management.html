@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Management Date (Admin){% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Managementul Datelor Globale</h1>
+    <p>Această secțiune permite exportul și importul complet al datelor aplicației. Utilizați cu precauție.</p>
+
+    <div class="row">
+        <!-- Export Card -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Export Date</h5>
+                    <p class="card-text">
+                        Creează o copie de siguranță completă a tuturor datelor din sistem (utilizatori, studenți, permisii, servicii, etc.) într-un singur fișier JSON.
+                    </p>
+                    <p class="card-text small text-muted">
+                        Acest fișier poate fi folosit pentru a restaura starea sistemului la un moment ulterior.
+                    </p>
+                    <form action="{{ url_for('admin_export_data') }}" method="post">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-download me-2"></i> Exportă Toate Datele
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Import Card -->
+        <div class="col-md-6">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <i class="fas fa-exclamation-triangle me-2"></i> Acțiune Distructivă
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">Import Date</h5>
+                    <p class="card-text">
+                        Importă date dintr-un fișier JSON (generat anterior prin funcția de export).
+                    </p>
+                    <div class="alert alert-danger">
+                        <strong>Atenție!</strong> Această acțiune va <strong>șterge ireversibil TOATE datele existente</strong> în baza de date înainte de a realiza importul. Asigurați-vă că aveți o copie de siguranță.
+                    </div>
+                    <form action="{{ url_for('admin_import_data') }}" method="post" enctype="multipart/form-data" id="importForm">
+                        <div class="mb-3">
+                            <label for="importFile" class="form-label">Selectează fișier JSON pentru import:</label>
+                            <input class="form-control" type="file" id="importFile" name="import_file" accept=".json" required>
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="confirmDelete" required>
+                            <label class="form-check-label" for="confirmDelete">Confirm că înțeleg că toate datele curente vor fi șterse.</label>
+                        </div>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-upload me-2"></i> Importă și Suprascrie Datele
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Simple script to prevent accidental submission of the import form
+document.getElementById('importForm').addEventListener('submit', function(e) {
+    if (!document.getElementById('confirmDelete').checked) {
+        alert('Trebuie să bifați căsuța de confirmare pentru a continua.');
+        e.preventDefault();
+        return;
+    }
+    const confirmation = confirm('Sunteți absolut sigur? Această acțiune nu poate fi anulată și va șterge toate datele curente.');
+    if (!confirmation) {
+        e.preventDefault();
+    }
+});
+</script>
+{% endblock %}
