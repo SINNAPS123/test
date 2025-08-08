@@ -1198,13 +1198,16 @@ body.dark-mode .report-text-block {
 input[type="date"],
 input[type="time"],
 input[type="datetime-local"] {
-  min-width: 220px;
+  /* A general minimum width for all date/time inputs */
+  min-width: 180px;
 }
 
-.input-group > input[type="date"],
-.input-group > input[type="time"],
-.input-group > input[type="datetime-local"] {
-  flex: 1 1 auto;
+/* Specific rules for inputs with helper buttons to prevent shrinking */
+.input-group > input.has-time-helpers {
+  /* Let it grow (1), don't let it shrink (0), and give it a base size */
+  flex: 1 0 180px;
+  /* min-width is a fallback and ensures it doesn't get smaller than this */
+  min-width: 180px;
 }
 
 /* Ensure inside small forms we still see content */
