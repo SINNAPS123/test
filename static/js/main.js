@@ -566,41 +566,70 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ---- Form helpers (date/time quick-fill) ----
     (function formHelpers(){
-        const candidates = Array.from(document.querySelectorAll('input[type="date"], input[type="time"], input[type="datetime-local"]'));
+        // Select only inputs that are specifically marked for helpers
+        const candidates = Array.from(document.querySelectorAll('input.has-time-helpers'));
         if (!candidates.length) return;
+
+        /**
+         * Gets the current date and time parts for the Europe/Bucharest timezone.
+         * This method is more robust against locale formatting issues.
+         * @returns {{date: string, time: string}} e.g., { date: '2025-08-08', time: '01:00' }
+         */
+        function getBucharestDateTimeParts() {
+            const now = new Date();
+            const options = {
+                timeZone: 'Europe/Bucharest',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hourCycle: 'h23' // Ensures 24-hour format (00-23)
+            };
+
+            // Using 'sv-SE' locale is a reliable way to get the YYYY-MM-DD HH:MM format
+            const formatter = new Intl.DateTimeFormat('sv-SE', options);
+            const formattedString = formatter.format(now); // e.g., "2025-08-08 01:00"
+            const [datePart, timePart] = formattedString.split(' ');
+
+            return { date: datePart, time: timePart };
+        }
+
         candidates.forEach(input => {
             const wrap = document.createElement('div');
             wrap.className = 'input-group mb-2';
-            input.parentNode.insertBefore(wrap, input);
+            const parent = input.parentNode;
+            parent.insertBefore(wrap, input);
             wrap.appendChild(input);
-            // Europe/Bucharest helpers
-            const fmt = new Intl.DateTimeFormat('ro-RO', { timeZone: 'Europe/Bucharest', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
-            function roParts(addHours){
-                const base = new Date(Date.now() + (addHours||0)*3600000);
-                const parts = fmt.formatToParts(base).reduce((acc,p)=>{ acc[p.type]=p.value; return acc; },{});
-                return { y: parts.year, m: parts.month, d: parts.day, hh: parts.hour, mm: parts.minute };
-            }
-            function applyParts(el, parts){
-                if (el.type === 'time') {
-                    el.value = `${parts.hh}:${parts.mm}`;
-                } else if (el.type === 'date') {
-                    el.value = `${parts.y}-${parts.m}-${parts.d}`;
-                } else if (el.type === 'datetime-local') {
-                    el.value = `${parts.y}-${parts.m}-${parts.d}T${parts.hh}:${parts.mm}`;
+
+            // Apply the date/time to the correct associated input
+            function applyTime() {
+                const parts = getBucharestDateTimeParts();
+                if (input.type === 'time') {
+                    input.value = parts.time;
+                } else if (input.type === 'date') {
+                    input.value = parts.date;
+                } else if (input.type === 'datetime-local') {
+                    input.value = `${parts.date}T${parts.time}`;
                 }
-                el.dispatchEvent(new Event('change', { bubbles: true }));
+                // Trigger change event for any other scripts listening
+                input.dispatchEvent(new Event('change', { bubbles: true }));
             }
+
             const btnNow = document.createElement('button');
-            btnNow.type='button'; btnNow.className='btn btn-outline-secondary'; btnNow.textContent='Acum';
-            btnNow.addEventListener('click', ()=>{
-                applyParts(input, roParts(0));
-            });
-            const btnPlus1h = document.createElement('button');
-            btnPlus1h.type='button'; btnPlus1h.className='btn btn-outline-secondary'; btnPlus1h.textContent='+1h';
-            btnPlus1h.addEventListener('click', ()=>{
-                applyParts(input, roParts(1));
-            });
-            const grp = document.createElement('div'); grp.className='input-group-append'; grp.append(btnNow, btnPlus1h); wrap.appendChild(grp);
+            btnNow.type = 'button';
+            btnNow.className = 'btn btn-outline-secondary';
+            btnNow.textContent = 'Acum';
+            btnNow.title = 'Setează ora curentă';
+            btnNow.addEventListener('click', applyTime);
+
+            // The "+1h" button has been removed as per the user's request.
+
+            const btnGroup = document.createElement('div');
+            // Bootstrap 5 uses .input-group-text for addons, but a simple button works too.
+            // No need for input-group-append in BS5
+            btnGroup.append(btnNow);
+            wrap.appendChild(btnGroup);
         });
     })();
 

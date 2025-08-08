@@ -36,19 +36,19 @@
 
                         <div class="mb-3">
                             <label for="service_date" class="form-label">Data Serviciului <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" id="service_date" name="service_date"
+                            <input type="date" class="form-control has-time-helpers" id="service_date" name="service_date"
                                    value="{{ form_data.service_date if form_data else today_str }}" required>
                         </div>
 
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="start_time" class="form-label">Ora de Început <span class="text-danger">*</span></label>
-                                <input type="time" class="form-control" id="start_time" name="start_time"
+                                <input type="time" class="form-control has-time-helpers" id="start_time" name="start_time"
                                        value="{{ form_data.start_time if form_data else '' }}" required>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="end_time" class="form-label">Ora de Sfârșit <span class="text-danger">*</span></label>
-                                <input type="time" class="form-control" id="end_time" name="end_time"
+                                <input type="time" class="form-control has-time-helpers" id="end_time" name="end_time"
                                        value="{{ form_data.end_time if form_data else '' }}" required>
                             </div>
                         </div>
