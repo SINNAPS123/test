@@ -127,6 +127,38 @@
         </div>
     </div>
 
+    <div class="card shadow-sm mb-4">
+      <div class="card-header"><i class="fas fa-shield-alt me-2"></i>Serviciile de azi - Compania {{ company_id }}</div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-striped table-hover table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Tip</th>
+                <th>Start</th>
+                <th>Final</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if todays_services %}
+                {% for s in todays_services %}
+                  <tr>
+                    <td>{{ s.student.grad_militar }} {{ s.student.nume }} {{ s.student.prenume }}</td>
+                    <td>{{ s.service_type }}</td>
+                    <td>{{ s.start_datetime|localdatetime('%H:%M') }}</td>
+                    <td>{{ s.end_datetime|localdatetime('%H:%M') }}</td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="4" class="text-muted small">Nicio înregistrare pentru azi.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
 
     <hr class="my-4">
     <div class="d-flex justify-content-between align-items-center">

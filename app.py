@@ -1,4 +1,5 @@
 from flask import Flask, render_template, redirect, url_for, flash, request, jsonify, send_file, session
+from flask_compress import Compress
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate # Added for database migrations
 from sqlalchemy.orm import joinedload
@@ -14,6 +15,7 @@ import bcrypt
 import os
 import secrets
 from datetime import datetime, date, time, timedelta
+import time as _time
 from sqlalchemy import func, or_, and_, inspect, text # Am adăugat text aici explicit, deși sa.text ar fi funcționat cu importul de mai sus
 import re
 from unidecode import unidecode
@@ -23,6 +25,10 @@ import pytz # Adăugat pentru fusuri orare
 
 # Inițializare aplicație Flask
 app = Flask(__name__)
+try:
+    Compress(app)  # HTTP compression for faster responses
+except Exception as _e:
+    print("Flask-Compress not active:", _e)
 
 # Definire fus orar pentru România
 EUROPE_BUCHAREST = pytz.timezone('Europe/Bucharest')
@@ -80,6 +86,12 @@ app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'dev_fallback_supe
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30) # Sesiune permanentă de 30 de zile
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = timedelta(days=30)  # Cache static files for 30 days
+# Cookie hardening (non-breaking defaults)
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['REMEMBER_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_COOKIE_SECURE', '0') in ['1', 'true', 'True']
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db) # Initialize Flask-Migrate
@@ -87,6 +99,69 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'user_login'
 login_manager.login_message_category = 'info'
 login_manager.login_message = "Te rugăm să te autentifici pentru a accesa această pagină."
+
+# Security and caching headers
+@app.after_request
+def add_default_headers(response):
+    try:
+        path = request.path or ""
+        if path.startswith('/static/'):
+            response.headers['Cache-Control'] = 'public, max-age=2592000, immutable'
+        else:
+            # Avoid caching dynamic content to keep data fresh
+            response.headers['Cache-Control'] = 'no-store'
+
+        # Helpful security headers (non-breaking)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        response.headers['Permissions-Policy'] = 'geolocation=(), camera=(), microphone=()'
+
+        # Content Security Policy tuned to current external CDNs and inline usage
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+            "img-src 'self' data: blob: https:; "
+            "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+            "connect-src 'self'; "
+            "object-src 'none'; "
+            "frame-ancestors 'self'; "
+            "base-uri 'self'"
+        )
+        response.headers.setdefault('Content-Security-Policy', csp)
+
+        # HSTS only when HTTPS
+        try:
+            if request.is_secure:
+                response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return response
+
+# Friendly error pages (non-intrusive)
+@app.errorhandler(404)
+def handle_404(_e):
+    try:
+        return render_template('errors/404.html'), 404
+    except Exception:
+        return "Pagina nu a fost găsită.", 404
+
+@app.errorhandler(403)
+def handle_403(_e):
+    try:
+        return render_template('errors/403.html'), 403
+    except Exception:
+        return "Acces interzis.", 403
+
+@app.errorhandler(500)
+def handle_500(_e):
+    try:
+        return render_template('errors/500.html'), 500
+    except Exception:
+        return "Eroare internă a serverului.", 500
 
 SERVICE_TYPES = ["GSS", "SVM", "Planton 1", "Planton 2", "Planton 3", "Intervenție", "Altul"]
 GENDERS = ["Nespecificat", "M", "F"]
@@ -99,6 +174,22 @@ KNOWN_RANK_PATTERNS = [
     re.compile(r"^(Plt\.? Maj\.?)\s+", re.IGNORECASE), re.compile(r"^(Plt\.?)\s+", re.IGNORECASE),
 ]
 # MAX_ACTIVE_COMPANY_GRADERS = 3 # Eliminat
+
+# --- Simple in-memory rate limiting (per-process) ---
+_RATE_LIMIT_BUCKETS = {}
+
+def _is_rate_limited(bucket_key: str, limit: int, window_seconds: int) -> bool:
+    now = _time.time()
+    window_start = now - window_seconds
+    timestamps = _RATE_LIMIT_BUCKETS.get(bucket_key, [])
+    # prune
+    timestamps = [ts for ts in timestamps if ts >= window_start]
+    if len(timestamps) >= limit:
+        _RATE_LIMIT_BUCKETS[bucket_key] = timestamps
+        return True
+    timestamps.append(now)
+    _RATE_LIMIT_BUCKETS[bucket_key] = timestamps
+    return False
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -425,6 +516,338 @@ def get_next_friday(start_date=None):
     while d.weekday() != 4: d += timedelta(days=1)
     return d
 
+# --- Insights / Operational Overview ---
+@app.route('/gradat/insights')
+@login_required
+def gradat_insights():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Scope to students managed by current gradat
+    students_managed = Student.query.filter_by(created_by_user_id=current_user.id).with_entities(Student.id, Student.nume, Student.prenume).all()
+    student_ids = [sid for sid, *_ in students_managed]
+    if not student_ids:
+        return render_template('insights.html',
+                               scope_label='Plutonul meu',
+                               stats={}, upcoming=[], conflicts=[])
+
+    now = get_localized_now()
+    horizon = now + timedelta(days=7)
+
+    # Upcoming items
+    dl_up = DailyLeave.query.options(joinedload(DailyLeave.student))\
+        .filter(DailyLeave.student_id.in_(student_ids), DailyLeave.start_time >= (now - timedelta(days=1)).time())\
+        .order_by(DailyLeave.start_time.asc()).all()
+
+    # Weekend leaves are stored per-day; build intervals via get_intervals()
+    wl_all = WeekendLeave.query.options(joinedload(WeekendLeave.student))\
+        .filter(WeekendLeave.student_id.in_(student_ids), WeekendLeave.status == 'Aprobată').all()
+
+    perm_up = Permission.query.options(joinedload(Permission.student))\
+        .filter(Permission.student_id.in_(student_ids), Permission.end_datetime >= now)\
+        .order_by(Permission.start_datetime.asc()).all()
+
+    serv_up = ServiceAssignment.query.options(joinedload(ServiceAssignment.student))\
+        .filter(ServiceAssignment.student_id.in_(student_ids), ServiceAssignment.end_datetime >= now)\
+        .order_by(ServiceAssignment.start_datetime.asc()).all()
+
+    def student_name(st):
+        try:
+            return f"{st.grad_militar} {st.nume} {st.prenume}" if hasattr(st, 'grad_militar') else f"{st.nume} {st.prenume}"
+        except Exception:
+            return "—"
+
+    upcoming = []
+    for p in perm_up:
+        upcoming.append(dict(kind='Permisie', student=student_name(p.student), start=p.start_datetime, end=p.end_datetime, meta=p.status))
+    for d in dl_up:
+        start_dt = datetime.combine(now.date(), d.start_time)
+        end_dt = datetime.combine(now.date(), d.end_time)
+        upcoming.append(dict(kind='Învoire Zilnică', student=student_name(d.student), start=start_dt, end=end_dt, meta=d.reason if hasattr(d,'reason') else ''))
+    for w in wl_all:
+        for it in w.get_intervals():
+            if it['end'] >= now:
+                upcoming.append(dict(kind='Învoire Weekend', student=student_name(w.student), start=it['start'], end=it['end'], meta=w.status))
+    for s in serv_up:
+        upcoming.append(dict(kind='Serviciu', student=student_name(s.student), start=s.start_datetime, end=s.end_datetime, meta=s.service_type))
+
+    # Limit upcoming to next 7 days for view brevity
+    upcoming = [u for u in upcoming if u['start'] <= horizon]
+    upcoming.sort(key=lambda x: (x['start'], x['student']))
+
+    # Quick stats
+    stats = {
+        'students_count': len(student_ids),
+        'permissions_active': sum(1 for p in perm_up if p.start_datetime <= now <= p.end_datetime),
+        'services_active': sum(1 for s in serv_up if s.start_datetime <= now <= s.end_datetime),
+        'leaves_today': sum(1 for d in dl_up if d.start_time <= now.time() <= d.end_time),
+        'weekend_leaves_upcoming': sum(1 for w in wl_all for it in w.get_intervals() if it['start'].date() <= horizon.date() and it['end'] >= now),
+    }
+
+    # Conflict detection (overlaps per student across all types)
+    per_student = {}
+    def add_evt(sid, label, start, end):
+        per_student.setdefault(sid, []).append((start, end, label))
+
+    for p in perm_up:
+        add_evt(p.student_id, f"Permisie ({p.status})", p.start_datetime, p.end_datetime)
+    for s in serv_up:
+        add_evt(s.student_id, f"Serviciu ({s.service_type})", s.start_datetime, s.end_datetime)
+    for w in wl_all:
+        for it in w.get_intervals():
+            add_evt(w.student_id, f"Weekend ({w.status})", it['start'], it['end'])
+    # Daily leave as same day window
+    for d in dl_up:
+        sd = datetime.combine(now.date(), d.start_time)
+        ed = datetime.combine(now.date(), d.end_time)
+        add_evt(d.student_id, "Învoire Zilnică", sd, ed)
+
+    conflicts = []
+    for sid, events in per_student.items():
+        ev = sorted(events, key=lambda t: t[0])
+        for i in range(len(ev)):
+            for j in range(i+1, len(ev)):
+                a_start, a_end, a_lbl = ev[i]
+                b_start, b_end, b_lbl = ev[j]
+                if a_end > b_start and a_start < b_end:
+                    st = db.session.get(Student, sid)
+                    conflicts.append(dict(student=student_name(st), a=a_lbl, b=b_lbl, start=max(a_start,b_start), end=min(a_end,b_end)))
+    conflicts.sort(key=lambda x: (x['student'], x['start']))
+
+    return render_template('insights.html',
+                           scope_label='Plutonul meu',
+                           stats=stats,
+                           upcoming=upcoming,
+                           conflicts=conflicts)
+
+@app.route('/admin/insights')
+@login_required
+def admin_insights():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+    # Reuse gradat_insights logic but for all students (capped)
+    now = get_localized_now()
+    horizon = now + timedelta(days=7)
+
+    perm_up = Permission.query.options(joinedload(Permission.student))\
+        .filter(Permission.end_datetime >= now)\
+        .order_by(Permission.start_datetime.asc()).limit(500).all()
+    dl_up = DailyLeave.query.options(joinedload(DailyLeave.student)).order_by(DailyLeave.start_time.asc()).limit(500).all()
+    wl_all = WeekendLeave.query.options(joinedload(WeekendLeave.student))\
+        .filter(WeekendLeave.status == 'Aprobată').limit(500).all()
+    serv_up = ServiceAssignment.query.options(joinedload(ServiceAssignment.student))\
+        .filter(ServiceAssignment.end_datetime >= now)\
+        .order_by(ServiceAssignment.start_datetime.asc()).limit(500).all()
+
+    def student_name(st):
+        try:
+            return f"{st.grad_militar} {st.nume} {st.prenume}" if hasattr(st, 'grad_militar') else f"{st.nume} {st.prenume}"
+        except Exception:
+            return "—"
+
+    upcoming = []
+    for p in perm_up:
+        upcoming.append(dict(kind='Permisie', student=student_name(p.student), start=p.start_datetime, end=p.end_datetime, meta=p.status))
+    for d in dl_up:
+        # For admin, assume today context for daily
+        sd = datetime.combine(now.date(), d.start_time)
+        ed = datetime.combine(now.date(), d.end_time)
+        upcoming.append(dict(kind='Învoire Zilnică', student=student_name(d.student), start=sd, end=ed, meta=getattr(d,'reason', '')))
+    for w in wl_all:
+        for it in w.get_intervals():
+            if it['end'] >= now:
+                upcoming.append(dict(kind='Învoire Weekend', student=student_name(w.student), start=it['start'], end=it['end'], meta=w.status))
+    for s in serv_up:
+        upcoming.append(dict(kind='Serviciu', student=student_name(s.student), start=s.start_datetime, end=s.end_datetime, meta=s.service_type))
+    upcoming = [u for u in upcoming if u['start'] <= horizon]
+    upcoming.sort(key=lambda x: (x['start'], x['student']))
+
+    stats = {
+        'permissions_active': sum(1 for p in perm_up if p.start_datetime <= now <= p.end_datetime),
+        'services_active': sum(1 for s in serv_up if s.start_datetime <= now <= s.end_datetime),
+        'leaves_today': sum(1 for d in dl_up if d.start_time <= now.time() <= d.end_time),
+        'weekend_leaves_upcoming': sum(1 for w in wl_all for it in w.get_intervals() if it['start'].date() <= horizon.date() and it['end'] >= now),
+    }
+
+    # Conflicts as above (limited)
+    per_student = {}
+    def add_evt(sid, label, start, end): per_student.setdefault(sid, []).append((start, end, label))
+    for p in perm_up: add_evt(p.student_id, f"Permisie ({p.status})", p.start_datetime, p.end_datetime)
+    for s in serv_up: add_evt(s.student_id, f"Serviciu ({s.service_type})", s.start_datetime, s.end_datetime)
+    for w in wl_up: add_evt(w.student_id, f"Weekend ({w.status})", w.start_datetime, w.end_datetime)
+    for d in dl_up:
+        sd = datetime.combine(now.date(), d.start_time); ed = datetime.combine(now.date(), d.end_time)
+        add_evt(d.student_id, "Învoire Zilnică", sd, ed)
+    conflicts = []
+    for sid, events in per_student.items():
+        ev = sorted(events, key=lambda t: t[0])
+        for i in range(len(ev)):
+            for j in range(i+1, len(ev)):
+                a_start, a_end, a_lbl = ev[i]; b_start, b_end, b_lbl = ev[j]
+                if a_end > b_start and a_start < b_end:
+                    st = db.session.get(Student, sid)
+                    conflicts.append(dict(student=student_name(st), a=a_lbl, b=b_lbl, start=max(a_start,b_start), end=min(a_end,b_end)))
+    conflicts.sort(key=lambda x: (x['student'], x['start']))
+
+    return render_template('insights.html',
+                           scope_label='Sistem (Admin)',
+                           stats=stats,
+                           upcoming=upcoming,
+                           conflicts=conflicts)
+
+# --- Daily Brief (today/tomorrow overview) ---
+def _collect_brief(scope_student_ids=None):
+    now = get_localized_now()
+    today = now.date()
+    tomorrow = today + timedelta(days=1)
+
+    def within_scope(q):
+        if scope_student_ids is None:
+            return q
+        return q.filter(getattr(q.column_descriptions[0]['entity'], 'student_id').in_(scope_student_ids))
+
+    # Permissions
+    perm_today = Permission.query.options(joinedload(Permission.student))\
+        .filter(Permission.start_datetime <= datetime.combine(today, time(23,59,59)),
+                Permission.end_datetime >= datetime.combine(today, time(0,0,0)))
+    perm_tom = Permission.query.options(joinedload(Permission.student))\
+        .filter(Permission.start_datetime <= datetime.combine(tomorrow, time(23,59,59)),
+                Permission.end_datetime >= datetime.combine(tomorrow, time(0,0,0)))
+    if scope_student_ids is not None:
+        perm_today = perm_today.filter(Permission.student_id.in_(scope_student_ids))
+        perm_tom = perm_tom.filter(Permission.student_id.in_(scope_student_ids))
+
+    # Services
+    serv_today = ServiceAssignment.query.options(joinedload(ServiceAssignment.student))\
+        .filter(ServiceAssignment.start_datetime <= datetime.combine(today, time(23,59,59)),
+                ServiceAssignment.end_datetime >= datetime.combine(today, time(0,0,0)))
+    serv_tom = ServiceAssignment.query.options(joinedload(ServiceAssignment.student))\
+        .filter(ServiceAssignment.start_datetime <= datetime.combine(tomorrow, time(23,59,59)),
+                ServiceAssignment.end_datetime >= datetime.combine(tomorrow, time(0,0,0)))
+    if scope_student_ids is not None:
+        serv_today = serv_today.filter(ServiceAssignment.student_id.in_(scope_student_ids))
+        serv_tom = serv_tom.filter(ServiceAssignment.student_id.in_(scope_student_ids))
+
+    # Daily leaves (today only by definition)
+    dl_today = DailyLeave.query.options(joinedload(DailyLeave.student))
+    if scope_student_ids is not None:
+        dl_today = dl_today.filter(DailyLeave.student_id.in_(scope_student_ids))
+
+    # Weekend leaves via intervals
+    wl_all = WeekendLeave.query.options(joinedload(WeekendLeave.student))
+    if scope_student_ids is not None:
+        wl_all = wl_all.filter(WeekendLeave.student_id.in_(scope_student_ids))
+    wl_all = wl_all.filter(WeekendLeave.status == 'Aprobată').all()
+
+    return dict(
+        today=dict(
+            permissions=perm_today.order_by(Permission.start_datetime.asc()).all(),
+            services=serv_today.order_by(ServiceAssignment.start_datetime.asc()).all(),
+            daily_leaves=dl_today.all(),
+            weekend_leaves=[w for w in wl_all if any(it['start'].date() <= today <= it['end'].date() for it in w.get_intervals())],
+        ),
+        tomorrow=dict(
+            permissions=perm_tom.order_by(Permission.start_datetime.asc()).all(),
+            services=serv_tom.order_by(ServiceAssignment.start_datetime.asc()).all(),
+            weekend_leaves=[w for w in wl_all if any(it['start'].date() <= tomorrow <= it['end'].date() for it in w.get_intervals())],
+        )
+    )
+
+@app.route('/gradat/brief')
+@login_required
+def gradat_brief():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+    students = Student.query.filter_by(created_by_user_id=current_user.id).with_entities(Student.id).all()
+    student_ids = [sid for sid, in students]
+    data = _collect_brief(scope_student_ids=student_ids)
+    return render_template('daily_brief.html', scope_label='Plutonul meu', data=data)
+
+@app.route('/admin/brief')
+@login_required
+def admin_brief():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+    data = _collect_brief(scope_student_ids=None)
+    return render_template('daily_brief.html', scope_label='Sistem (Admin)', data=data)
+
+@app.route('/brief/ack', methods=['POST'])
+@login_required
+def brief_ack():
+    try:
+        log_action('BRIEF_ACK', description=f"Brief acknowledged by user {current_user.id}")
+        db.session.commit()
+        flash('Brief marcat ca citit.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('Eroare la marcarea brief-ului.', 'danger')
+    ref = request.referrer or url_for('dashboard')
+    return redirect(ref)
+
+# --- Conflict Center ---
+def _collect_conflicts(scope_student_ids=None):
+    now = get_localized_now()
+    horizon = now + timedelta(days=14)
+    perm_up = Permission.query.options(joinedload(Permission.student)).filter(Permission.end_datetime >= now)
+    wl_candidates = WeekendLeave.query.options(joinedload(WeekendLeave.student)).filter(WeekendLeave.status == 'Aprobată')
+    serv_up = ServiceAssignment.query.options(joinedload(ServiceAssignment.student)).filter(ServiceAssignment.end_datetime >= now)
+    dl_all = DailyLeave.query.options(joinedload(DailyLeave.student))
+    if scope_student_ids is not None:
+        perm_up = perm_up.filter(Permission.student_id.in_(scope_student_ids))
+        wl_candidates = wl_candidates.filter(WeekendLeave.student_id.in_(scope_student_ids))
+        serv_up = serv_up.filter(ServiceAssignment.student_id.in_(scope_student_ids))
+        dl_all = dl_all.filter(DailyLeave.student_id.in_(scope_student_ids))
+    perm_up = perm_up.order_by(Permission.start_datetime.asc()).limit(1000).all()
+    wl_candidates = wl_candidates.limit(1000).all()
+    serv_up = serv_up.order_by(ServiceAssignment.start_datetime.asc()).limit(1000).all()
+    dl_up = dl_all.all()
+
+    def add_evt(store, sid, label, start, end): store.setdefault(sid, []).append((start, end, label))
+    per_student = {}
+    for p in perm_up: add_evt(per_student, p.student_id, f"Permisie ({p.status})", p.start_datetime, p.end_datetime)
+    for s in serv_up: add_evt(per_student, s.student_id, f"Serviciu ({s.service_type})", s.start_datetime, s.end_datetime)
+    for w in wl_candidates:
+        for it in w.get_intervals():
+            add_evt(per_student, w.student_id, f"Weekend ({w.status})", it['start'], it['end'])
+    for d in dl_up:
+        sd = datetime.combine(now.date(), d.start_time); ed = datetime.combine(now.date(), d.end_time)
+        add_evt(per_student, d.student_id, "Învoire Zilnică", sd, ed)
+    conflicts = []
+    for sid, events in per_student.items():
+        ev = sorted(events, key=lambda t: t[0])
+        for i in range(len(ev)):
+            for j in range(i+1, len(ev)):
+                a_start, a_end, a_lbl = ev[i]; b_start, b_end, b_lbl = ev[j]
+                if a_end > b_start and a_start < b_end and max(a_start,b_start) <= horizon:
+                    st = db.session.get(Student, sid)
+                    conflicts.append(dict(student=st, a=a_lbl, b=b_lbl, start=max(a_start,b_start), end=min(a_end,b_end)))
+    conflicts.sort(key=lambda x: (x['student'].nume if x['student'] else '', x['start']))
+    return conflicts
+
+@app.route('/gradat/conflicts')
+@login_required
+def gradat_conflicts():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+    students = Student.query.filter_by(created_by_user_id=current_user.id).with_entities(Student.id).all()
+    student_ids = [sid for sid, in students]
+    conflicts = _collect_conflicts(student_ids)
+    return render_template('conflicts.html', scope_label='Plutonul meu', conflicts=conflicts)
+
+@app.route('/admin/conflicts')
+@login_required
+def admin_conflicts():
+    if current_user.role != 'admin':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+    conflicts = _collect_conflicts(None)
+    return render_template('conflicts.html', scope_label='Sistem (Admin)', conflicts=conflicts)
+
 def get_upcoming_fridays(num_fridays=5):
     """
     Generates a list of upcoming (and potentially the current or immediate past) Fridays.
@@ -690,12 +1113,22 @@ def user_login():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
     if request.method == 'POST':
+        # Rate limiting: 5 attempts / 5 minutes per IP
+        client_ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
+        bucket_key = f"login:user:{client_ip}"
+        if _is_rate_limited(bucket_key, limit=5, window_seconds=300):
+            flash('Prea multe încercări. Încearcă din nou în câteva minute.', 'warning')
+            return render_template('errors/429.html'), 429
         login_code = request.form.get('login_code')
         user_by_unique_code = User.query.filter_by(unique_code=login_code).first()
 
         if user_by_unique_code:
             if user_by_unique_code.is_first_login:
                 login_user(user_by_unique_code, remember=True)
+                try:
+                    session.permanent = True
+                except Exception:
+                    pass
                 log_action("USER_FIRST_LOGIN_SUCCESS", target_model_name="User", target_id=user_by_unique_code.id,
                            description=f"User {user_by_unique_code.username} first login with unique code. IP: {request.remote_addr}",
                            user_override=user_by_unique_code)
@@ -709,8 +1142,9 @@ def user_login():
                 flash('Acest cod unic a fost deja folosit pentru prima autentificare. Te rugăm folosește codul personal setat.', 'warning')
                 return redirect(url_for('user_login'))
 
-        users_non_admin = User.query.filter(User.role != 'admin').all()
-        user_by_personal_code = next((u for u in users_non_admin if u.personal_code_hash and u.check_personal_code(login_code)), None)
+        # Narrow search to non-admin users who have a personal code set
+        users_non_admin = User.query.filter(User.role != 'admin', User.personal_code_hash.isnot(None)).all()
+        user_by_personal_code = next((u for u in users_non_admin if u.check_personal_code(login_code)), None)
 
         if user_by_personal_code:
             if user_by_personal_code.is_first_login: # Should not happen if logic is correct
@@ -721,6 +1155,10 @@ def user_login():
                 return redirect(url_for('user_login'))
 
             login_user(user_by_personal_code, remember=True)
+            try:
+                session.permanent = True
+            except Exception:
+                pass
             log_action("USER_LOGIN_SUCCESS", target_model_name="User", target_id=user_by_personal_code.id,
                        description=f"User {user_by_personal_code.username} login with personal code. IP: {request.remote_addr}",
                        user_override=user_by_personal_code)
@@ -739,11 +1177,21 @@ def admin_login():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
     if request.method == 'POST':
+        # Rate limiting: 5 attempts / 5 minutes per IP
+        client_ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
+        bucket_key = f"login:admin:{client_ip}"
+        if _is_rate_limited(bucket_key, limit=5, window_seconds=300):
+            flash('Prea multe încercări. Încearcă din nou în câteva minute.', 'warning')
+            return render_template('errors/429.html'), 429
         username = request.form.get('username')
         password = request.form.get('password')
         user = User.query.filter_by(username=username, role='admin').first()
         if user and user.check_password(password):
             login_user(user, remember=True)
+            try:
+                session.permanent = True
+            except Exception:
+                pass
             log_action("ADMIN_LOGIN_SUCCESS", target_model_name="User", target_id=user.id,
                        description=f"Admin user {user.username} logged in. IP: {request.remote_addr}",
                        user_override=user)
@@ -756,6 +1204,22 @@ def admin_login():
             flash('Nume de utilizator sau parolă admin incorecte.', 'danger')
             return redirect(url_for('admin_login'))
     return render_template('admin_login.html')
+
+# Lightweight health endpoint
+@app.route('/healthz')
+def healthz():
+    try:
+        # DB quick check
+        db.session.execute(sa.text('SELECT 1'))
+        db_ok = True
+    except Exception:
+        db_ok = False
+    status = 200 if db_ok else 500
+    return jsonify({
+        'status': 'ok' if db_ok else 'degraded',
+        'db': 'ok' if db_ok else 'error',
+        'time': get_localized_now().isoformat()
+    }), status
 
 @app.route('/logout')
 @login_required
@@ -858,7 +1322,7 @@ def dashboard():
     if current_user.role == 'admin':
         return redirect(url_for('admin_dashboard_route'))
     elif current_user.role == 'gradat':
-        student_ids_managed = [s.id for s in Student.query.filter_by(created_by_user_id=current_user.id).with_entities(Student.id).all()]
+        student_ids_managed = [sid for (sid,) in Student.query.filter_by(created_by_user_id=current_user.id).with_entities(Student.id).all()]
         student_count = len(student_ids_managed)
 
         today_localized = get_localized_now().date()
@@ -930,6 +1394,13 @@ def dashboard():
             }
 
 
+        # Serviciile de azi pentru pluton
+        todays_services = ServiceAssignment.query.options(joinedload(ServiceAssignment.student)).filter(
+            ServiceAssignment.student_id.in_(student_ids_managed),
+            ServiceAssignment.start_datetime <= today_end,
+            ServiceAssignment.end_datetime >= today_start
+        ).order_by(ServiceAssignment.start_datetime.asc()).all()
+
         return render_template('gradat_dashboard.html',
                                student_count=student_count,
                                permissions_today_count=permissions_today_count, # Statistică veche "azi"
@@ -950,17 +1421,9 @@ def dashboard():
                                    ServiceAssignment.start_datetime > get_localized_now(),
                                    ServiceAssignment.start_datetime <= get_localized_now() + timedelta(days=7)
                                ).count(),
-                               service_ranking = db.session.query(
-                                       Student.grad_militar, Student.nume, Student.prenume,
-                                       func.count(ServiceAssignment.id).label('service_count')
-                                   ).join(ServiceAssignment, Student.id == ServiceAssignment.student_id)\
-                                   .filter(Student.id.in_(student_ids_managed))\
-                                   .group_by(Student.id)\
-                                   .order_by(func.count(ServiceAssignment.id).desc())\
-                                   .limit(5).all(),
+                               todays_services=todays_services,
                                # Quick Stats
-                               students_with_high_points=Student.query.filter(Student.created_by_user_id==current_user.id, Student.volunteer_points > 10).count(),
-                               upcoming_birthdays=0 # Placeholder for now
+                                students_with_high_points=Student.query.filter(Student.created_by_user_id==current_user.id, Student.volunteer_points > 10).count()
                                )
     elif current_user.role == 'comandant_companie':
         return redirect(url_for('company_commander_dashboard'))
@@ -2259,6 +2722,13 @@ def company_commander_dashboard():
         scope_id=company_id_str
     ).filter(PublicViewCode.expires_at > get_localized_now()).all()
 
+    # Serviciile de azi pentru companie (listă)
+    todays_services_company = ServiceAssignment.query.options(joinedload(ServiceAssignment.student)).filter(
+        ServiceAssignment.student_id.in_(student_ids_in_company),
+        ServiceAssignment.start_datetime <= today_end,
+        ServiceAssignment.end_datetime >= today_start
+    ).order_by(ServiceAssignment.start_datetime.asc()).all()
+
     return render_template('company_commander_dashboard.html',
                            company_id=company_id_str,
                            roll_call_time_str=roll_call_time_str,
@@ -2282,7 +2752,8 @@ def company_commander_dashboard():
                             active_public_codes=active_public_codes,
                             # New service stats
                             services_last_7_days_count=services_last_7_days_count,
-                            services_today_breakdown=services_today_breakdown
+                            services_today_breakdown=services_today_breakdown,
+                            todays_services=todays_services_company
                            )
 
 @app.route('/company_commander/logs', endpoint='company_commander_logs')
@@ -2587,6 +3058,13 @@ def battalion_commander_dashboard():
         scope_id=battalion_id_str
     ).filter(PublicViewCode.expires_at > get_localized_now()).all()
 
+    # Serviciile de azi pentru batalion (listă)
+    todays_services_battalion = ServiceAssignment.query.options(joinedload(ServiceAssignment.student)).filter(
+        ServiceAssignment.student_id.in_(student_ids_in_battalion),
+        ServiceAssignment.start_datetime <= today_end,
+        ServiceAssignment.end_datetime >= today_start
+    ).order_by(ServiceAssignment.start_datetime.asc()).all()
+
     return render_template('battalion_commander_dashboard.html',
                            battalion_id=battalion_id_str,
                            roll_call_time_str=roll_call_time_str,
@@ -2610,7 +3088,8 @@ def battalion_commander_dashboard():
                            active_public_codes=active_public_codes,
                            # New service stats
                            services_last_7_days_count=services_last_7_days_count,
-                           services_today_breakdown=services_today_breakdown
+                            services_today_breakdown=services_today_breakdown,
+                            todays_services=todays_services_battalion
                            )
 
 # --- Volunteer Module ---
@@ -2802,39 +3281,39 @@ def _generate_eligible_volunteers(gradat_id, num_to_generate, exclude_girls=Fals
         activity_day_start_aware = EUROPE_BUCHAREST.localize(datetime.combine(activity_date, time.min))
         activity_day_end_aware = EUROPE_BUCHAREST.localize(datetime.combine(activity_date, time.max))
 
-        all_managed_student_ids = [s.id for s in Student.query.filter_by(created_by_user_id=gradat_id).with_entities(Student.id).all()]
+    all_managed_student_ids = [sid for (sid,) in Student.query.filter_by(created_by_user_id=gradat_id).with_entities(Student.id).all()]
 
-        # Permissions
-        act_day_start_naive = activity_day_start_aware.replace(tzinfo=None)
-        act_day_end_naive = activity_day_end_aware.replace(tzinfo=None)
-        permissions = Permission.query.filter(
-            Permission.student_id.in_(all_managed_student_ids), Permission.status == 'Aprobată',
-            Permission.start_datetime < act_day_end_naive, Permission.end_datetime > act_day_start_naive
-        ).with_entities(Permission.student_id).all()
-        for p_id in permissions: ids_on_leave.add(p_id[0])
+    # Permissions
+    act_day_start_naive = activity_day_start_aware.replace(tzinfo=None)
+    act_day_end_naive = activity_day_end_aware.replace(tzinfo=None)
+    permissions = Permission.query.filter(
+        Permission.student_id.in_(all_managed_student_ids), Permission.status == 'Aprobată',
+        Permission.start_datetime < act_day_end_naive, Permission.end_datetime > act_day_start_naive
+    ).with_entities(Permission.student_id).all()
+    for p_id in permissions: ids_on_leave.add(p_id[0])
 
-        # Daily Leaves
-        daily_leaves = DailyLeave.query.filter(
-            DailyLeave.student_id.in_(all_managed_student_ids), DailyLeave.status == 'Aprobată',
-            DailyLeave.leave_date == activity_date
-        ).all()
-        for dl in daily_leaves:
-            if dl.start_datetime < act_day_end_naive and dl.end_datetime > act_day_start_naive:
-                ids_on_leave.add(dl.student_id)
+    # Daily Leaves
+    daily_leaves = DailyLeave.query.filter(
+        DailyLeave.student_id.in_(all_managed_student_ids), DailyLeave.status == 'Aprobată',
+        DailyLeave.leave_date == activity_date
+    ).all()
+    for dl in daily_leaves:
+        if dl.start_datetime < act_day_end_naive and dl.end_datetime > act_day_start_naive:
+            ids_on_leave.add(dl.student_id)
 
-        # Weekend Leaves
-        weekend_leaves = WeekendLeave.query.filter(
-            WeekendLeave.student_id.in_(all_managed_student_ids), WeekendLeave.status == 'Aprobată',
-            WeekendLeave.weekend_start_date <= activity_date, WeekendLeave.weekend_start_date >= activity_date - timedelta(days=3)
-        ).all()
-        for wl in weekend_leaves:
-            for interval in wl.get_intervals():
-                if interval['start'] < activity_day_end_aware and interval['end'] > activity_day_start_aware:
-                    ids_on_leave.add(wl.student_id)
-                    break
+    # Weekend Leaves
+    weekend_leaves = WeekendLeave.query.filter(
+        WeekendLeave.student_id.in_(all_managed_student_ids), WeekendLeave.status == 'Aprobată',
+        WeekendLeave.weekend_start_date <= activity_date, WeekendLeave.weekend_start_date >= activity_date - timedelta(days=3)
+    ).all()
+    for wl in weekend_leaves:
+        for interval in wl.get_intervals():
+            if interval['start'] < activity_day_end_aware and interval['end'] > activity_day_start_aware:
+                ids_on_leave.add(wl.student_id)
+                break
 
-        if ids_on_leave:
-            students_query = students_query.filter(Student.id.notin_(list(ids_on_leave)))
+    if ids_on_leave:
+        students_query = students_query.filter(Student.id.notin_(list(ids_on_leave)))
 
     return students_query.order_by(Student.volunteer_points.asc(), Student.nume.asc()).limit(num_to_generate).all()
 
@@ -3668,7 +4147,7 @@ def delete_student(student_id):
 def list_permissions():
     if current_user.role != 'gradat': flash('Acces neautorizat.', 'danger'); return redirect(url_for('dashboard'))
     student_id_tuples = db.session.query(Student.id).filter_by(created_by_user_id=current_user.id).all()
-    student_ids_managed_by_gradat = [s[0] for s in student_id_tuples]
+    student_ids_managed_by_gradat = [sid for (sid,) in student_id_tuples]
     if not student_ids_managed_by_gradat:
         return render_template('list_permissions.html', active_permissions=[], upcoming_permissions=[], past_permissions=[], title="Listă Permisii")
 
@@ -5295,7 +5774,7 @@ def list_services():
         return redirect(url_for('dashboard'))
 
     students_managed_by_gradat = Student.query.filter_by(created_by_user_id=current_user.id).with_entities(Student.id).all()
-    student_ids = [s_id[0] for s_id in students_managed_by_gradat]
+    student_ids = [sid for (sid,) in students_managed_by_gradat]
 
     if not student_ids:
         return render_template('list_services.html',
@@ -6374,7 +6853,7 @@ def gradat_invoiri_istoric():
         return redirect(url_for('dashboard'))
 
     students_managed_by_gradat = Student.query.filter_by(created_by_user_id=current_user.id).with_entities(Student.id).all()
-    student_ids = [s[0] for s in students_managed_by_gradat]
+    student_ids = [sid for (sid,) in students_managed_by_gradat]
 
     if not student_ids:
         return render_template('invoiri_istoric.html', leaves_history=[], title="Istoric Învoiri Pluton", form_data=request.args)
@@ -6889,7 +7368,7 @@ def company_commander_export_permissions_word():
         flash('ID-ul companiei nu a putut fi determinat.', 'warning')
         return redirect(url_for('company_commander_dashboard'))
 
-    student_ids_in_company = [s.id for s in Student.query.filter_by(companie=company_id_str).with_entities(Student.id).all()]
+    student_ids_in_company = [sid for (sid,) in Student.query.filter_by(companie=company_id_str).with_entities(Student.id).all()]
     if not student_ids_in_company:
         flash(f'Niciun student în compania {company_id_str} pentru a exporta permisii.', 'info')
         return redirect(url_for('company_commander_dashboard'))
@@ -6970,7 +7449,7 @@ def company_commander_export_weekend_leaves_word():
         flash('ID-ul companiei nu a putut fi determinat.', 'warning')
         return redirect(url_for('company_commander_dashboard'))
 
-    student_ids_in_company = [s.id for s in Student.query.filter_by(companie=company_id_str).with_entities(Student.id).all()]
+    student_ids_in_company = [sid for (sid,) in Student.query.filter_by(companie=company_id_str).with_entities(Student.id).all()]
     if not student_ids_in_company:
         flash(f'Niciun student în compania {company_id_str} pentru a exporta învoiri de weekend.', 'info')
         return redirect(url_for('company_commander_dashboard'))
@@ -7093,7 +7572,7 @@ def battalion_commander_export_permissions_word():
         flash('ID-ul batalionului nu a putut fi determinat.', 'warning')
         return redirect(url_for('battalion_commander_dashboard'))
 
-    student_ids_in_battalion = [s.id for s in Student.query.filter_by(batalion=battalion_id_str).with_entities(Student.id).all()]
+    student_ids_in_battalion = [sid for (sid,) in Student.query.filter_by(batalion=battalion_id_str).with_entities(Student.id).all()]
     if not student_ids_in_battalion:
         flash(f'Niciun student în batalionul {battalion_id_str} pentru a exporta permisii.', 'info')
         return redirect(url_for('battalion_commander_dashboard'))
@@ -7174,7 +7653,7 @@ def battalion_commander_export_weekend_leaves_word():
         flash('ID-ul batalionului nu a putut fi determinat.', 'warning')
         return redirect(url_for('battalion_commander_dashboard'))
 
-    student_ids_in_battalion = [s.id for s in Student.query.filter_by(batalion=battalion_id_str).with_entities(Student.id).all()]
+    student_ids_in_battalion = [sid for (sid,) in Student.query.filter_by(batalion=battalion_id_str).with_entities(Student.id).all()]
     if not student_ids_in_battalion:
         flash(f'Niciun student în batalionul {battalion_id_str} pentru a exporta învoiri de weekend.', 'info')
         return redirect(url_for('battalion_commander_dashboard'))
@@ -7523,7 +8002,7 @@ def view_scoped_permissions():
         unit_id_str = _get_commander_unit_id(current_user.username, "CmdC")
         if unit_id_str:
             students_in_unit = Student.query.filter_by(companie=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
+            student_ids_in_scope = [sid for (sid,) in students_in_unit]
             report_title_detail = f"Permisii Compania {unit_id_str}"
             return_dashboard_url = 'company_commander_dashboard'
         else:
@@ -7532,7 +8011,7 @@ def view_scoped_permissions():
         unit_id_str = _get_commander_unit_id(current_user.username, "CmdB")
         if unit_id_str:
             students_in_unit = Student.query.filter_by(batalion=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
+            student_ids_in_scope = [sid for (sid,) in students_in_unit]
             report_title_detail = f"Permisii Batalionul {unit_id_str}"
             return_dashboard_url = 'battalion_commander_dashboard'
         else:
@@ -7601,7 +8080,7 @@ def view_scoped_daily_leaves():
         unit_id_str = _get_commander_unit_id(current_user.username, "CmdC")
         if unit_id_str:
             students_in_unit = Student.query.filter_by(companie=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
+            student_ids_in_scope = [sid for (sid,) in students_in_unit]
             view_title = f"Învoiri Zilnice Compania {unit_id_str}"
             return_dashboard_url = 'company_commander_dashboard'
         else:
@@ -7610,7 +8089,7 @@ def view_scoped_daily_leaves():
         unit_id_str = _get_commander_unit_id(current_user.username, "CmdB")
         if unit_id_str:
             students_in_unit = Student.query.filter_by(batalion=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
+            student_ids_in_scope = [sid for (sid,) in students_in_unit]
             view_title = f"Învoiri Zilnice Batalionul {unit_id_str}"
             return_dashboard_url = 'battalion_commander_dashboard'
         else:
@@ -7670,7 +8149,7 @@ def view_scoped_weekend_leaves():
         unit_id_str = _get_commander_unit_id(current_user.username, "CmdC")
         if unit_id_str:
             students_in_unit = Student.query.filter_by(companie=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
+            student_ids_in_scope = [sid for (sid,) in students_in_unit]
             view_title = f"Învoiri Weekend Compania {unit_id_str}"
             return_dashboard_url = 'company_commander_dashboard'
         else:
@@ -7679,7 +8158,7 @@ def view_scoped_weekend_leaves():
         unit_id_str = _get_commander_unit_id(current_user.username, "CmdB")
         if unit_id_str:
             students_in_unit = Student.query.filter_by(batalion=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
+            student_ids_in_scope = [sid for (sid,) in students_in_unit]
             view_title = f"Învoiri Weekend Batalionul {unit_id_str}"
             return_dashboard_url = 'battalion_commander_dashboard'
         else:
@@ -7739,7 +8218,7 @@ def view_scoped_services():
         unit_id_str = _get_commander_unit_id(current_user.username, "CmdC")
         if unit_id_str:
             students_in_unit = Student.query.filter_by(companie=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
+            student_ids_in_scope = [sid for (sid,) in students_in_unit]
             view_title = f"Servicii Compania {unit_id_str}"
             return_dashboard_url = 'company_commander_dashboard'
         else:
@@ -7748,7 +8227,7 @@ def view_scoped_services():
         unit_id_str = _get_commander_unit_id(current_user.username, "CmdB")
         if unit_id_str:
             students_in_unit = Student.query.filter_by(batalion=unit_id_str).with_entities(Student.id).all()
-            student_ids_in_scope = [s[0] for s in students_in_unit]
+            student_ids_in_scope = [sid for (sid,) in students_in_unit]
             view_title = f"Servicii Batalionul {unit_id_str}"
             return_dashboard_url = 'battalion_commander_dashboard'
         else:

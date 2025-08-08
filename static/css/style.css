@@ -24,37 +24,40 @@ html.dark-mode-preload body {
 
 /* Variabile de Culoare */
 :root {
-    --bg-main: #f8f9fa;                     /* Gri foarte deschis, aproape alb */
-    --bg-surface: #ffffff;                  /* Alb pentru carduri, suprafețe principale */
-    --bg-surface-hover: #f1f3f5;           /* Gri deschis pentru hover */
+    /* Light theme with a calm blue tint */
+    --bg-main: #f5f7fb;                     /* White with subtle cool tint */
+    --bg-surface: #ffffff;                  /* Primary surfaces */
+    --bg-surface-hover: #edf2f7;            /* Gentle hover */
 
-    --text-primary: #212529;                /* Negru/Gri închis pentru text principal */
-    --text-secondary: #6c757d;              /* Gri mediu pentru text secundar */
-    --text-on-accent: #ffffff;              /* Text alb pentru butoane cu fundal colorat */
+    --text-primary: #1f2937;                /* Softer dark */
+    --text-secondary: #6b7280;              /* Medium gray */
+    --text-on-accent: #ffffff;              /* On colored buttons */
 
-    --accent-primary: #007bff;              /* Albastru Bootstrap primar */
-    --accent-primary-darker: #0056b3;       /* Albastru mai închis pentru hover */
-    --accent-secondary: #6c757d;            /* Gri Bootstrap secundar */
-    --accent-secondary-darker: #545b62;     /* Gri mai închis pentru hover */
+    --accent-primary: #3b82f6;              /* Blue 500 */
+    --accent-primary-darker: #1d4ed8;       /* Blue 700 */
+    --accent-secondary: #6c757d;            /* Bootstrap secondary */
+    --accent-secondary-darker: #545b62;     /* Darker hover */
 
-    --accent-success: #28a745;              /* Verde Bootstrap succes */
-    --accent-danger: #dc3545;               /* Roșu Bootstrap pericol */
-    --accent-warning: #ffc107;              /* Galben Bootstrap avertisment */
-    --accent-info: #17a2b8;                 /* Cyan Bootstrap informație */
+    --accent-success: #22c55e;              /* Green 500 */
+    --accent-danger: #ef4444;               /* Red 500 */
+    --accent-warning: #f59e0b;              /* Amber 500 */
+    --accent-info: #06b6d4;                 /* Cyan 500 */
 
-    --border-color: #dee2e6;                /* Culoare standard Bootstrap pentru margini */
+    --border-color: #d9dee6;                /* Softer borders */
     --input-bg: #ffffff;
-    --input-border: #ced4da;
-    --input-focus-border: #80bdff;          /* Albastru deschis pentru focus input */
-    --input-focus-shadow: rgba(0, 123, 255, 0.25);
+    --input-border: #cfd6de;
+    --input-focus-border: #93c5fd;          /* Light blue focus */
+    --input-focus-shadow: rgba(59, 130, 246, 0.25);
 
     --link-color: var(--accent-primary);
     --link-hover-color: var(--accent-primary-darker);
 
     --shadow-sm: 0 .125rem .25rem rgba(0, 0, 0, .075);
-    --shadow-md: 0 .5rem 1rem rgba(0, 0, 0, .15);
-    --shadow-lg: 0 1rem 3rem rgba(0, 0, 0, .175);
+    --shadow-md: 0 .5rem 1rem rgba(0, 0, 0, .12);
+    --shadow-lg: 0 1rem 3rem rgba(0, 0, 0, .16);
+    color-scheme: light dark;
 }
+html { scroll-behavior: smooth; }
 
 /* Dark Mode Variables */
 body.dark-mode {
@@ -142,6 +145,12 @@ body.dark-mode .badge.bg-light { /* Make .bg-light distinct in dark mode */
     background-color: var(--border-color) !important; /* Using a variable that's dark, like a dark grey */
     color: var(--text-primary) !important; /* Text should be light */
 }
+/* Light button in dark mode should look subtle */
+body.dark-mode .btn-light {
+    background-color: var(--bg-surface-hover) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
 /* Ensure text on .badge.bg-warning is dark for readability */
 body.dark-mode .badge.bg-warning,
 body.dark-mode .badge.status-urmeaza, /* Common class for "upcoming" status */
@@ -182,7 +191,7 @@ body.dark-mode input[type="datetime-local"]::-webkit-calendar-picker-indicator {
     filter: invert(1);
 }
 
-body.dark-mode .card-header {
+body.dark-mode .card-header:not([class*="bg-"]) {
     background-color: var(--bg-surface-hover);
     border-bottom: 1px solid var(--border-color);
     color: var(--text-primary); /* Ensure header text is also correct */
@@ -452,10 +461,10 @@ body.dark-mode .list-group-item {
 
 /* Stiluri Globale */
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     margin: 0;
     padding: 0;
-    background-color: var(--bg-main);
+    background: linear-gradient(180deg, rgba(59,130,246,0.05), rgba(255,255,255,0)) no-repeat fixed, var(--bg-main);
     color: var(--text-primary);
     line-height: 1.4; /* Redus și mai mult line-height global */
     font-size: 0.95rem; /* Micșorat fontul de bază global */
@@ -469,18 +478,23 @@ body {
 a {
     color: var(--link-color);
     text-decoration: none;
-    transition: color 0.2s ease-in-out, text-decoration 0.2s ease-in-out;
+    background-image: linear-gradient(currentColor, currentColor);
+    background-position: 0% 100%;
+    background-repeat: no-repeat;
+    background-size: 0% 2px;
+    transition: color 0.2s ease-in-out, background-size 0.2s ease-in-out;
 }
 a:hover {
     color: var(--link-hover-color);
-    text-decoration: underline;
+    background-size: 100% 2px;
 }
 
 /* Navbar */
 .navbar-brand img.logo-img {
-    height: 70px; /* Increased from 50px */
+    height: clamp(40px, 6.5vw, 64px);
     width: auto;
-    margin-right: 5px; /* Spațiu între logo și textul Beta (dacă există) */
+    margin-right: 8px;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,.08));
 }
 
 /* Logo for the main page (home.html) */
@@ -493,7 +507,8 @@ a:hover {
 .navbar {
     background-color: var(--bg-surface) !important;
     border-bottom: 1px solid var(--border-color);
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 8px 30px rgba(0,0,0,.05);
+    backdrop-filter: saturate(120%) blur(6px);
 }
 .navbar {
     padding-top: 0.02rem; /* Și mai mic padding navbar */
@@ -523,6 +538,21 @@ a:hover {
 .navbar .nav-link:hover, .navbar .nav-link.active {
     color: var(--accent-primary) !important;
 }
+.navbar .btn#darkModeToggle {
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+    background: transparent;
+}
+.navbar .btn#darkModeToggle:hover {
+    background-color: var(--bg-surface-hover);
+}
+.navbar .nav-link:focus-visible,
+.btn:focus-visible,
+.form-control:focus-visible,
+.form-select:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
 .navbar-toggler {
     border-color: rgba(0,0,0,0.1);
 }
@@ -535,28 +565,42 @@ a:hover {
 
 
 /* Carduri */
+.stat-card {
+    background: radial-gradient(1200px circle at 0% 0%, rgba(0,123,255,0.08), transparent 40%), var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,.05);
+    transition: transform .2s ease, box-shadow .2s ease;
+}
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 45px rgba(0,0,0,.10);
+}
+.stat-card h4 { font-weight: 700; letter-spacing: .2px; }
+.stat-card small { color: var(--text-secondary); }
+
 .card {
     background-color: var(--bg-surface);
     border: 1px solid var(--border-color);
-    border-radius: 0.375rem; /* Bootstrap default */
-    box-shadow: var(--shadow-sm);
-    margin-bottom: 1rem; /* Redus margin-bottom card */
-    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    border-radius: 0.75rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,.06);
+    margin-bottom: 1rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 .card:hover {
-    transform: translateY(-3px); /* Ridică ușor cardul */
-    box-shadow: var(--shadow-md); /* O umbră puțin mai pronunțată */
+    transform: translateY(-2px);
+    box-shadow: 0 18px 45px rgba(0,0,0,.10);
 }
 .card-header {
-    background-color: var(--bg-main); /* Un fundal ușor diferit pentru header */
+    background-color: var(--bg-main);
     color: var(--text-primary);
     border-bottom: 1px solid var(--border-color);
     font-weight: 600;
-    padding: 0.6rem 1rem; /* Redus padding card-header */
+    padding: 0.9rem 1.1rem;
 }
 .card-body {
     color: var(--text-primary);
-    padding: 1rem; /* Redus padding card-body */
+    padding: 1.1rem;
 }
 .card-footer {
     background-color: var(--bg-main);
@@ -585,27 +629,81 @@ a:hover {
     vertical-align: bottom;
     border-bottom: 2px solid var(--border-color);
     font-weight: 600;
-    background-color: var(--bg-surface-hover); /* Fundal puțin mai distinct pentru header tabel în dark mode */
-    color: var(--text-primary); /* Asigură culoarea textului în header */
+    background-color: var(--bg-surface-hover);
+    color: var(--text-primary);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    cursor: pointer;
+    user-select: none;
+}
+.th-sortable::after {
+    content: '';
+    display: inline-block;
+    margin-left: .35rem;
+    border: 4px solid transparent;
+    border-top-color: transparent;
+    border-bottom-color: transparent;
+}
+thead th[aria-sort="ascending"].th-sortable::after {
+    border-bottom-color: currentColor;
+}
+thead th[aria-sort="descending"].th-sortable::after {
+    border-top-color: currentColor;
+}
+
+/* Selection bar */
+.selection-bar {
+    position: fixed;
+    left: 0; right: 0; bottom: -70px;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border-color);
+    transition: bottom .2s ease;
+    z-index: 1039;
+}
+.selection-bar.show { bottom: 0; }
+body.dark-mode .selection-bar { background: var(--bg-surface); }
+
+@media print {
+    .navbar, .footer, .fab-container, #loading-overlay { display: none !important; }
+    a { text-decoration: none !important; color: #000 !important; }
+    body { background: #fff !important; color: #000 !important; }
+    .card, .table { box-shadow: none !important; }
 }
 .table-striped > tbody > tr:nth-of-type(odd) > * {
     background-color: rgba(0, 0, 0, 0.03); /* Dungile foarte subtile */
-    /* Dark mode specific striping is handled by body.dark-mode .table-striped */
 }
 .table-hover > tbody > tr:hover > * {
     background-color: rgba(0, 0, 0, 0.06);
     /* Dark mode specific hover is handled by body.dark-mode .table-hover */
 }
+.table-compact th, .table-compact td { padding: 0.35rem !important; }
+.table tbody tr.row-selected > * { background-color: rgba(59,130,246,0.12) !important; }
+body.dark-mode .table tbody tr.row-selected > * { background-color: rgba(59,130,246,0.22) !important; }
+
+/* Debug admin bar spacing under sticky navbar */
+@media (max-width: 991.98px) {
+  body .container.mt-4 { margin-top: 1rem !important; }
+}
 
 /* Specific dark mode table cell text color, just in case of overrides */
+body.dark-mode .table { background-color: var(--bg-surface); }
 body.dark-mode .table th,
 body.dark-mode .table td {
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
+    background-color: var(--bg-surface) !important;
 }
-
 body.dark-mode .table thead th {
-    background-color: var(--bg-surface-hover); /* Consistent with other dark mode headers */
+    background-color: var(--bg-surface-hover) !important; /* Consistent with other dark mode headers */
 }
+body.dark-mode .table-striped > tbody > tr:nth-of-type(odd) > * {
+    background-color: rgba(255, 255, 255, 0.035) !important; /* Lighter stripe over dark surface */
+}
+body.dark-mode .table-hover > tbody > tr:hover > * {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+}
+body.dark-mode .table a { color: var(--link-color) !important; }
+body.dark-mode .table a:hover { color: var(--link-hover-color) !important; }
 
 
 /* Formulare */
@@ -651,11 +749,11 @@ body.dark-mode .table thead th {
     border-radius: 0.25rem;
     padding: 0.4rem 0.8rem; /* Redus padding btn */
     font-weight: 500;
-    transition: color .15s ease-in-out, background-color .15s ease-in-out, border-color .15s ease-in-out, box-shadow .15s ease-in-out, transform .15s ease-in-out; /* Adăugat transform */
+    transition: color .15s ease, background-color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
 .btn:hover {
-    transform: translateY(-1px); /* Mic efect de ridicare */
-    filter: brightness(95%); /* Ușor mai întunecat la hover, sau brightness(105%) pentru mai luminos */
+    transform: translateY(-1px);
+    filter: brightness(98%);
 }
 /* Pentru butoanele outline, vrem ca textul și border-ul să devină mai opace, nu tot butonul */
 .btn-outline-primary:hover, .btn-outline-secondary:hover {
@@ -723,6 +821,19 @@ body.dark-mode .table thead th {
     border-color: var(--accent-secondary);
 }
 
+/* Dropdowns */
+.dropdown-menu {
+    border-radius: 0.5rem;
+    border-color: var(--border-color);
+    box-shadow: 0 10px 30px rgba(0,0,0,.10);
+    background-color: var(--bg-surface);
+}
+.dropdown-item { color: var(--text-primary); }
+.dropdown-item:hover, .dropdown-item:focus { background-color: var(--bg-surface-hover); }
+body.dark-mode .dropdown-menu { background-color: var(--bg-surface); border-color: var(--border-color); }
+body.dark-mode .dropdown-item { color: var(--text-primary); }
+body.dark-mode .dropdown-item:hover, body.dark-mode .dropdown-item:focus { background-color: var(--bg-surface-hover); color: var(--text-primary); }
+
 
 /* Alerte */
 .alert {
@@ -787,6 +898,14 @@ body.dark-mode .table thead th {
 
 .content-wrapper-animated {
     animation: fadeIn 0.5s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+    }
 }
 
 /* Icon Animations */
@@ -982,14 +1101,35 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
     }
 }
 
+/* Floating actions (CSV export, Print) */
+.fab-container {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 1040; /* Above content, below modal (1050) */
+}
+.fab-button {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,.15);
+}
+
 /* Loading Spinner Overlay */
+/* (Note: keep this marker for navigation only) */
 #loading-overlay {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(255, 255, 255, 0.7); /* Fundal alb semi-transparent */
+    background-color: rgba(255, 255, 255, 0.6);
     z-index: 9999;
     display: flex;
     justify-content: center;
@@ -1019,13 +1159,15 @@ body.dark-mode #loading-overlay .spinner-container {
 }
 
 #loading-overlay .spinner {
-    border: 8px solid #f3f3f3;
-    border-top: 8px solid #3498db;
+    border: 6px solid transparent;
+    border-top-color: #3498db;
+    border-right-color: #3498db;
     border-radius: 50%;
-    width: 60px;
-    height: 60px;
-    animation: spin 1s linear infinite;
-    margin: 0 auto; /* Explicitly center the spinner horizontally */
+    width: 56px;
+    height: 56px;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto;
+    box-shadow: inset 0 0 0 1px rgba(52,152,219,0.25);
 }
 
 body.dark-mode #loading-overlay .spinner {
@@ -1050,4 +1192,24 @@ body.dark-mode .report-text-block {
     background-color: #1a1a1a;
     border-color: #555;
     color: #f1f1f1;
+}
+
+/* Larger controls for date/time inputs to improve readability */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  min-width: 220px;
+}
+
+.input-group > input[type="date"],
+.input-group > input[type="time"],
+.input-group > input[type="datetime-local"] {
+  flex: 1 1 auto;
+}
+
+/* Ensure inside small forms we still see content */
+.form-control[type="date"],
+.form-control[type="time"],
+.form-control[type="datetime-local"] {
+  padding-right: 0.75rem;
 }

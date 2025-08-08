@@ -126,6 +126,37 @@
     </div>
 
     <hr class="my-4">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header"><i class="fas fa-shield-alt me-2"></i>Serviciile de azi - Batalionul {{ battalion_id }}</div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-striped table-hover table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Tip</th>
+                <th>Start</th>
+                <th>Final</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if todays_services %}
+                {% for s in todays_services %}
+                  <tr>
+                    <td>{{ s.student.grad_militar }} {{ s.student.nume }} {{ s.student.prenume }}</td>
+                    <td>{{ s.service_type }}</td>
+                    <td>{{ s.start_datetime|localdatetime('%H:%M') }}</td>
+                    <td>{{ s.end_datetime|localdatetime('%H:%M') }}</td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="4" class="text-muted small">Nicio înregistrare pentru azi.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
     <div class="d-flex justify-content-between align-items-center">
         <h4 class="mb-3">Situația la Apelul de Seară (<span class="text-muted">{{ roll_call_time_str }}</span>)</h4>
         <a href="{{ url_for('text_report_display_battalion') }}" class="btn btn-sm btn-outline-secondary" title="Vezi raportul text complet pentru apelul de seară">

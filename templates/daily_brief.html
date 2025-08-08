@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Daily Brief - {{ scope_label }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h3 class="mb-0">Daily Brief - {{ scope_label }}</h3>
+  <div class="d-flex gap-2">
+    <button type="button" class="btn btn-outline-secondary no-loader" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
+    <form method="post" action="{{ url_for('brief_ack') }}" class="d-inline">
+      <button type="submit" class="btn btn-success"><i class="fas fa-check"></i> Marcat ca citit</button>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-lg-6">
+    <div class="card h-100">
+      <div class="card-header"><strong>Astăzi</strong></div>
+      <div class="card-body">
+        <div class="mb-3">
+          <h6 class="text-muted">Servicii</h6>
+          <ul class="list-group list-group-flush">
+            {% for s in data.today.services %}
+            <li class="list-group-item">{{ s.student.grad_militar }} {{ s.student.nume }} {{ s.student.prenume }} — {{ s.service_type }} ({{ s.start_datetime|localdatetime('%H:%M') }} - {{ s.end_datetime|localdatetime('%H:%M') }})</li>
+            {% else %}
+            <li class="list-group-item text-muted">Nimic</li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="mb-3">
+          <h6 class="text-muted">Permisii</h6>
+          <ul class="list-group list-group-flush">
+            {% for p in data.today.permissions %}
+            <li class="list-group-item">{{ p.student.grad_militar }} {{ p.student.nume }} {{ p.student.prenume }} — {{ p.status }} ({{ p.start_datetime|localdatetime('%H:%M') }} - {{ p.end_datetime|localdatetime('%H:%M') }})</li>
+            {% else %}
+            <li class="list-group-item text-muted">Nimic</li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="mb-3">
+          <h6 class="text-muted">Învoiri Zilnice</h6>
+          <ul class="list-group list-group-flush">
+            {% for d in data.today.daily_leaves %}
+            <li class="list-group-item">{{ d.student.grad_militar }} {{ d.student.nume }} {{ d.student.prenume }} — {{ d.start_time|localtime('%H:%M') }} - {{ d.end_time|localtime('%H:%M') }}</li>
+            {% else %}
+            <li class="list-group-item text-muted">Nimic</li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="mb-3">
+          <h6 class="text-muted">Învoiri Weekend</h6>
+          <ul class="list-group list-group-flush">
+            {% for w in data.today.weekend_leaves %}
+            <li class="list-group-item">{{ w.student.grad_militar }} {{ w.student.nume }} {{ w.student.prenume }} — {{ w.start_datetime|localdatetime('%d-%m %H:%M') }} - {{ w.end_datetime|localdatetime('%d-%m %H:%M') }}</li>
+            {% else %}
+            <li class="list-group-item text-muted">Nimic</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-6">
+    <div class="card h-100">
+      <div class="card-header"><strong>Mâine</strong></div>
+      <div class="card-body">
+        <div class="mb-3">
+          <h6 class="text-muted">Servicii</h6>
+          <ul class="list-group list-group-flush">
+            {% for s in data.tomorrow.services %}
+            <li class="list-group-item">{{ s.student.grad_militar }} {{ s.student.nume }} {{ s.student.prenume }} — {{ s.service_type }} ({{ s.start_datetime|localdatetime('%H:%M') }} - {{ s.end_datetime|localdatetime('%H:%M') }})</li>
+            {% else %}
+            <li class="list-group-item text-muted">Nimic</li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="mb-3">
+          <h6 class="text-muted">Permisii</h6>
+          <ul class="list-group list-group-flush">
+            {% for p in data.tomorrow.permissions %}
+            <li class="list-group-item">{{ p.student.grad_militar }} {{ p.student.nume }} {{ p.student.prenume }} — {{ p.status }} ({{ p.start_datetime|localdatetime('%H:%M') }} - {{ p.end_datetime|localdatetime('%H:%M') }})</li>
+            {% else %}
+            <li class="list-group-item text-muted">Nimic</li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="mb-3">
+          <h6 class="text-muted">Învoiri Weekend</h6>
+          <ul class="list-group list-group-flush">
+            {% for w in data.tomorrow.weekend_leaves %}
+            <li class="list-group-item">{{ w.student.grad_militar }} {{ w.student.nume }} {{ w.student.prenume }} — {{ w.start_datetime|localdatetime('%d-%m %H:%M') }} - {{ w.end_datetime|localdatetime('%d-%m %H:%M') }}</li>
+            {% else %}
+            <li class="list-group-item text-muted">Nimic</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

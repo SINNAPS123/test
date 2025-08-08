@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Prea multe încercări{% endblock %}
+{% block content %}
+<div class="text-center py-5">
+  <h1 class="display-6">429</h1>
+  <p class="lead">Prea multe încercări într-un interval scurt. Te rugăm să încerci din nou în câteva minute.</p>
+  <a href="{{ url_for('home') }}" class="btn btn-primary">Înapoi acasă</a>
+{% endblock %}
+
+

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Conflict Center - {{ scope_label }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h3 class="mb-0">Conflict Center - {{ scope_label }}</h3>
+  <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">Înapoi</a>
+  </div>
+
+<div class="card">
+  <div class="card-header"><i class="fas fa-exclamation-triangle me-2"></i>Suprapuneri detectate (14 zile)</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-striped table-hover table-sm">
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Eveniment A</th>
+            <th>Eveniment B</th>
+            <th>Interval</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in conflicts %}
+          <tr>
+            <td>{{ c.student.grad_militar }} {{ c.student.nume }} {{ c.student.prenume }}</td>
+            <td>{{ c.a }}</td>
+            <td>{{ c.b }}</td>
+            <td>{{ c.start|localdatetime('%d-%m-%Y %H:%M') }} - {{ c.end|localdatetime('%d-%m-%Y %H:%M') }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="text-center text-muted">Nu au fost găsite conflicte.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

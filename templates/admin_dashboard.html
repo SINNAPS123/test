@@ -48,11 +48,27 @@
                     <p>După prima autentificare cu codul unic, li se va cere să își seteze un <strong>cod personal</strong>.</p>
                     <p>Logările ulterioare se vor face folosind codul personal.</p>
                     <hr>
-                    <h5>Statistici (placeholder)</h5>
-                    <p>
-                        Secțiunea pentru managementul "Gradaților Speciali" (Useri) a fost eliminată.
-                        Noua funcționalitate de "Gradat Pluton" se va gestiona la nivel de Student.
-                    </p>
+                    <h5>Statistici Sistem</h5>
+                    <div class="row text-center g-2">
+                        <div class="col-4">
+                            <div class="stat-card p-2 border rounded shadow-sm">
+                                <div class="h5 mb-0">{{ total_users }}</div>
+                                <small class="text-muted">Utilizatori</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="stat-card p-2 border rounded shadow-sm">
+                                <div class="h5 mb-0">{{ total_students }}</div>
+                                <small class="text-muted">Studenți</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="stat-card p-2 border rounded shadow-sm">
+                                <div class="h5 mb-0">{{ active_public_codes|length }}</div>
+                                <small class="text-muted">Coduri Publice Active</small>
+                            </div>
+                        </div>
+                    </div>
                     <!-- Linkul către admin_manage_special_graded a fost eliminat -->
                 </div>
             </div>
