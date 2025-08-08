@@ -123,15 +123,6 @@
 
                     <hr class="my-3">
                     <h6 class="text-muted">Exporturi Generale (Text):</h6>
-                    <a href="{{ url_for('admin_export_studenti_text') }}" class="btn btn-sm btn-outline-secondary mb-2" title="Exportă toți studenții în format text simplu">
-                        <i class="fas fa-file-alt icon-rotate-hover"></i> Export Studenți (Text)
-                    </a>
-                    <a href="{{ url_for('admin_export_permisii_text') }}" class="btn btn-sm btn-outline-secondary mb-2" title="Exportă toate permisiile în format text simplu">
-                        <i class="fas fa-file-alt icon-rotate-hover"></i> Export Permisii (Text)
-                    </a>
-                    <a href="{{ url_for('admin_export_invoiri_text') }}" class="btn btn-sm btn-outline-secondary mb-2" title="Exportă toate învoirile (zilnice și weekend) în format text simplu">
-                        <i class="fas fa-file-alt icon-rotate-hover"></i> Export Învoiri (Text)
-                    </a>
 
                 </div>
             </div>
@@ -200,6 +191,17 @@
                             <p class="text-muted p-2">Nu există coduri active.</p>
                         {% endif %}
                     </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Management Date</h5>
+                    <p class="small text-muted">Exportul sau importul complet al bazei de date. Utilizați cu precauție.</p>
+                    <a href="{{ url_for('admin_data_management') }}" class="btn btn-sm btn-outline-warning">
+                        <i class="fas fa-database me-1"></i> Import / Export
+                    </a>
                 </div>
             </div>
         </div>
