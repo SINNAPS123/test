@@ -433,6 +433,73 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     document.querySelectorAll('table.table').forEach(enhanceTable);
 
+    function exportTableToCSV() {
+        const table = document.querySelector('table.table');
+        if (!table) {
+            alert('Tabelul nu a fost găsit pentru export.');
+            return;
+        }
+
+        const selectedRows = table.querySelectorAll('tbody tr.row-selected');
+        if (selectedRows.length === 0) {
+            alert('Nu ați selectat niciun rând pentru export.');
+            return;
+        }
+
+        const headersToExport = [];
+        const indicesToExport = [];
+        // First, determine which columns to export by checking header visibility and content
+        table.querySelectorAll('thead th').forEach((th, index) => {
+            // Export column if it's visible and not the 'Acțiuni' column
+            if (th.style.display !== 'none' && th.innerText.trim().toLowerCase() !== 'acțiuni') {
+                // Sanitize header text for CSV
+                const headerText = `"${th.innerText.trim().replace(/"/g, '""')}"`;
+                headersToExport.push(headerText);
+                indicesToExport.push(index);
+            }
+        });
+
+        const csvRows = [headersToExport.join(',')];
+
+        // Process selected rows
+        selectedRows.forEach(row => {
+            const rowData = [];
+            const cells = Array.from(row.cells);
+            indicesToExport.forEach(index => {
+                if (cells[index]) {
+                    // Sanitize cell text for CSV
+                    const cellText = `"${cells[index].innerText.trim().replace(/"/g, '""')}"`;
+                    rowData.push(cellText);
+                } else {
+                    rowData.push('""'); // Add empty value for missing cell
+                }
+            });
+            csvRows.push(rowData.join(','));
+        });
+
+        // Create a BOM for UTF-8 to support diacritics in Excel
+        const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+        const csvString = csvRows.join('\\n');
+        const blob = new Blob([bom, csvString], { type: 'text/csv;charset=utf-8;' });
+
+        // Create a link to download the blob
+        const link = document.createElement("a");
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            const today = new Date();
+            const dateStr = today.toISOString().split('T')[0];
+            link.setAttribute("href", url);
+            link.setAttribute("download", `export_selectie_${dateStr}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } else {
+            alert("Browser-ul dumneavoastră nu suportă descărcarea fișierelor. Vă rugăm încercați un browser modern.");
+        }
+    }
+
     // ---- Selection action bar (for tables) ----
     (function initSelectionBar(){
         const table = document.querySelector('table.table');
@@ -452,7 +519,9 @@ document.addEventListener('DOMContentLoaded', function() {
         function update() {
             const count = table.querySelectorAll('tbody tr.row-selected').length;
             info.textContent = count + (count === 1 ? ' rând selectat' : ' rânduri selectate');
-            bar.classList.toggle('show', count > 0);
+            const isShown = count > 0;
+            bar.classList.toggle('show', isShown);
+            document.body.classList.toggle('selection-bar-shown', isShown);
         }
         table.addEventListener('click', (e)=>{
             if (e.target.closest('tbody')) setTimeout(update,0);

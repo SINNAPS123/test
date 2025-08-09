@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, flash, request, jsonify, send_file, session
+from flask import Flask, render_template, redirect, url_for, flash, request, send_file, session
 from flask_compress import Compress
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate # Added for database migrations
@@ -2037,11 +2037,8 @@ def get_standard_roll_call_datetime(for_date=None):
     return datetime.combine(target_date, roll_call_time)
 
 # --- Helper function to calculate presence data for a list of students (Optimized) ---
-def _calculate_presence_data(student_list_for_platoon_view, check_datetime):
-    # student_list_for_platoon_view: students belonging to the platoon for which the report is primarily generated.
-    # check_datetime: the specific datetime for which presence is being calculated.
-
-    if not student_list_for_platoon_view:
+def _calculate_presence_data(student_list, check_datetime):
+    if not student_list:
         return {
             "efectiv_control": 0, "efectiv_prezent_total": 0, "efectiv_absent_total": 0,
             "in_formation_count": 0, "in_formation_students_details": [],
@@ -2052,417 +2049,67 @@ def _calculate_presence_data(student_list_for_platoon_view, check_datetime):
             "absent_students_details": []
         }
 
-    report_platoon_id = student_list_for_platoon_view[0].pluton
-    now = check_datetime
-
-    all_students_system = Student.query.all()
-    all_student_ids_system = [s.id for s in all_students_system]
-
-    active_services_map_all = {sa.student_id: sa for sa in ServiceAssignment.query.filter(
-        ServiceAssignment.student_id.in_(all_student_ids_system),
-        ServiceAssignment.start_datetime <= now, ServiceAssignment.end_datetime >= now
-    ).all()}
-
-    active_permissions_map_all = {p.student_id: p for p in Permission.query.filter(
-        Permission.student_id.in_(all_student_ids_system), Permission.status == 'Aprobată',
-        Permission.start_datetime <= now, Permission.end_datetime >= now
-    ).all()}
-
-    all_daily_leaves_system = DailyLeave.query.filter(
-        DailyLeave.student_id.in_(all_student_ids_system), DailyLeave.status == 'Aprobată'
-    ).all()
-    active_daily_leaves_map_all = {}
-    for dl in all_daily_leaves_system:
-        dl_start_aware = EUROPE_BUCHAREST.localize(dl.start_datetime) if dl.start_datetime.tzinfo is None else dl.start_datetime.astimezone(EUROPE_BUCHAREST)
-        dl_end_aware = EUROPE_BUCHAREST.localize(dl.end_datetime) if dl.end_datetime.tzinfo is None else dl.end_datetime.astimezone(EUROPE_BUCHAREST)
-        if dl_start_aware <= now <= dl_end_aware:
-            if dl.student_id not in active_daily_leaves_map_all: active_daily_leaves_map_all[dl.student_id] = dl
-
-    all_weekend_leaves_system = WeekendLeave.query.filter(
-        WeekendLeave.student_id.in_(all_student_ids_system), WeekendLeave.status == 'Aprobată'
-    ).all()
-    active_weekend_leaves_map_all = {}
-    for wl in all_weekend_leaves_system:
-        for interval in wl.get_intervals():
-            if interval['start'] <= now <= interval['end']:
-                if wl.student_id not in active_weekend_leaves_map_all: active_weekend_leaves_map_all[wl.student_id] = {"leave": wl, "interval": interval}
-                break
-
-    efectiv_control = len(student_list_for_platoon_view)
-    in_formation_list_details = []
-    on_duty_list_details = []
-    absent_list_details = []
-    smt_list_details = []
-    exempt_other_list_details = []
-
-    platoon_graded_duty_final_details = []
-    present_leader_ids_for_this_platoon = set()
-
-    for s_leader_check in all_students_system:
-        is_leader_for_report_platoon = False
-        leader_detail_suffix = ""
-
-        if s_leader_check.assigned_graded_platoon == report_platoon_id:
-            is_leader_for_report_platoon = True
-            if s_leader_check.pluton != report_platoon_id:
-                leader_detail_suffix = f" (din Pl.{s_leader_check.pluton})"
-        elif s_leader_check.pluton == report_platoon_id and s_leader_check.is_platoon_graded_duty and not s_leader_check.assigned_graded_platoon:
-            is_leader_for_report_platoon = True
-
-        if is_leader_for_report_platoon:
-            leader_display_name = f"{s_leader_check.grad_militar} {s_leader_check.nume} {s_leader_check.prenume}{leader_detail_suffix}"
-            leader_status_detail = "Gradat Pluton"
-            is_present_leader = True
-
-            if s_leader_check.is_smt:
-                leader_status_detail = f"Gradat Pluton (SMT)"
-                is_present_leader = False
-            elif s_leader_check.exemption_details:
-                leader_status_detail = f"Gradat Pluton (Scutit: {s_leader_check.exemption_details})"
-                is_present_leader = False
-            elif s_leader_check.id in active_services_map_all:
-                svc = active_services_map_all[s_leader_check.id]
-                leader_status_detail = f"Gradat Pluton (Serviciu: {svc.service_type})"
-                is_present_leader = False
-            elif s_leader_check.id in active_permissions_map_all:
-                leader_status_detail = f"Gradat Pluton (Permisie)"
-                is_present_leader = False
-            elif s_leader_check.id in active_weekend_leaves_map_all:
-                wl_info = active_weekend_leaves_map_all[s_leader_check.id]
-                leader_status_detail = f"Gradat Pluton (Învoire Weekend: {wl_info['interval']['day_name']})"
-                is_present_leader = False
-            elif s_leader_check.id in active_daily_leaves_map_all:
-                dl_info = active_daily_leaves_map_all[s_leader_check.id]
-                leader_status_detail = f"Gradat Pluton (Învoire Zilnică: {dl_info.leave_type_display})"
-                is_present_leader = False
-
-            platoon_graded_duty_final_details.append(f"{leader_display_name} - {leader_status_detail}")
-            if is_present_leader:
-                present_leader_ids_for_this_platoon.add(s_leader_check.id)
-
-    for s in student_list_for_platoon_view:
-        student_display_name = f"{s.grad_militar} {s.nume} {s.prenume}"
-
-        if s.id in present_leader_ids_for_this_platoon:
-            # This student is a present leader of this platoon. Already fully accounted for.
-            continue
-
-        # Check other statuses for students in student_list_for_platoon_view
-        # who are NOT present leaders of this platoon.
-        if s.is_smt:
-            smt_list_details.append(f"{student_display_name} - SMT")
-        elif s.exemption_details:
-            exempt_other_list_details.append(f"{student_display_name} - Scutit: {s.exemption_details}")
-        elif s.id in active_services_map_all:
-            svc = active_services_map_all[s.id]
-            on_duty_list_details.append(f"{student_display_name} - Serviciu ({svc.service_type})")
-        elif s.id in active_permissions_map_all:
-            absent_list_details.append(f"{student_display_name} - Permisie")
-        elif s.id in active_weekend_leaves_map_all:
-            wl_info = active_weekend_leaves_map_all[s.id]
-            absent_list_details.append(f"{student_display_name} - Învoire Weekend ({wl_info['interval']['day_name']})")
-        elif s.id in active_daily_leaves_map_all:
-            dl_info = active_daily_leaves_map_all[s.id]
-            absent_list_details.append(f"{student_display_name} - Învoire Zilnică ({dl_info.leave_type_display})")
-        elif s.id in active_weekend_leaves_map_all: # Check for weekend leave AFTER daily, as daily might be more specific for a given moment
-            wl_data = active_weekend_leaves_map_all[s.id] # This contains {'leave': wl_object, 'interval': interval_dict}
-            wl_object = wl_data['leave']
-            active_interval = wl_data['interval'] # This is the interval active at 'now'
-
-            # Check for church attendance specifically
-            # now is check_datetime, which is aware
-            # active_interval['start'] and active_interval['end'] are aware
-            is_sunday = now.weekday() == 6  # Sunday
-            church_start_time = time(9, 0)
-            church_end_time = time(11, 0)
-
-            if wl_object.duminica_biserica and \
-               active_interval['day_name'] == 'Duminica' and \
-               is_sunday and \
-               church_start_time <= now.time() < church_end_time: # Check if 'now' is within 09:00-11:00 on that Sunday
-                absent_list_details.append(f"{student_display_name} - La Biserică (Învoire Weekend)")
-            else:
-                absent_list_details.append(f"{student_display_name} - Învoire Weekend ({active_interval['day_name']})")
-        else:
-            # If none of the above and not a present leader, they are in formation.
-            in_formation_list_details.append(student_display_name)
-
-    in_formation_count = len(in_formation_list_details)
-    on_duty_count = len(on_duty_list_details)
-    platoon_graded_duty_present_count = len(present_leader_ids_for_this_platoon)
-    smt_count = len(smt_list_details)
-    exempt_other_count = len(exempt_other_list_details)
-    absent_due_to_leave_permission_count = len(absent_list_details)
-
-    # These totals are based on student_list_for_platoon_view
-    efectiv_absent_total = smt_count + exempt_other_count + absent_due_to_leave_permission_count
-
-    # Efectiv prezent for the student_list_for_platoon_view:
-    # Sum of those in formation, on duty (from this list), and present leaders who are part of this list.
-    # Students from student_list_for_platoon_view who are present leaders are in present_leader_ids_for_this_platoon.
-    # Students from student_list_for_platoon_view on duty are in on_duty_list_details.
-    # Students from student_list_for_platoon_view in formation are in in_formation_list_details.
-    # These three categories (for students in student_list_for_platoon_view) should be mutually exclusive.
-
-    _efectiv_prezent_calc = 0
-    for s_check in student_list_for_platoon_view:
-        if s_check.id in present_leader_ids_for_this_platoon: # Present leader from this platoon
-            _efectiv_prezent_calc +=1
-        elif s_check.id not in active_services_map_all and \
-             s_check.id not in active_permissions_map_all and \
-             s_check.id not in active_weekend_leaves_map_all and \
-             s_check.id not in active_daily_leaves_map_all and \
-             not s_check.is_smt and not s_check.exemption_details: # In formation
-             _efectiv_prezent_calc +=1
-        elif s_check.id in active_services_map_all and \
-             not s_check.is_smt and not s_check.exemption_details : # On duty
-             _efectiv_prezent_calc +=1
-
-    efectiv_prezent_total = _efectiv_prezent_calc
-
-    if efectiv_control != efectiv_prezent_total + efectiv_absent_total:
-        app.logger.error(f"Final Presence data discrepancy: EC({efectiv_control}) != EP({efectiv_prezent_total}) + EA({efectiv_absent_total}) for Pl.{report_platoon_id} at {check_datetime.strftime('%Y-%m-%d %H:%M')}")
-
-    return {
-        "efectiv_control": efectiv_control,
-        "efectiv_prezent_total": efectiv_prezent_total,
-        "efectiv_absent_total": efectiv_absent_total,
-
-        "in_formation_count": in_formation_count,
-        "in_formation_students_details": sorted(in_formation_list_details),
-
-        "on_duty_count": on_duty_count, # Count of students from student_list_for_platoon_view on duty
-        "on_duty_students_details": sorted(on_duty_list_details),
-
-        "platoon_graded_duty_count": platoon_graded_duty_present_count, # Count of ALL present leaders for this platoon
-        "platoon_graded_duty_students_details": sorted(platoon_graded_duty_final_details), # Details of ALL leaders for this platoon (present or status)
-
-        "smt_count": smt_count, # Count from student_list_for_platoon_view
-        "smt_students_details": sorted(smt_list_details),
-
-        "exempt_other_count": exempt_other_count, # Count from student_list_for_platoon_view
-        "exempt_other_students_details": sorted(exempt_other_list_details),
-
-        "absent_students_details": sorted(absent_list_details) # From student_list_for_platoon_view (leaves/permissions)
-    }
-    if not student_list:
-        return {
-            "efectiv_control": 0, "efectiv_prezent_total": 0, "efectiv_absent_total": 0,
-            "efectiv_control": 0, "efectiv_prezent_total": 0, "efectiv_absent_total": 0,
-            "in_formation_count": 0, "in_formation_students_details": [],
-            "on_duty_count": 0, "on_duty_students_details": [],
-            "platoon_graded_duty_count": 0, "platoon_graded_duty_students_details": [],
-            "smt_count": 0, "smt_students_details": [], # Added SMT
-            "absent_students_details": []
-        }
-
+    # --- Step 1: Bulk Data Fetch ---
     student_ids = [s.id for s in student_list]
-    now = check_datetime # Folosim check_datetime consistent
+    now_naive = check_datetime.replace(tzinfo=None) # Use naive datetime for DB comparison
 
-    # Preîncărcare date
-    # Folosim dictionare pentru a mapa student_id la obiectul relevant, pentru acces rapid
-    # Presupunem ca un student are cel mult un item activ din fiecare categorie (serviciu, permisie etc.)
-    # Daca pot fi multiple, logica de mai jos ia primul gasit dupa sortare (daca e cazul)
-
-    active_services_map = {sa.student_id: sa for sa in ServiceAssignment.query.filter(
+    # Bulk fetch all potentially relevant records
+    active_services = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids),
-        ServiceAssignment.start_datetime <= now,
-        ServiceAssignment.end_datetime >= now
-    ).order_by(ServiceAssignment.start_datetime).all()}
+        ServiceAssignment.start_datetime <= now_naive,
+        ServiceAssignment.end_datetime >= now_naive
+    ).all()
 
-    active_permissions_map = {p.student_id: p for p in Permission.query.filter(
+    active_permissions = Permission.query.filter(
         Permission.student_id.in_(student_ids),
         Permission.status == 'Aprobată',
-        Permission.start_datetime <= now,
-        Permission.end_datetime >= now
-    ).order_by(Permission.start_datetime).all()}
+        Permission.start_datetime <= now_naive,
+        Permission.end_datetime >= now_naive
+    ).all()
 
+    # For leaves, we fetch all and check the time-based properties in Python
+    # This is safer due to the logic in the properties (e.g., overnight)
     all_daily_leaves = DailyLeave.query.filter(
         DailyLeave.student_id.in_(student_ids),
         DailyLeave.status == 'Aprobată'
     ).all()
-    active_daily_leaves_map = {}
-    for dl in all_daily_leaves:
-        # Make dl.start_datetime and dl.end_datetime (which are naive properties) timezone-aware
-        # Assuming they represent time in EUROPE_BUCHAREST timezone
-        dl_start_aware = EUROPE_BUCHAREST.localize(dl.start_datetime)
-        dl_end_aware = EUROPE_BUCHAREST.localize(dl.end_datetime)
-        if dl_start_aware <= now <= dl_end_aware:
-            if dl.student_id not in active_daily_leaves_map: # Ia prima învoire activă
-                 active_daily_leaves_map[dl.student_id] = dl
 
     all_weekend_leaves = WeekendLeave.query.filter(
         WeekendLeave.student_id.in_(student_ids),
         WeekendLeave.status == 'Aprobată'
     ).all()
+
+    # --- Step 2: Process into Fast-Lookup Maps ---
+    active_services_map = {sa.student_id: sa for sa in active_services}
+    active_permissions_map = {p.student_id: p for p in active_permissions}
+
+    active_daily_leaves_map = {}
+    for dl in all_daily_leaves:
+        if dl.is_active: # is_active property checks against localized time
+            if dl.student_id not in active_daily_leaves_map:
+                active_daily_leaves_map[dl.student_id] = dl
+
     active_weekend_leaves_map = {}
     for wl in all_weekend_leaves:
-        for interval in wl.get_intervals(): # get_intervals() ar trebui să fie eficient
-            if interval['start'] <= now <= interval['end']:
-                if wl.student_id not in active_weekend_leaves_map:
-                    active_weekend_leaves_map[wl.student_id] = {"leave": wl, "interval": interval}
-                break
+        if wl.is_any_interval_active_now:
+            if wl.student_id not in active_weekend_leaves_map:
+                # Find the specific interval that is active now
+                active_interval = next((interval for interval in wl.get_intervals() if interval['start'] <= check_datetime <= interval['end']), None)
+                if active_interval:
+                    active_weekend_leaves_map[wl.student_id] = {"leave": wl, "interval": active_interval}
 
+    # --- Step 3: Categorize Students ---
     efectiv_control = len(student_list)
     in_formation_list = []
     on_duty_list = []
-    platoon_graded_duty_list = [] # Leaders for THIS platoon
+    platoon_graded_duty_list = [] # Present leaders
     absent_list = []
     smt_list = []
-    exempt_other_list = [] # For non-SMT exemptions
+    exempt_other_list = []
 
-    # Determine the platoon ID for which this report is being generated.
-    # This assumes student_list contains students primarily from one platoon.
-    report_platoon_id = None
-    if student_list:
-        report_platoon_id = student_list[0].pluton
-        # Add a check if all students in student_list are from the same platoon, if necessary.
-        # For now, assume they are, as per typical usage (e.g. a gradat's own students).
-
-    # First pass: Identify leaders for the current report_platoon_id
-    # This includes leaders from this platoon and leaders assigned from other platoons.
-    # This requires querying all students, not just student_list.
-    if report_platoon_id:
-        all_potential_leaders = Student.query.all() # Query all students
-        for s_leader_check in all_potential_leaders:
-            is_leader_for_this_platoon = False
-            leader_detail_suffix = ""
-
-            if s_leader_check.assigned_graded_platoon == report_platoon_id:
-                is_leader_for_this_platoon = True
-                if s_leader_check.pluton != report_platoon_id:
-                    leader_detail_suffix = f" (din Pl.{s_leader_check.pluton})"
-            elif s_leader_check.pluton == report_platoon_id and s_leader_check.is_platoon_graded_duty and not s_leader_check.assigned_graded_platoon:
-                # Leader in own platoon, and not explicitly assigned elsewhere to override
-                is_leader_for_this_platoon = True
-
-            if is_leader_for_this_platoon:
-                # Check if this leader is currently away (service, permission, etc.)
-                # to avoid double counting or misrepresenting presence.
-                # For simplicity in this pass, we add them to platoon_graded_duty_list.
-                # Their specific status (present/absent) will be determined in the second pass if they are also in student_list.
-                # If they are an external leader, their presence calculation is more complex and might be out of scope for this function
-                # if it only processes student_list.
-                # For now, we list them as leaders. Their active status (if they are part of student_list) will be refined.
-
-                # Avoid adding if they are SMT or have other exemptions, as that takes precedence.
-                if s_leader_check.is_smt:
-                    # If an SMT student is a leader, they are primarily SMT.
-                    # We might still want to note their leadership role.
-                    # This part needs careful thought: should SMT override leadership display?
-                    # For now, SMT takes precedence for their primary status.
-                    continue
-                if s_leader_check.exemption_details:
-                    continue # Similar to SMT, exemption takes precedence.
-
-                # Check if leader is on service, permission, etc.
-                # This logic is similar to the main loop below.
-                leader_is_away = False
-                if s_leader_check.id in active_services_map: leader_is_away = True
-                elif s_leader_check.id in active_permissions_map: leader_is_away = True
-                elif s_leader_check.id in active_weekend_leaves_map: leader_is_away = True
-                elif s_leader_check.id in active_daily_leaves_map: leader_is_away = True
-
-                if not leader_is_away: # Only add to platoon_graded_duty_list if they are not otherwise away
-                     platoon_graded_duty_list.append(f"{s_leader_check.grad_militar} {s_leader_check.nume} {s_leader_check.prenume}{leader_detail_suffix} - Gradat Pluton")
-
-
-    # Second pass: Process students in the provided student_list for their detailed status
-    student_ids_processed_as_leaders = { # Keep track of students from student_list already handled as present leaders
-        int(re.search(r"ID:(\d+)", detail).group(1)) for detail in platoon_graded_duty_list if re.search(r"ID:(\d+)", detail)
-    } # This simplistic ID extraction from string is not robust. Better to store objects or IDs.
-    # For now, let's refine this: platoon_graded_duty_list should store student objects or IDs directly if possible.
-    # Let's assume platoon_graded_duty_list now contains dicts: {'student': s_object, 'detail_suffix': suffix}
-
-    # Re-think leader processing:
-    # The `platoon_graded_duty_list` should contain details of leaders *for the platoon matching report_platoon_id*.
-    # These leaders might or might not be in the input `student_list`.
-
-    processed_leader_ids_for_report_platoon = set() # IDs of students identified as leaders for report_platoon_id
-
-    if report_platoon_id:
-        all_students_in_system = Student.query.options(
-            # Eager load necessary relationships if performance becomes an issue,
-            # though for now, direct attribute access is used.
-        ).all()
-
-        temp_platoon_graded_duty_list = [] # Temporary list to build leader details
-
-        for s_potential_leader in all_students_in_system:
-            leader_detail_suffix = ""
-            is_leader_for_report_platoon = False
-
-            if s_potential_leader.assigned_graded_platoon == report_platoon_id:
-                is_leader_for_report_platoon = True
-                if s_potential_leader.pluton != report_platoon_id:
-                    leader_detail_suffix = f" (din Pl.{s_potential_leader.pluton})"
-            elif s_potential_leader.pluton == report_platoon_id and s_potential_leader.is_platoon_graded_duty and not s_potential_leader.assigned_graded_platoon:
-                is_leader_for_report_platoon = True
-
-            if is_leader_for_report_platoon:
-                # Check if this leader is SMT or has other exemptions. If so, they are primarily that.
-                if s_potential_leader.is_smt:
-                    # smt_list.append(f"{s_potential_leader.grad_militar} {s_potential_leader.nume} {s_potential_leader.prenume} - SMT (Gradat Pl.{report_platoon_id})")
-                    # status_found_for_leader = True # Handled as SMT
-                    continue # Skip adding to platoon_graded_duty_list if SMT
-                if s_potential_leader.exemption_details:
-                    # exempt_other_list.append(f"{s_potential_leader.grad_militar} {s_potential_leader.nume} {s_potential_leader.prenume} - Scutit: {s_potential_leader.exemption_details} (Gradat Pl.{report_platoon_id})")
-                    # status_found_for_leader = True # Handled as Exempt
-                    continue # Skip adding to platoon_graded_duty_list if Exempt
-
-                # Now check if this leader is away on leave/service
-                leader_is_effectively_absent = False
-                absent_reason_for_leader = ""
-                if s_potential_leader.id in active_services_map:
-                    leader_is_effectively_absent = True; absent_reason_for_leader = f"Serviciu ({active_services_map[s_potential_leader.id].service_type})"
-                elif s_potential_leader.id in active_permissions_map:
-                    leader_is_effectively_absent = True; absent_reason_for_leader = "Permisie"
-                elif s_potential_leader.id in active_weekend_leaves_map:
-                    leader_is_effectively_absent = True; absent_reason_for_leader = f"Învoire Weekend ({active_weekend_leaves_map[s_potential_leader.id]['interval']['day_name']})"
-                elif s_potential_leader.id in active_daily_leaves_map:
-                    leader_is_effectively_absent = True; absent_reason_for_leader = f"Învoire Zilnică ({active_daily_leaves_map[s_potential_leader.id].leave_type_display})"
-
-                leader_display_name = f"{s_potential_leader.grad_militar} {s_potential_leader.nume} {s_potential_leader.prenume}{leader_detail_suffix}"
-                if leader_is_effectively_absent:
-                    # If leader is absent, add to absent_list with their leader role noted
-                    # This ensures they are counted as absent but their role is known.
-                    # This applies if the leader is part of the student_list being processed for detailed status.
-                    # If they are an external leader and absent, they don't affect student_list's direct presence.
-                    # For now, platoon_graded_duty_list will list them as "Gradat Pluton (Absent - Motiv)".
-                    temp_platoon_graded_duty_list.append(f"{leader_display_name} - Gradat Pluton (Absent: {absent_reason_for_leader})")
-                else:
-                    # Leader is present and active in their leadership role for this platoon
-                    temp_platoon_graded_duty_list.append(f"{leader_display_name} - Gradat Pluton")
-
-                processed_leader_ids_for_report_platoon.add(s_potential_leader.id)
-
-        platoon_graded_duty_list = sorted(temp_platoon_graded_duty_list)
-
-
-    # Process each student from the input list
     for s in student_list:
         student_display_name = f"{s.grad_militar} {s.nume} {s.prenume}"
         status_found = False
-
-        if s.id in processed_leader_ids_for_report_platoon:
-            # This student was already identified as a leader for report_platoon_id.
-            # Their status (present gradat or absent gradat) is already in platoon_graded_duty_list.
-            # We need to ensure they are not double-counted in other categories like 'in_formation' or 'absent_list' here.
-            # If they were added to platoon_graded_duty_list as "Gradat Pluton (Absent: ...)",
-            # they should also be added to the main absent_list for correct Ea count.
-            # This is tricky. Let's simplify: if a student from student_list is a leader and present, they are in platoon_graded_duty_list.
-            # If they are a leader but absent (SMT, exempt, leave, service), they will be caught by subsequent checks.
-
-            # If this student IS a leader of the current report_platoon_id,
-            # and they are NOT SMT/Exempt/Away, they are already in platoon_graded_duty_list as "Gradat Pluton".
-            # So, we can mark status_found = True here for such cases to avoid putting them in "in_formation_list".
-            # This needs the leader's "away" status to be checked robustly above.
-
-            # Let's refine: the main loop determines primary status. Leadership is an overlay.
-            # The platoon_graded_duty_list is a separate list of *who the leaders are*.
-            # Their presence/absence is determined by the main logic.
-            pass # Leadership role is noted in platoon_graded_duty_list. Primary status (present, SMT, absent) determined below.
-
 
         if s.is_smt:
             smt_list.append(f"{student_display_name} - SMT")
@@ -2471,10 +2118,7 @@ def _calculate_presence_data(student_list_for_platoon_view, check_datetime):
             exempt_other_list.append(f"{student_display_name} - Scutit: {s.exemption_details}")
             status_found = True
         elif s.id in active_services_map:
-            active_service = active_services_map[s.id]
-            # If student is on service AND is a leader of this platoon, their detail in platoon_graded_duty_list should reflect this.
-            # For now, primary status is "on duty".
-            on_duty_list.append(f"{student_display_name} - Serviciu ({active_service.service_type})")
+            on_duty_list.append(f"{student_display_name} - Serviciu ({active_services_map[s.id].service_type})")
             status_found = True
         elif s.id in active_permissions_map:
             absent_list.append(f"{student_display_name} - Permisie")
@@ -2484,124 +2128,47 @@ def _calculate_presence_data(student_list_for_platoon_view, check_datetime):
             absent_list.append(f"{student_display_name} - Învoire Weekend ({wl_data['interval']['day_name']})")
             status_found = True
         elif s.id in active_daily_leaves_map:
-            dl_current = active_daily_leaves_map[s.id] # Renamed from dl to avoid conflict
-            absent_list.append(f"{student_display_name} - Învoire Zilnică ({dl_current.leave_type_display})")
+            absent_list.append(f"{student_display_name} - Învoire Zilnică ({active_daily_leaves_map[s.id].leave_type_display})")
             status_found = True
 
         if not status_found:
-            # If not SMT, not exempt, not on leave/service:
-            # Check if they are a leader of THIS platoon (report_platoon_id) and were marked as present leader.
-            # This is complex. The `platoon_graded_duty_list` should be definitive for who is counted as a "Gradat Pluton" for presence.
-            # If a student is in `student_list` and also determined to be a "present Gradat Pluton" for `report_platoon_id`,
-            # they should NOT go into `in_formation_list`.
+            # Student is present. Now check if they are a platoon leader.
+            # This logic assumes the report is for the student's own platoon context.
+            if s.is_platoon_graded_duty:
+                 platoon_graded_duty_list.append(f"{student_display_name} - Gradat Pluton")
+            else:
+                 in_formation_list.append(student_display_name)
 
-            # Simpler approach for now: if they are in student_list and their leadership role for report_platoon_id
-            # means they are "present and acting as leader", they are primarily "Gradat Pluton".
-            # The `platoon_graded_duty_list` is constructed independently.
-            # Here, we just decide if student `s` from `student_list` goes to `in_formation_list`.
-
-            is_acting_leader_of_report_platoon_and_present = False
-            if report_platoon_id and s.pluton == report_platoon_id and s.is_platoon_graded_duty and not s.assigned_graded_platoon:
-                is_acting_leader_of_report_platoon_and_present = True
-            elif report_platoon_id and s.assigned_graded_platoon == report_platoon_id:
-                 is_acting_leader_of_report_platoon_and_present = True
-
-            # This check `is_acting_leader_of_report_platoon_and_present` is a bit redundant if platoon_graded_duty_list
-            # is already populated with present leaders.
-            # The student `s` from `student_list` should only be added to `in_formation_list` if they are not
-            # SMT, Exempt, Away, AND also not one of the present leaders in `platoon_graded_duty_list`.
-
-            # Let's assume `platoon_graded_duty_list` contains strings of present leaders.
-            # We need a way to check if student `s` is one of them.
-
-            # Revised logic for "in_formation_list":
-            # A student `s` from `student_list` is "in formation" if:
-            # 1. Not SMT
-            # 2. Not Exempt (other)
-            # 3. Not on Service
-            # 4. Not on Permission
-            # 5. Not on Weekend Leave
-            # 6. Not on Daily Leave
-            # 7. AND they are NOT primarily identified as a "Gradat Pluton" who is present.
-            #    The `platoon_graded_duty_list` should ideally contain only *present* leaders for the current platoon.
-            #    If student `s` is in that list, they shouldn't be in `in_formation_list`.
-
-            # For now, the old logic for platoon_graded_duty for students within student_list:
-            if s.is_platoon_graded_duty and s.pluton == report_platoon_id and not s.assigned_graded_platoon:
-                 # This specific case is handled by the global platoon_graded_duty_list construction.
-                 # If they are here (not status_found), they are present.
-                 # To avoid double counting, if they are in platoon_graded_duty_list, don't add to in_formation_list
-                 # This relies on platoon_graded_duty_list being accurate for *present* leaders.
-
-                 # Simplified: if they are not any of the above (SMT, exempt, away), they are either "Gradat" or "In Formatie"
-                 # The `platoon_graded_duty_list` is a separate reporting line.
-                 # Here, we determine if they are part of the main "present" contingent.
-                 # The `platoon_graded_duty_count` will come from the length of `platoon_graded_duty_list`.
-                 # Students in `platoon_graded_duty_list` who are from `student_list` and are present should not be in `in_formation_list`.
-
-                # Let's assume `platoon_graded_duty_list` only contains *actively present* leaders for this platoon.
-                # A student `s` from `student_list` should be in `in_formation_list` if not SMT, not Exempt, not Away,
-                # AND not already counted in the `platoon_graded_duty_list` (if they are a present leader from student_list).
-
-                # This is becoming circular. Let's adjust the primary categories:
-                # SMT, Exempt, Service, Permission, WL, DL -> these are terminal states for this loop.
-                # If none of those, then they are physically present in unit.
-                # Of those physically present, are they a gradat for *this* platoon, or just in formation?
-
-                # The `platoon_graded_duty_list` is a list of *all* designated leaders for report_platoon_id,
-                # with their status (present or absent reason).
-                # The `platoon_graded_duty_count` should be number of *present* leaders for this platoon.
-
-                # If student `s` (from student_list) is NOT SMT/Exempt/Away:
-                #   If `s` is a leader for `report_platoon_id` (either own or assigned):
-                #     (They are already in `platoon_graded_duty_list` with a "present" status)
-                #     Don't add to `in_formation_list`.
-                #   Else (not a leader for this platoon):
-                #     Add to `in_formation_list`.
-
-                is_present_leader_for_this_platoon = False
-                leader_check_name_for_s = f"{s.grad_militar} {s.nume} {s.prenume}"
-                for leader_detail_str in platoon_graded_duty_list:
-                    if leader_check_name_for_s in leader_detail_str and "Gradat Pluton" in leader_detail_str and not "(Absent:" in leader_detail_str:
-                        is_present_leader_for_this_platoon = True
-                        break
-
-                if not is_present_leader_for_this_platoon:
-                    in_formation_list.append(student_display_name)
-                # If they are a present leader, they are already accounted for in platoon_graded_duty_list.
-
-            else: # Not s.is_platoon_graded_duty (for own platoon) or has assigned_graded_platoon
-                  # or s.pluton != report_platoon_id (student from student_list but not of this platoon - less likely)
-                in_formation_list.append(student_display_name)
-
-
+    # --- Step 4: Compile Results ---
     in_formation_count = len(in_formation_list)
     on_duty_count = len(on_duty_list)
-    # This count should be of *present* leaders for the report_platoon_id.
-    platoon_graded_duty_count = sum(1 for detail in platoon_graded_duty_list if "Gradat Pluton" in detail and not "(Absent:" in detail)
+    platoon_graded_duty_count = len(platoon_graded_duty_list)
     smt_count = len(smt_list)
     exempt_other_count = len(exempt_other_list)
+    absent_leaves_count = len(absent_list)
 
-    efectiv_absent_total = len(absent_list) + smt_count + exempt_other_count
     efectiv_prezent_total = in_formation_count + on_duty_count + platoon_graded_duty_count
+    efectiv_absent_total = absent_leaves_count + smt_count + exempt_other_count
 
-    # Optional consistency check
-    # if efectiv_control != efectiv_prezent_total + efectiv_absent_total:
-    #     app.logger.warning(f"Discrepancy in presence data: EC({efectiv_control}) != EP({efectiv_prezent_total}) + EA({efectiv_absent_total}) for check_datetime {check_datetime}")
+    # Consistency check
+    if efectiv_control != efectiv_prezent_total + efectiv_absent_total:
+        app.logger.error(f"Presence data discrepancy: EC({efectiv_control}) != EP({efectiv_prezent_total}) + EA({efectiv_absent_total})")
 
     return {
         "efectiv_control": efectiv_control,
         "efectiv_prezent_total": efectiv_prezent_total,
-        "efectiv_absent_total": efectiv_absent_total, # Includes SMT
+        "efectiv_absent_total": efectiv_absent_total,
         "in_formation_count": in_formation_count,
         "in_formation_students_details": sorted(in_formation_list),
         "on_duty_count": on_duty_count,
         "on_duty_students_details": sorted(on_duty_list),
         "platoon_graded_duty_count": platoon_graded_duty_count,
         "platoon_graded_duty_students_details": sorted(platoon_graded_duty_list),
-        "smt_count": smt_count, # New SMT count
-        "smt_students_details": sorted(smt_list), # New SMT details
-        "absent_students_details": sorted(absent_list) # Now only leaves/permissions
+        "smt_count": smt_count,
+        "smt_students_details": sorted(smt_list),
+        "exempt_other_count": exempt_other_count,
+        "exempt_other_students_details": sorted(exempt_other_list),
+        "absent_students_details": sorted(absent_list)
     }
 
 # --- Commander Dashboards ---
