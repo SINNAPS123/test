@@ -20,7 +20,6 @@ from sqlalchemy import func, or_, and_, inspect, text # Am adăugat text aici ex
 import re
 from unidecode import unidecode
 import json
-# from sqlalchemy import inspect # Duplicat, inspect este deja importat mai sus
 import pytz # Adăugat pentru fusuri orare
 
 # Inițializare aplicație Flask
@@ -173,7 +172,6 @@ KNOWN_RANK_PATTERNS = [
     re.compile(r"^(Frt\.?)\s+", re.IGNORECASE), re.compile(r"^(Plt\.? Adj\.?)\s+", re.IGNORECASE), 
     re.compile(r"^(Plt\.? Maj\.?)\s+", re.IGNORECASE), re.compile(r"^(Plt\.?)\s+", re.IGNORECASE),
 ]
-# MAX_ACTIVE_COMPANY_GRADERS = 3 # Eliminat
 
 # --- Simple in-memory rate limiting (per-process) ---
 _RATE_LIMIT_BUCKETS = {}
@@ -3878,6 +3876,7 @@ def add_edit_permission(permission_id=None):
                            permission=permission, # Pass the permission object itself for the template
                            students=students_managed,
                            form_data=form_data_on_get if request.method == 'GET' and permission else request.form if request.method == 'POST' else {})
+
 
 
 def find_student_for_bulk_import(name_line, students_or_user_id):
@@ -8205,26 +8204,8 @@ def admin_import_data():
         return redirect(url_for('admin_data_management'))
 
 
-# This block seems to be intended for main execution,
-# but was previously mis-indented.
-# It should ideally be within an `if __name__ == '__main__':` block.
+# END JULES BLOCK - MORNING INVIGORATION REPORT (PROBLEM 5)
 
-# print("--------------------------------------------------------")
-# user_input = input("Do you want to attempt to apply database migrations? (yes/no): ")
-# print("--------------------------------------------------------")
-
-# if user_input.lower() == 'yes':
-#     try:
-#         print("Attempting to apply database migrations...")
-#         # Assuming 'upgrade' comes from Flask-Migrate, it needs app context
-#         # from flask_migrate import upgrade # Ensure this import is at the top if used here
-#         # with app.app_context(): # Migrations need app context
-#         #     upgrade()
-#         print("Database migrations applied successfully or no new migrations were found.")
-#     except Exception as e:
-#         print(f"Error applying database migrations: {e}")
-# else:
-#     print("Skipping database migrations.")
 
 # START JULES - ADMIN HOME PAGE SETTINGS
 @app.route('/admin/settings/homepage', methods=['GET', 'POST'], endpoint='admin_homepage_settings')
@@ -8520,47 +8501,18 @@ def student_profile(student_id):
                            services=services,
                            volunteer_participations=volunteer_participations)
 
-# It's recommended to run the app within an if __name__ == '__main__': block.
-# The app.run() call is correctly placed within this block below.
-
-# The database initialization and migration logic is best handled
-# by Flask CLI commands (e.g., flask db init, flask db migrate, flask db upgrade)
-# and/or a separate script to create the initial admin user if needed.
-# Interactive prompts for these operations during app startup are generally avoided.
-# These actions should be performed explicitly during setup or deployment.
-
 if __name__ == '__main__':
-    # --- Database Initialization and Migration ---
-    # The following section for database migrations and initialization (init_db)
-    # is commented out by default. It is NOT recommended to run these automatically
-    # every time the application starts.
-
-    # For database migrations:
-    # Use Flask-Migrate CLI commands in your terminal:
-    #   flask db migrate -m "description of changes"
-    #   flask db upgrade
-    # These commands should be run manually when database schema changes are made.
-
-    # For initial database setup (creating tables and admin user):
-    # The init_db() function can be called manually, for example, via a custom Flask CLI command
-    # or a separate script. This is typically done once for initial setup or in development.
-    #
-    # Example of how one might run init_db() or migrations once for development (uncomment to use):
     with app.app_context():
-        # To apply migrations:
-        print("--- Attempting to apply database migrations... ---")
+        print("Applying database migrations...")
         try:
             from flask_migrate import upgrade as flask_upgrade
             flask_upgrade()
-            print("DB migrations applied or up-to-date.")
+            print("Database migrations applied successfully.")
         except Exception as e:
-            print(f"Error during migration: {e}")
+            print(f"An error occurred during database migration: {e}")
 
-        # To initialize the database (create tables, admin user if not exists):
-        print("--- Attempting to initialize database (admin user, etc.)... ---")
-        init_db() # Make sure init_db() is defined and handles its operations correctly.
-        print("DB initialization complete.")
-        # pass # Use 'pass' if all operations above are commented out.
+        print("Initializing database (if needed)...")
+        init_db()
+        print("Database initialization complete.")
 
-    # Start the Flask development server
     app.run(host='0.0.0.0', port=5001, debug=True)
