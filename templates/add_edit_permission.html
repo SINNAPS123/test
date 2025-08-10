@@ -27,15 +27,13 @@
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="start_datetime" class="form-label">Data și Ora de Început <span class="text-danger">*</span></label>
-                                <input type="datetime-local" class="form-control" id="start_datetime" name="start_datetime"
-                                       value="{{ permission.start_datetime.strftime('%Y-%m-%dT%H:%M') if permission and permission.start_datetime else '' }}" required>
-                                <small class="form-text text-muted">Ex: Vineri, ora 15:00</small>
+                                <input type="datetime-local" class="form-control has-time-helpers" id="start_datetime" name="start_datetime"
+                                       value="{{ form_data.start_datetime if form_data and form_data.start_datetime is defined else (permission.start_datetime.strftime('%Y-%m-%dT%H:%M') if permission and permission.start_datetime else '') }}" required>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="end_datetime" class="form-label">Data și Ora de Sfârșit <span class="text-danger">*</span></label>
-                                <input type="datetime-local" class="form-control" id="end_datetime" name="end_datetime"
-                                       value="{{ permission.end_datetime.strftime('%Y-%m-%dT%H:%M') if permission and permission.end_datetime else '' }}" required>
-                                <small class="form-text text-muted">Ex: Duminică, ora 22:00</small>
+                                <input type="datetime-local" class="form-control has-time-helpers" id="end_datetime" name="end_datetime"
+                                       value="{{ form_data.end_datetime if form_data and form_data.end_datetime is defined else (permission.end_datetime.strftime('%Y-%m-%dT%H:%M') if permission and permission.end_datetime else '') }}" required>
                             </div>
                         </div>
 
@@ -43,14 +41,12 @@
                             <label for="destination" class="form-label">Destinație</label>
                             <input type="text" class="form-control" id="destination" name="destination"
                                    value="{{ form_data.destination if form_data and form_data.destination is defined else (permission.destination if permission and permission.destination is defined else '') }}">
-                            <small class="form-text text-muted">Localitatea de destinație.</small>
                         </div>
 
                         <div class="mb-3">
                             <label for="transport_mode" class="form-label">Mijloc de transport</label>
                             <input type="text" class="form-control" id="transport_mode" name="transport_mode"
                                    value="{{ form_data.transport_mode if form_data and form_data.transport_mode is defined else (permission.transport_mode if permission and permission.transport_mode is defined else '') }}">
-                            <small class="form-text text-muted">Ex: Auto personal, Tren, Autobuz.</small>
                         </div>
 
                         <div class="mb-3">

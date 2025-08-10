@@ -36,12 +36,12 @@
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="start_time" class="form-label">Ora de Început <span class="text-danger">*</span></label>
-                                <input type="time" class="form-control" id="start_time" name="start_time"
+                                <input type="time" class="form-control has-time-helpers" id="start_time" name="start_time"
                                        value="{{ form_data.start_time or '' }}" required>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="end_time" class="form-label">Ora de Sfârșit <span class="text-danger">*</span></label>
-                                <input type="time" class="form-control" id="end_time" name="end_time"
+                                <input type="time" class="form-control has-time-helpers" id="end_time" name="end_time"
                                        value="{{ form_data.end_time or '' }}" required>
                             </div>
                         </div>
@@ -76,30 +76,4 @@
         </div>
     </div>
 </div>
-<script>
-    // Optional: Setează data minimă pentru inputul de dată la ziua curentă
-    // și restricționează zilele la Luni-Joi.
-    document.addEventListener('DOMContentLoaded', function() {
-        var dateInput = document.getElementById('leave_date');
-        if (dateInput) {
-            var today = new Date();
-            // Format YYYY-MM-DD
-            var yyyy = today.getFullYear();
-            var mm = String(today.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
-            var dd = String(today.getDate()).padStart(2, '0');
-            // dateInput.min = yyyy + '-' + mm + '-' + dd; // Nu setăm min ca să poată vedea și în trecut dacă e cazul, validarea e în backend
-
-            dateInput.addEventListener('input', function(e) {
-                var selectedDate = new Date(e.target.value);
-                var day = selectedDate.getUTCDay(); // Duminică = 0, Luni = 1, ..., Sâmbătă = 6
-                if (day === 0 || day === 5 || day === 6) { // Duminică, Vineri, Sâmbătă
-                    e.target.setCustomValidity('Învoirile zilnice sunt permise doar de Luni până Joi.');
-                    e.target.reportValidity();
-                } else {
-                    e.target.setCustomValidity('');
-                }
-            });
-        }
-    });
-</script>
 {% endblock %}

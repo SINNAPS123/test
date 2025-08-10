@@ -592,71 +592,61 @@ document.addEventListener('DOMContentLoaded', function() {
     })();
 
     // ---- Form helpers (date/time quick-fill) ----
-    (function formHelpers(){
-        // Select only inputs that are specifically marked for helpers
+    (function formHelpers() {
         const candidates = Array.from(document.querySelectorAll('input.has-time-helpers'));
         if (!candidates.length) return;
 
-        /**
-         * Gets the current date and time parts for the Europe/Bucharest timezone.
-         * This method is more robust against locale formatting issues.
-         * @returns {{date: string, time: string}} e.g., { date: '2025-08-08', time: '01:00' }
-         */
         function getBucharestDateTimeParts() {
             const now = new Date();
-            const options = {
-                timeZone: 'Europe/Bucharest',
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                hourCycle: 'h23' // Ensures 24-hour format (00-23)
-            };
-
-            // Using 'sv-SE' locale is a reliable way to get the YYYY-MM-DD HH:MM format
+            const options = { timeZone: 'Europe/Bucharest', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
             const formatter = new Intl.DateTimeFormat('sv-SE', options);
-            const formattedString = formatter.format(now); // e.g., "2025-08-08 01:00"
-            const [datePart, timePart] = formattedString.split(' ');
-
+            const [datePart, timePart] = formatter.format(now).split(' ');
             return { date: datePart, time: timePart };
         }
 
         candidates.forEach(input => {
-            const wrap = document.createElement('div');
-            wrap.className = 'input-group mb-2';
-            const parent = input.parentNode;
-            parent.insertBefore(wrap, input);
-            wrap.appendChild(input);
+            const container = document.createElement('div');
+            container.className = 'd-flex flex-wrap align-items-center gap-2 mt-1';
 
-            // Apply the date/time to the correct associated input
-            function applyTime() {
-                const parts = getBucharestDateTimeParts();
-                if (input.type === 'time') {
-                    input.value = parts.time;
-                } else if (input.type === 'date') {
-                    input.value = parts.date;
-                } else if (input.type === 'datetime-local') {
-                    input.value = `${parts.date}T${parts.time}`;
-                }
-                // Trigger change event for any other scripts listening
-                input.dispatchEvent(new Event('change', { bubbles: true }));
-            }
+            const quickHours = ['07:00', '15:00', '22:00'];
+
+            quickHours.forEach(hour => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-sm btn-outline-info';
+                btn.textContent = hour;
+                btn.title = `Setează ora la ${hour}`;
+                btn.addEventListener('click', () => {
+                    if (input.type === 'time') {
+                        input.value = hour;
+                    } else if (input.type === 'datetime-local') {
+                        const currentVal = input.value;
+                        const datePart = currentVal ? currentVal.split('T')[0] : getBucharestDateTimeParts().date;
+                        input.value = `${datePart}T${hour}`;
+                    }
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+                container.appendChild(btn);
+            });
 
             const btnNow = document.createElement('button');
             btnNow.type = 'button';
-            btnNow.className = 'btn btn-outline-secondary';
+            btnNow.className = 'btn btn-sm btn-outline-secondary';
             btnNow.textContent = 'Acum';
-            btnNow.title = 'Setează ora curentă';
-            btnNow.addEventListener('click', applyTime);
+            btnNow.title = 'Setează data și ora curentă';
+            btnNow.addEventListener('click', () => {
+                const parts = getBucharestDateTimeParts();
+                if (input.type === 'time') {
+                    input.value = parts.time;
+                } else if (input.type === 'datetime-local') {
+                    input.value = `${parts.date}T${parts.time}`;
+                }
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            container.appendChild(btnNow);
 
-            // The "+1h" button has been removed as per the user's request.
-
-            const btnGroup = document.createElement('div');
-            // Bootstrap 5 uses .input-group-text for addons, but a simple button works too.
-            // No need for input-group-append in BS5
-            btnGroup.append(btnNow);
-            wrap.appendChild(btnGroup);
+            // Insert the container of buttons after the input element
+            input.parentNode.insertBefore(container, input.nextSibling);
         });
     })();
 
@@ -732,6 +722,23 @@ document.addEventListener('DOMContentLoaded', function() {
         container.querySelector('.sv-save').addEventListener('click',()=>{ const name=container.querySelector('.sv-name').value.trim()||'Vedere'; const vs=get(); vs.unshift({ name, data: capture() }); set(vs.slice(0,20)); render(); });
         render();
     })();
+    // ---- Daily Leave Date Validation ----
+    (function dailyLeaveDateValidation() {
+        const dateInput = document.getElementById('leave_date');
+        if (dateInput) {
+            dateInput.addEventListener('input', function(e) {
+                const selectedDate = new Date(e.target.value);
+                const day = selectedDate.getUTCDay(); // Sunday = 0, Monday = 1, ..., Saturday = 6
+                if (day === 0 || day === 5 || day === 6) { // Sunday, Friday, Saturday
+                    e.target.setCustomValidity('Învoirile zilnice sunt permise doar de Luni până Joi.');
+                    e.target.reportValidity();
+                } else {
+                    e.target.setCustomValidity('');
+                }
+            });
+        }
+    })();
+
     // ---- Reminder notificări locale (fără backend) ----
     (function localReminders(){
         if (!('Notification' in window)) return;
