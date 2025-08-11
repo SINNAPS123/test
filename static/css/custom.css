@@ -1,0 +1,383 @@
+/* =============================================================================
+   Custom Theme & Components for Flask App Modernization
+   -----------------------------------------------------------------------------
+   This file defines CSS variables for light/dark mode, Bootstrap overrides,
+   component polish, and utility classes. It is layered above Bootstrap and
+   before style.css. DO NOT RENAME IDs, class hooks, or data-* attributes.
+   ============================================================================ */
+
+/*------------------------------------------------------------------------------
+  1. Theme Tokens (Light & Dark)
+------------------------------------------------------------------------------*/
+:root {
+  --brand-primary: #2563eb;
+  --accent: #fbbf24;
+  --bg: #f8fafc;
+  --text: #222b45;
+  --muted: #64748b;
+  --border: #e5e7eb;
+  --card-bg: #fff;
+  --shadow: 0 1px 8px 0 rgba(30,34,90,0.08);
+  --shadow-sm: 0 1px 2px 0 rgba(30,34,90,0.08);
+
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 1rem;
+  --spacing-4: 1.5rem;
+  --spacing-5: 2.5rem;
+
+  --radius-sm: 0.375rem;
+  --radius: 0.75rem;
+  --radius-lg: 1.25rem;
+  --focus-ring: 0 0 0 3px rgba(37,99,235,0.2);
+
+  --navbar-height: 58px;
+}
+
+[data-theme="dark"],
+html.dark-mode-preload {
+  --brand-primary: #60a5fa;
+  --accent: #facc15;
+  --bg: #181f2a;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --border: #334155;
+  --card-bg: #232d3b;
+  --shadow: 0 1px 8px 0 rgba(20,25,40,0.18);
+  --shadow-sm: 0 1px 2px 0 rgba(20,25,40,0.18);
+}
+
+/*------------------------------------------------------------------------------
+  2. Bootstrap Variable Overrides & Body
+------------------------------------------------------------------------------*/
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 1rem;
+  min-height: 100vh;
+}
+
+a {
+  color: var(--brand-primary);
+}
+a:hover {
+  color: #1747b1;
+  text-decoration: underline;
+}
+
+/*------------------------------------------------------------------------------
+  3. Navbar Styles
+------------------------------------------------------------------------------*/
+.navbar {
+  min-height: var(--navbar-height);
+  box-shadow: var(--shadow-sm);
+  background: var(--card-bg) !important;
+  transition: background 0.2s;
+  border-bottom: 1px solid var(--border);
+}
+.navbar .navbar-brand img {
+  max-height: 40px;
+}
+.navbar .nav-link.active,
+.navbar .nav-link[aria-current="page"] {
+  color: var(--brand-primary) !important;
+  font-weight: 600;
+  border-bottom: 2px solid var(--brand-primary);
+  background: transparent;
+}
+.navbar .nav-link {
+  color: var(--text);
+  transition: color 0.18s;
+  margin-right: 0.5rem;
+}
+.navbar .nav-link:hover {
+  color: var(--brand-primary);
+}
+.navbar .navbar-toggler {
+  border-radius: var(--radius-sm);
+}
+
+/*------------------------------------------------------------------------------
+  4. Card Styles
+------------------------------------------------------------------------------*/
+.page-card, .card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  margin-bottom: var(--spacing-4);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.section-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--spacing-2);
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+.card-header {
+  background: none;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+.card-body {
+  padding: var(--spacing-3);
+}
+.page-card {
+  padding: var(--spacing-4) var(--spacing-4) var(--spacing-3) var(--spacing-4);
+}
+
+/*------------------------------------------------------------------------------
+  5. Table Styles
+------------------------------------------------------------------------------*/
+.table {
+  background: var(--card-bg);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: 0;
+}
+.table thead th {
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.97rem;
+  border-bottom: 2px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.table-striped > tbody > tr:nth-of-type(odd) {
+  background: #f6f8fa;
+}
+[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd),
+html.dark-mode-preload .table-striped > tbody > tr:nth-of-type(odd) {
+  background: #20293b;
+}
+.table-hover > tbody > tr:hover {
+  background: #e6f0ff;
+}
+[data-theme="dark"] .table-hover > tbody > tr:hover,
+html.dark-mode-preload .table-hover > tbody > tr:hover {
+  background: #24304a;
+}
+.table-sm td, .table-sm th {
+  padding: 0.45rem 0.55rem;
+}
+.sticky-header thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 2;
+}
+
+/* Responsive table container */
+.table-responsive {
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--spacing-3);
+  box-shadow: none;
+  background: none;
+  padding: 0;
+  overflow-x: auto;
+}
+
+/*------------------------------------------------------------------------------
+  6. Form Styles
+------------------------------------------------------------------------------*/
+.form-label {
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 1rem;
+}
+.form-control, .form-select {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 1rem;
+  transition: box-shadow 0.2s, border-color 0.15s;
+}
+.form-control:focus, .form-select:focus {
+  border-color: var(--brand-primary);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+.form-control::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+.form-check-input:focus {
+  box-shadow: var(--focus-ring);
+}
+.form-check-label {
+  margin-left: 0.3em;
+}
+.input-group-text {
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  font-size: 1rem;
+}
+
+/*------------------------------------------------------------------------------
+  7. Button Styles
+------------------------------------------------------------------------------*/
+.btn {
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  transition: background 0.16s, color 0.16s, border 0.14s;
+  box-shadow: none;
+}
+.btn-primary, .btn-primary:focus {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+}
+.btn-primary:hover, .btn-primary:active {
+  background: #1747b1;
+  border-color: #1747b1;
+}
+.btn-outline-secondary, .btn-outline-secondary:focus {
+  border-color: var(--muted);
+  color: var(--muted);
+}
+.btn-outline-secondary:hover, .btn-outline-secondary:active {
+  background: var(--muted);
+  color: #fff;
+}
+.btn-success { background: #22c55e; border-color: #22c55e; }
+.btn-success:hover { background: #16a34a; border-color: #16a34a; }
+.btn-warning { background: #fbbf24; border-color: #fbbf24; color: #222b45; }
+.btn-warning:hover { background: #f59e42; border-color: #f59e42; }
+.btn-danger { background: #ef4444; border-color: #ef4444; }
+.btn-danger:hover { background: #dc2626; border-color: #dc2626; }
+.btn-group > .btn {
+  margin-right: 0.33em;
+}
+.btn-group > .btn:last-child {
+  margin-right: 0;
+}
+.btn:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+/* Full-width on mobile */
+@media (max-width: 576px) {
+  .btn.w-100, .btn-group .btn {
+    width: 100%;
+    margin-bottom: var(--spacing-2);
+  }
+}
+
+/*------------------------------------------------------------------------------
+  8. Loading Overlay & Spinner (moved from inline)
+------------------------------------------------------------------------------*/
+#loading-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(245, 247, 255, 0.70);
+  z-index: 9999;
+  display: none;
+  justify-content: center;
+  align-items: center;
+}
+[data-theme="dark"] #loading-overlay,
+html.dark-mode-preload #loading-overlay {
+  background: rgba(24, 31, 42, 0.88);
+}
+.spinner-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.spinner {
+  border: 4px solid var(--border);
+  border-top: 4px solid var(--brand-primary);
+  border-radius: 50%;
+  width: 2.5rem;
+  height: 2.5rem;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  100% { transform: rotate(360deg);}
+}
+.heartbeat {
+  animation: heartbeat 1.1s infinite;
+}
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1);}
+  15% { transform: scale(1.16);}
+  30% { transform: scale(0.92);}
+  45% { transform: scale(1.12);}
+  60% { transform: scale(0.95);}
+  75% { transform: scale(1.06);}
+}
+
+/*------------------------------------------------------------------------------
+  9. Utilities
+------------------------------------------------------------------------------*/
+.section-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: var(--spacing-2);
+  color: var(--brand-primary);
+  letter-spacing: -0.5px;
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+}
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-3) 0;
+  color: var(--muted);
+  text-align: center;
+}
+.empty-state .fa, .empty-state .fas, .empty-state .fa-solid {
+  font-size: 2.2rem;
+  margin-bottom: 0.4em;
+  color: var(--brand-primary);
+}
+.content-wrapper-animated {
+  animation: fadeInUp 0.5s cubic-bezier(.4,0,.2,1);
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(18px);}
+  to { opacity: 1; transform: none;}
+}
+
+/*-----------------------------------------------------------------------------
+  10. Debug/Dev Bar (admin/debug bar top offset)
+-----------------------------------------------------------------------------*/
+#admin-debug-bar {
+  position: sticky;
+  top: var(--navbar-height);
+  z-index: 1050;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.97rem;
+  padding: 0.35em 1.25em;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  margin-bottom: 0.5em;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  gap: 1.5em;
+}
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+  .navbar {
+    min-height: 48px;
+  }
+  .section-title {
+    font-size: 1.1rem;
+  }
+  .page-card, .card {
+    padding: var(--spacing-2);
+  }
+}
