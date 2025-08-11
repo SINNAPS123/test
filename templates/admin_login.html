@@ -1,19 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="d-flex justify-content-center">
-  <div class="card" style="max-width: 420px; width: 100%;">
-    <div class="card-body">
-      <h2 class="mb-4">Autentificare administrator</h2>
-      <form method="post">
-        <div class="mb-3">
-          <label for="username" class="form-label">Utilizator</label>
-          <input type="text" name="username" id="username" class="form-control">
-        </div>
-        ...
-        <button type="submit" class="btn btn-primary w-100">Autentificare</button>
-      </form>
+<div class="container mt-4">
+  <h2 class="mb-4">Autentificare administrator</h2>
+  <form method="post">
+    <div class="mb-3">
+      <label for="username">Utilizator</label>
+      <input type="text" name="username" id="username" class="form-control">
     </div>
-  </div>
+    <div class="mb-3">
+      <label for="password">Parolă</label>
+      <input type="password" name="password" id="password" class="form-control">
+    </div>
+    <button type="submit" class="btn btn-primary">Autentificare</button>
+  </form>
 </div>
 {% endblock %}
 

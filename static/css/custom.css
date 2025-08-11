@@ -89,13 +89,62 @@ a:hover {
 
 /* Style for the admin debug bar */
 #admin-debug-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: sticky;
+  top: var(--navbar-height);
   z-index: 1050;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.97rem;
+  padding: 0.35em 1.25em;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  margin-bottom: 0.5em;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  gap: 1.5em;
 }
 
+/* Card container for main page sections */
+.page-card {
+  background: #fff;
+  border-radius: 1rem;
+  box-shadow: 0 4px 16px rgba(48,68,111,0.08);
+  padding: 2rem 1.5rem;
+  margin-bottom: 2rem;
+}
+
+/* Remove duplicate margin if inner containers exist */
+.page-card > .container,
+.page-card > .container-fluid {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Sticky table header for list pages */
+.sticky-header thead th {
+  position: sticky;
+  top: 0;
+  background: #f8f9fa;
+  z-index: 1;
+}
+
+/* Ensure responsive images have lazy loading */
+img[loading="lazy"] {
+  /* No effect in CSS, but selector for reference */
+}
+
+/* Modern KPI value styling (optional improvement) */
+.kpi-value {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #2563eb;
+}
+
+@media (max-width: 767.98px) {
+  .page-card {
+    padding: 1.25rem 0.5rem;
+  }
+}
 /* Card container for main page sections */
 .page-card {
   background: #fff;
