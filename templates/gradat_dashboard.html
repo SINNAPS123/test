@@ -1,6 +1,30 @@
 {% extends "base.html" %}
-
-{% block title %}Panou Gradat - {{ current_user.username }}{% endblock %}
+{% block content %}
+<div class="page-card">
+  <h2 class="mb-4">Dashboard studenți</h2>
+  <div class="row">
+    <div class="col-lg-3 col-md-6 mb-3">
+      <div class="card">
+        <div class="card-body text-center">
+          <h5>Total studenți</h5>
+          <div class="kpi-value">{{ num_students }}</div>
+        </div>
+      </div>
+    </div>
+    ...
+  </div>
+  {% if recent_activities %}
+  <div class="card mt-4">
+    <div class="card-body">
+      <h4>Activități recente</h4>
+      <ul>
+        ...
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
