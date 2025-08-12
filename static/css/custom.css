@@ -501,15 +501,7 @@ html.dark-mode-preload #loading-overlay {
     transition: background .14s;
 }
 
-/* Remove old selection-bar and row-selected styles if present */
-.selection-bar,
-.row-selected,
-.selection-bar-shown body,
-.table tr.row-selected {
-    display: none !important;
-    background: none !important;
-    box-shadow: none !important;
-}
+
 
 /* Modern cards/containers spacing */
 .mt-4, .container.mt-4, .content-wrapper-animated {
