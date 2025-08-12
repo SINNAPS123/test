@@ -78,6 +78,11 @@ def inject_global_vars():
     # ensure this processor is correctly registered and the Flask app is restarted.
     return dict(get_localized_now=get_localized_now)
 
+@app.context_processor
+def inject_app_config():
+    # Makes the Flask app object available as 'app' in all templates
+    return dict(app=app)
+
 # IMPORTANT: Change this to a strong, unique, and static secret key in a real environment!
 # Using a static key is crucial for session persistence across app restarts.
 # For production, load from an environment variable.
