@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, flash, request, send_file, session
+from flask import Flask, render_template, redirect, url_for, flash, request, send_file, session, jsonify
 from flask_compress import Compress
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate # Added for database migrations
@@ -844,79 +844,63 @@ def brief_ack():
 def _collect_conflicts(scope_student_ids=None):
     now = get_localized_now()
     horizon = now + timedelta(days=14)
+
+    # Query relevant records
     perm_up = Permission.query.options(joinedload(Permission.student)).filter(Permission.end_datetime >= now)
-    wl_candidates = WeekendLeave.query.options(joinedload(WeekendLeave.student)).filter(WeekendLeave.status == 'Aprobată')
+    wl_all = WeekendLeave.query.options(joinedload(WeekendLeave.student)).filter(WeekendLeave.status == 'Aprobată')
     serv_up = ServiceAssignment.query.options(joinedload(ServiceAssignment.student)).filter(ServiceAssignment.end_datetime >= now)
-    dl_all = DailyLeave.query.options(joinedload(DailyLeave.student))
+    dl_up = DailyLeave.query.options(joinedload(DailyLeave.student)).filter(DailyLeave.status == 'Aprobată')
+
     if scope_student_ids is not None:
         perm_up = perm_up.filter(Permission.student_id.in_(scope_student_ids))
-        wl_candidates = wl_candidates.filter(WeekendLeave.student_id.in_(scope_student_ids))
+        wl_all = wl_all.filter(WeekendLeave.student_id.in_(scope_student_ids))
         serv_up = serv_up.filter(ServiceAssignment.student_id.in_(scope_student_ids))
-        dl_all = dl_all.filter(DailyLeave.student_id.in_(scope_student_ids))
+        dl_up = dl_up.filter(DailyLeave.student_id.in_(scope_student_ids))
+
     perm_up = perm_up.order_by(Permission.start_datetime.asc()).limit(1000).all()
-    wl_candidates = wl_candidates.limit(1000).all()
+    wl_all = wl_all.limit(1000).all()
     serv_up = serv_up.order_by(ServiceAssignment.start_datetime.asc()).limit(1000).all()
-    dl_up = dl_all.all()
+    dl_up = dl_up.order_by(DailyLeave.leave_date.asc(), DailyLeave.start_time.asc()).limit(1000).all()
+
+    per_student = {}
 
     def add_evt(store, sid, label, start, end):
         start_aware = EUROPE_BUCHAREST.localize(start) if start.tzinfo is None else start.astimezone(EUROPE_BUCHAREST)
         end_aware = EUROPE_BUCHAREST.localize(end) if end.tzinfo is None else end.astimezone(EUROPE_BUCHAREST)
         store.setdefault(sid, []).append((start_aware, end_aware, label))
-    for p in perm_up: add_evt(per_student, p.student_id, f"Permisie ({p.status})", p.start_datetime, p.end_datetime)
-    for s in serv_up: add_evt(per_student, s.student_id, f"Serviciu ({s.service_type})", s.start_datetime, s.end_datetime)
+
+    # Add permissions
+    for p in perm_up:
+        add_evt(per_student, p.student_id, f"Permisie ({p.status})", p.start_datetime, p.end_datetime)
+
+    # Add services
+    for s in serv_up:
+        add_evt(per_student, s.student_id, f"Serviciu ({s.service_type})", s.start_datetime, s.end_datetime)
+
+    # Add approved weekend leaves
     for w in wl_all:
         for it in w.get_intervals():
-            if it['end'] >= now: # Only consider active/upcoming for conflicts
-                 add_evt(per_student, w.student_id, f"Weekend ({w.status})", it['start'], it['end'])
+            if it['end'] >= now:
+                add_evt(per_student, w.student_id, f"Weekend ({w.status})", it['start'], it['end'])
+
+    # Add daily leaves (use model properties for accurate intervals)
     for d in dl_up:
-        sd = datetime.combine(now.date(), d.start_time); ed = datetime.combine(now.date(), d.end_time)
-        sd_aware = EUROPE_BUCHAREST.localize(sd)
-        ed_aware = EUROPE_BUCHAREST.localize(ed)
-        add_evt(per_student, d.student_id, "Învoire Zilnică", sd_aware, ed_aware)
+        add_evt(per_student, d.student_id, "Învoire Zilnică", d.start_datetime, d.end_datetime)
+
+    # Compute conflicts
     conflicts = []
     for sid, events in per_student.items():
         ev = sorted(events, key=lambda t: t[0])
         for i in range(len(ev)):
             for j in range(i+1, len(ev)):
-                a_start, a_end, a_lbl = ev[i]; b_start, b_end, b_lbl = ev[j]
-                if a_end > b_start and a_start < b_end:
+                a_start, a_end, a_lbl = ev[i]
+                b_start, b_end, b_lbl = ev[j]
+                overlap_start = max(a_start, b_start)
+                overlap_end = min(a_end, b_end)
+                if a_end > b_start and a_start < b_end and overlap_start <= horizon:
                     st = db.session.get(Student, sid)
-                    conflicts.append(dict(student=student_name(st), a=a_lbl, b=b_lbl, start=max(a_start,b_start), end=min(a_end,b_end)))
-    conflicts.sort(key=lambda x: (x['student'], x['start']))
-    per_student = {}
-    for p in perm_up: add_evt(per_student, p.student_id, f"Permisie ({p.status})", p.start_datetime, p.end_datetime)
-    for s in serv_up: add_evt(per_student, s.student_id, f"Serviciu ({s.service_type})", s.start_datetime, s.end_datetime)
-    for w in wl_candidates:
-        for it in w.get_intervals():
-            add_evt(per_student, w.student_id, f"Weekend ({w.status})", it['start'], it['end'])
-    for d in dl_up:
-        sd = datetime.combine(now.date(), d.start_time); ed = datetime.combine(now.date(), d.end_time)
-        sd_aware = EUROPE_BUCHAREST.localize(sd)
-        ed_aware = EUROPE_BUCHAREST.localize(ed)
-        add_evt(per_student, d.student_id, "Învoire Zilnică", sd_aware, ed_aware)
-        for it in w.get_intervals():
-            add_evt(per_student, w.student_id, f"Weekend ({w.status})", it['start'], it['end'])
-    for d in dl_up:
-        sd = datetime.combine(now.date(), d.start_time); ed = datetime.combine(now.date(), d.end_time)
-        sd_aware = EUROPE_BUCHAREST.localize(sd)
-        ed_aware = EUROPE_BUCHAREST.localize(ed)
-        add_evt(per_student, d.student_id, "Învoire Zilnică", sd_aware, ed_aware)
-        for it in w.get_intervals():
-            add_evt(per_student, w.student_id, f"Weekend ({w.status})", it['start'], it['end'])
-    for d in dl_up:
-        sd = datetime.combine(now.date(), d.start_time); ed = datetime.combine(now.date(), d.end_time)
-        sd_aware = EUROPE_BUCHAREST.localize(sd)
-        ed_aware = EUROPE_BUCHAREST.localize(ed)
-        add_evt(per_student, d.student_id, "Învoire Zilnică", sd_aware, ed_aware)
-    conflicts = []
-    for sid, events in per_student.items():
-        ev = sorted(events, key=lambda t: t[0])
-        for i in range(len(ev)):
-            for j in range(i+1, len(ev)):
-                a_start, a_end, a_lbl = ev[i]; b_start, b_end, b_lbl = ev[j]
-                if a_end > b_start and a_start < b_end and max(a_start,b_start) <= horizon:
-                    st = db.session.get(Student, sid)
-                    conflicts.append(dict(student=st, a=a_lbl, b=b_lbl, start=max(a_start,b_start), end=min(a_end,b_end)))
+                    conflicts.append(dict(student=st, a=a_lbl, b=b_lbl, start=overlap_start, end=overlap_end))
+
     conflicts.sort(key=lambda x: (x['student'].nume if x['student'] else '', x['start']))
     return conflicts
 
@@ -8458,6 +8442,13 @@ def public_view_login():
         access_code = PublicViewCode.query.filter_by(code=code_to_check, is_active=True).first()
 
         if access_code and access_code.expires_at > now_utc:
+            # Consume the code on first use
+            access_code.is_active = False
+            try:
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                app.logger.error(f"PublicViewCode consume failed for code {access_code.code}: {e}")
             session['public_view_access'] = {
                 'scope_type': access_code.scope_type,
                 'scope_id': access_code.scope_id,
