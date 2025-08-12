@@ -563,17 +563,24 @@ def gradat_insights():
 
     upcoming = []
     for p in perm_up:
-        upcoming.append(dict(kind='Permisie', student=student_name(p.student), start=p.start_datetime, end=p.end_datetime, meta=p.status))
+        start_aware = EUROPE_BUCHAREST.localize(p.start_datetime) if p.start_datetime.tzinfo is None else p.start_datetime.astimezone(EUROPE_BUCHAREST)
+        end_aware = EUROPE_BUCHAREST.localize(p.end_datetime) if p.end_datetime.tzinfo is None else p.end_datetime.astimezone(EUROPE_BUCHAREST)
+        upcoming.append(dict(kind='Permisie', student=student_name(p.student), start=start_aware, end=end_aware, meta=p.status))
     for d in dl_up:
         start_dt = datetime.combine(now.date(), d.start_time)
         end_dt = datetime.combine(now.date(), d.end_time)
-        upcoming.append(dict(kind='Învoire Zilnică', student=student_name(d.student), start=start_dt, end=end_dt, meta=d.reason if hasattr(d,'reason') else ''))
+        start_aware = EUROPE_BUCHAREST.localize(start_dt)
+        end_aware = EUROPE_BUCHAREST.localize(end_dt)
+        upcoming.append(dict(kind='Învoire Zilnică', student=student_name(d.student), start=start_aware, end=end_aware, meta=d.reason if hasattr(d,'reason') else ''))
     for w in wl_all:
         for it in w.get_intervals():
+            # it['start'] and it['end'] already aware
             if it['end'] >= now:
                 upcoming.append(dict(kind='Învoire Weekend', student=student_name(w.student), start=it['start'], end=it['end'], meta=w.status))
     for s in serv_up:
-        upcoming.append(dict(kind='Serviciu', student=student_name(s.student), start=s.start_datetime, end=s.end_datetime, meta=s.service_type))
+        start_aware = EUROPE_BUCHAREST.localize(s.start_datetime) if s.start_datetime.tzinfo is None else s.start_datetime.astimezone(EUROPE_BUCHAREST)
+        end_aware = EUROPE_BUCHAREST.localize(s.end_datetime) if s.end_datetime.tzinfo is None else s.end_datetime.astimezone(EUROPE_BUCHAREST)
+        upcoming.append(dict(kind='Serviciu', student=student_name(s.student), start=start_aware, end=end_aware, meta=s.service_type))
 
     # Limit upcoming to next 7 days for view brevity
     upcoming = [u for u in upcoming if u['start'] <= horizon]
@@ -582,16 +589,32 @@ def gradat_insights():
     # Quick stats
     stats = {
         'students_count': len(student_ids),
-        'permissions_active': sum(1 for p in perm_up if p.start_datetime <= now <= p.end_datetime),
-        'services_active': sum(1 for s in serv_up if s.start_datetime <= now <= s.end_datetime),
+        'permissions_active': sum(
+            1 for p in perm_up
+            if ((EUROPE_BUCHAREST.localize(p.start_datetime) if p.start_datetime.tzinfo is None else p.start_datetime.astimezone(EUROPE_BUCHAREST))
+                <= now <=
+                (EUROPE_BUCHAREST.localize(p.end_datetime) if p.end_datetime.tzinfo is None else p.end_datetime.astimezone(EUROPE_BUCHAREST)))
+        ),
+        'services_active': sum(
+            1 for s in serv_up
+            if ((EUROPE_BUCHAREST.localize(s.start_datetime) if s.start_datetime.tzinfo is None else s.start_datetime.astimezone(EUROPE_BUCHAREST))
+                <= now <=
+                (EUROPE_BUCHAREST.localize(s.end_datetime) if s.end_datetime.tzinfo is None else s.end_datetime.astimezone(EUROPE_BUCHAREST)))
+        ),
         'leaves_today': sum(1 for d in dl_up if d.start_time <= now.time() <= d.end_time),
-        'weekend_leaves_upcoming': sum(1 for w in wl_all for it in w.get_intervals() if it['start'].date() <= horizon.date() and it['end'] >= now),
+        'weekend_leaves_upcoming': sum(
+            1 for w in wl_all for it in w.get_intervals()
+            if it['start'].date() <= horizon.date() and it['end'] >= now
+        ),
     }
 
     # Conflict detection (overlaps per student across all types)
     per_student = {}
     def add_evt(sid, label, start, end):
-        per_student.setdefault(sid, []).append((start, end, label))
+        # Ensure all events are aware
+        start_aware = EUROPE_BUCHAREST.localize(start) if start.tzinfo is None else start.astimezone(EUROPE_BUCHAREST)
+        end_aware = EUROPE_BUCHAREST.localize(end) if end.tzinfo is None else end.astimezone(EUROPE_BUCHAREST)
+        per_student.setdefault(sid, []).append((start_aware, end_aware, label))
 
     for p in perm_up:
         add_evt(p.student_id, f"Permisie ({p.status})", p.start_datetime, p.end_datetime)
@@ -604,7 +627,9 @@ def gradat_insights():
     for d in dl_up:
         sd = datetime.combine(now.date(), d.start_time)
         ed = datetime.combine(now.date(), d.end_time)
-        add_evt(d.student_id, "Învoire Zilnică", sd, ed)
+        sd_aware = EUROPE_BUCHAREST.localize(sd)
+        ed_aware = EUROPE_BUCHAREST.localize(ed)
+        add_evt(d.student_id, "Învoire Zilnică", sd_aware, ed_aware)
 
     conflicts = []
     for sid, events in per_student.items():
@@ -652,26 +677,45 @@ def admin_insights():
 
     upcoming = []
     for p in perm_up:
-        upcoming.append(dict(kind='Permisie', student=student_name(p.student), start=p.start_datetime, end=p.end_datetime, meta=p.status))
+        start_aware = EUROPE_BUCHAREST.localize(p.start_datetime) if p.start_datetime.tzinfo is None else p.start_datetime.astimezone(EUROPE_BUCHAREST)
+        end_aware = EUROPE_BUCHAREST.localize(p.end_datetime) if p.end_datetime.tzinfo is None else p.end_datetime.astimezone(EUROPE_BUCHAREST)
+        upcoming.append(dict(kind='Permisie', student=student_name(p.student), start=start_aware, end=end_aware, meta=p.status))
     for d in dl_up:
         # For admin, assume today context for daily
         sd = datetime.combine(now.date(), d.start_time)
         ed = datetime.combine(now.date(), d.end_time)
-        upcoming.append(dict(kind='Învoire Zilnică', student=student_name(d.student), start=sd, end=ed, meta=getattr(d,'reason', '')))
+        sd_aware = EUROPE_BUCHAREST.localize(sd)
+        ed_aware = EUROPE_BUCHAREST.localize(ed)
+        upcoming.append(dict(kind='Învoire Zilnică', student=student_name(d.student), start=sd_aware, end=ed_aware, meta=getattr(d,'reason', '')))
     for w in wl_all:
         for it in w.get_intervals():
             if it['end'] >= now:
                 upcoming.append(dict(kind='Învoire Weekend', student=student_name(w.student), start=it['start'], end=it['end'], meta=w.status))
     for s in serv_up:
-        upcoming.append(dict(kind='Serviciu', student=student_name(s.student), start=s.start_datetime, end=s.end_datetime, meta=s.service_type))
+        start_aware = EUROPE_BUCHAREST.localize(s.start_datetime) if s.start_datetime.tzinfo is None else s.start_datetime.astimezone(EUROPE_BUCHAREST)
+        end_aware = EUROPE_BUCHAREST.localize(s.end_datetime) if s.end_datetime.tzinfo is None else s.end_datetime.astimezone(EUROPE_BUCHAREST)
+        upcoming.append(dict(kind='Serviciu', student=student_name(s.student), start=start_aware, end=end_aware, meta=s.service_type))
     upcoming = [u for u in upcoming if u['start'] <= horizon]
     upcoming.sort(key=lambda x: (x['start'], x['student']))
 
     stats = {
-        'permissions_active': sum(1 for p in perm_up if p.start_datetime <= now <= p.end_datetime),
-        'services_active': sum(1 for s in serv_up if s.start_datetime <= now <= s.end_datetime),
+        'permissions_active': sum(
+            1 for p in perm_up
+            if ((EUROPE_BUCHAREST.localize(p.start_datetime) if p.start_datetime.tzinfo is None else p.start_datetime.astimezone(EUROPE_BUCHAREST))
+                <= now <=
+                (EUROPE_BUCHAREST.localize(p.end_datetime) if p.end_datetime.tzinfo is None else p.end_datetime.astimezone(EUROPE_BUCHAREST)))
+        ),
+        'services_active': sum(
+            1 for s in serv_up
+            if ((EUROPE_BUCHAREST.localize(s.start_datetime) if s.start_datetime.tzinfo is None else s.start_datetime.astimezone(EUROPE_BUCHAREST))
+                <= now <=
+                (EUROPE_BUCHAREST.localize(s.end_datetime) if s.end_datetime.tzinfo is None else s.end_datetime.astimezone(EUROPE_BUCHAREST)))
+        ),
         'leaves_today': sum(1 for d in dl_up if d.start_time <= now.time() <= d.end_time),
-        'weekend_leaves_upcoming': sum(1 for w in wl_all for it in w.get_intervals() if it['start'].date() <= horizon.date() and it['end'] >= now),
+        'weekend_leaves_upcoming': sum(
+            1 for w in wl_all for it in w.get_intervals()
+            if it['start'].date() <= horizon.date() and it['end'] >= now
+        ),
     }
 
     # Conflicts as above (limited)
@@ -685,7 +729,9 @@ def admin_insights():
                  add_evt(w.student_id, f"Weekend ({w.status})", it['start'], it['end'])
     for d in dl_up:
         sd = datetime.combine(now.date(), d.start_time); ed = datetime.combine(now.date(), d.end_time)
-        add_evt(d.student_id, "Învoire Zilnică", sd, ed)
+        sd_aware = EUROPE_BUCHAREST.localize(sd)
+        ed_aware = EUROPE_BUCHAREST.localize(ed)
+        add_evt(d.student_id, "Învoire Zilnică", sd_aware, ed_aware)
     conflicts = []
     for sid, events in per_student.items():
         ev = sorted(events, key=lambda t: t[0])
@@ -812,7 +858,31 @@ def _collect_conflicts(scope_student_ids=None):
     serv_up = serv_up.order_by(ServiceAssignment.start_datetime.asc()).limit(1000).all()
     dl_up = dl_all.all()
 
-    def add_evt(store, sid, label, start, end): store.setdefault(sid, []).append((start, end, label))
+    def add_evt(store, sid, label, start, end):
+        start_aware = EUROPE_BUCHAREST.localize(start) if start.tzinfo is None else start.astimezone(EUROPE_BUCHAREST)
+        end_aware = EUROPE_BUCHAREST.localize(end) if end.tzinfo is None else end.astimezone(EUROPE_BUCHAREST)
+        store.setdefault(sid, []).append((start_aware, end_aware, label))
+    for p in perm_up: add_evt(per_student, p.student_id, f"Permisie ({p.status})", p.start_datetime, p.end_datetime)
+    for s in serv_up: add_evt(per_student, s.student_id, f"Serviciu ({s.service_type})", s.start_datetime, s.end_datetime)
+    for w in wl_all:
+        for it in w.get_intervals():
+            if it['end'] >= now: # Only consider active/upcoming for conflicts
+                 add_evt(per_student, w.student_id, f"Weekend ({w.status})", it['start'], it['end'])
+    for d in dl_up:
+        sd = datetime.combine(now.date(), d.start_time); ed = datetime.combine(now.date(), d.end_time)
+        sd_aware = EUROPE_BUCHAREST.localize(sd)
+        ed_aware = EUROPE_BUCHAREST.localize(ed)
+        add_evt(per_student, d.student_id, "Învoire Zilnică", sd_aware, ed_aware)
+    conflicts = []
+    for sid, events in per_student.items():
+        ev = sorted(events, key=lambda t: t[0])
+        for i in range(len(ev)):
+            for j in range(i+1, len(ev)):
+                a_start, a_end, a_lbl = ev[i]; b_start, b_end, b_lbl = ev[j]
+                if a_end > b_start and a_start < b_end:
+                    st = db.session.get(Student, sid)
+                    conflicts.append(dict(student=student_name(st), a=a_lbl, b=b_lbl, start=max(a_start,b_start), end=min(a_end,b_end)))
+    conflicts.sort(key=lambda x: (x['student'], x['start']))
     per_student = {}
     for p in perm_up: add_evt(per_student, p.student_id, f"Permisie ({p.status})", p.start_datetime, p.end_datetime)
     for s in serv_up: add_evt(per_student, s.student_id, f"Serviciu ({s.service_type})", s.start_datetime, s.end_datetime)
@@ -821,7 +891,23 @@ def _collect_conflicts(scope_student_ids=None):
             add_evt(per_student, w.student_id, f"Weekend ({w.status})", it['start'], it['end'])
     for d in dl_up:
         sd = datetime.combine(now.date(), d.start_time); ed = datetime.combine(now.date(), d.end_time)
-        add_evt(per_student, d.student_id, "Învoire Zilnică", sd, ed)
+        sd_aware = EUROPE_BUCHAREST.localize(sd)
+        ed_aware = EUROPE_BUCHAREST.localize(ed)
+        add_evt(per_student, d.student_id, "Învoire Zilnică", sd_aware, ed_aware)
+        for it in w.get_intervals():
+            add_evt(per_student, w.student_id, f"Weekend ({w.status})", it['start'], it['end'])
+    for d in dl_up:
+        sd = datetime.combine(now.date(), d.start_time); ed = datetime.combine(now.date(), d.end_time)
+        sd_aware = EUROPE_BUCHAREST.localize(sd)
+        ed_aware = EUROPE_BUCHAREST.localize(ed)
+        add_evt(per_student, d.student_id, "Învoire Zilnică", sd_aware, ed_aware)
+        for it in w.get_intervals():
+            add_evt(per_student, w.student_id, f"Weekend ({w.status})", it['start'], it['end'])
+    for d in dl_up:
+        sd = datetime.combine(now.date(), d.start_time); ed = datetime.combine(now.date(), d.end_time)
+        sd_aware = EUROPE_BUCHAREST.localize(sd)
+        ed_aware = EUROPE_BUCHAREST.localize(ed)
+        add_evt(per_student, d.student_id, "Învoire Zilnică", sd_aware, ed_aware)
     conflicts = []
     for sid, events in per_student.items():
         ev = sorted(events, key=lambda t: t[0])
@@ -6475,6 +6561,7 @@ def gradat_invoiri_istoric():
         daily_leaves_query = daily_leaves_query.filter(DailyLeave.leave_date >= start_date, DailyLeave.leave_date <= end_date)
 
     for dl in daily_leaves_query.order_by(DailyLeave.leave_date.desc(), DailyLeave.start_time.desc()).all():
+        # These are times, not datetimes, but if comparison is made elsewhere, ensure awareness.
         leaves_history.append({
             "student_name": f"{dl.student.grad_militar} {dl.student.nume} {dl.student.prenume}",
             "tip": "Zilnică",
@@ -6502,15 +6589,14 @@ def gradat_invoiri_istoric():
         else: # start_date și end_date sunt definite
             for interval in wl.get_intervals(): # get_intervals returnează datetimes aware
                 # Convertim start_date/end_date (naive date) la datetime naive pentru comparație corectă cu datele intervalelor
-                filter_start_dt_naive = datetime.combine(start_date, time.min)
-                filter_end_dt_naive = datetime.combine(end_date, time.max)
+                filter_start_dt_aware = EUROPE_BUCHAREST.localize(datetime.combine(start_date, time.min))
+                filter_end_dt_aware = EUROPE_BUCHAREST.localize(datetime.combine(end_date, time.max))
 
-                # Convertim interval.start/end (aware) la naive în același fus orar (presupunând că sunt Europe/Bucharest)
-                interval_start_naive = interval['start'].astimezone(EUROPE_BUCHAREST).replace(tzinfo=None)
-                interval_end_naive = interval['end'].astimezone(EUROPE_BUCHAREST).replace(tzinfo=None)
+                interval_start_aware = interval['start'].astimezone(EUROPE_BUCHAREST)
+                interval_end_aware = interval['end'].astimezone(EUROPE_BUCHAREST)
 
                 # Verificare intersecție intervale: (StartA <= EndB) and (EndA >= StartB)
-                if interval_start_naive <= filter_end_dt_naive and interval_end_naive >= filter_start_dt_naive:
+                if interval_start_aware <= filter_end_dt_aware and interval_end_aware >= filter_start_dt_aware:
                     relevant_for_period = True
                     break
 
