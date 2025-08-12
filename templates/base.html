@@ -28,34 +28,17 @@
     <title>{% block title %}Administrare Studenți{% endblock %}</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
     <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
     <!-- Font Awesome CSS -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" crossorigin="anonymous">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
     <!-- App Theme Styles -->
     {% if app.config.DEBUG %}
         <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% else %}
         <link rel="stylesheet" href="{{ url_for('static', filename='css/style.min.css') }}">
     {% endif %}
-    <style>
-        .unap-logo-text {
-            font-weight: 600; /* Ajustat font-weight */
-            font-size: 1.25rem; /* Redus font-size pentru compactare */
-            background: linear-gradient(45deg, #0033A0, #00BFFF);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            text-fill-color: transparent;
-            padding: 1px 0; /* Redus padding */
-        }
-        .navbar-brand.unap-brand {
-            padding-top: 0.2rem; /* Redus padding-top pentru compactare */
-            padding-bottom: 0.2rem; /* Redus padding-bottom pentru compactare */
-        }
-        /* Stilul pentru .navbar-brand img.logo-img a fost mutat în style.css */
-        .navbar { margin-bottom: 0.5rem !important; } /* Redus margin-bottom pentru navbar */
-        .footer { margin-top: 0.5rem !important; } /* Redus margin-top pentru footer */
-    </style>
 </head>
 <body>
     <!-- Loading Spinner Overlay -->
@@ -69,7 +52,7 @@
     <nav class="navbar navbar-expand-lg navbar-light bg-light sticky-top"> <!-- Navbar styled via CSS variables; dark mode handled in CSS -->
         <div class="container-fluid">
             <a class="navbar-brand unap-brand" href="{{ url_for('home') }}" style="display: flex; align-items: center;">
-                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="UNAP Logo" class="logo-img">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="UNAP Logo" class="logo-img" loading="lazy">
                 {# <span class="unap-logo-text">UNAP</span> #}
                 <span class="badge ms-2" style="padding: 0.2em 0.4em; font-size: 0.55em; color: white; background-image: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);">BETA</span>
             </a>
@@ -169,7 +152,7 @@
     </nav>
 
     {% if current_user.is_authenticated and current_user.role == 'admin' %}
-    <div class="container-fluid py-1" style="position:sticky;top:56px;z-index:1029;">
+    <div id="admin-debug-bar" class="container-fluid py-1">
         <div class="d-flex flex-wrap gap-2 align-items-center bg-light border rounded px-2 py-1 shadow-sm">
             <span class="text-muted small">Debug (admin):</span>
             <button class="btn btn-sm btn-outline-secondary no-loader" onclick="(function(){localStorage.clear();sessionStorage.clear();alert('Local storage curățat');})()">Clear Storage</button>
@@ -182,16 +165,7 @@
     {% endif %}
 
     <div class="container mt-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+        {% include '_flash_messages.html' %}
 
         <div class="content-wrapper-animated"> <!-- Added wrapper for animation -->
             {% block content %}
@@ -206,7 +180,7 @@
     </footer>
 
     <!-- Bootstrap JS Bundle (Popper.js inclus) -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
     {% if app.config.DEBUG %}
         <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
     {% else %}
