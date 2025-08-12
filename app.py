@@ -8442,6 +8442,13 @@ def public_view_login():
         access_code = PublicViewCode.query.filter_by(code=code_to_check, is_active=True).first()
 
         if access_code and access_code.expires_at > now_utc:
+            # Consume the code on first use
+            access_code.is_active = False
+            try:
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                app.logger.error(f"PublicViewCode consume failed for code {access_code.code}: {e}")
             session['public_view_access'] = {
                 'scope_type': access_code.scope_type,
                 'scope_id': access_code.scope_id,
