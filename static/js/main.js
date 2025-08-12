@@ -63,12 +63,322 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Hide loader if the user navigates back in history
     window.addEventListener('pageshow', function(event) {
-        // The pageshow event is fired when a session history entry is traversed.
-        // If the page is loaded from the cache (bfcache), we hide the loader.
         if (event.persisted) {
             hideLoader();
         }
     });
+
+    // --- UNIVERSAL TABLE COPY/CONTEXT MENU/COACHMARK ---
+    // --- Utility: Copy Text and Show Bubble ---
+    function copyText(str) {
+        navigator.clipboard.writeText(str).catch(()=>{});
+    }
+    function showCopyBubble(targetEl, text = 'Copiat') {
+        let bubble = document.createElement('div');
+        bubble.className = 'copy-bubble';
+        bubble.innerText = text;
+        document.body.appendChild(bubble);
+        // Position: above center of targetEl
+        const rect = targetEl.getBoundingClientRect();
+        bubble.style.left = (rect.left + rect.width/2 + window.scrollX) + 'px';
+        bubble.style.top = (rect.top + window.scrollY - 4) + 'px';
+        setTimeout(()=>bubble.classList.add('show'),10);
+        setTimeout(()=>{
+            bubble.classList.remove('show');
+            setTimeout(()=>bubble.remove(), 180);
+        }, 1200);
+    }
+    // --- Utility: Get Cell Text (use data-value if present) ---
+    function getCellText(cell) {
+        return (cell.getAttribute('data-value') || cell.innerText || '').replace(/\s+/g, ' ').trim();
+    }
+    function getRowText(tr) {
+        return Array.from(tr.querySelectorAll('td')).map(getCellText).join('\t');
+    }
+    function getVisibleRowText(tr) {
+        // Only visible cells (display not none)
+        return Array.from(tr.querySelectorAll('td')).filter(td => td.offsetParent !== null && td.style.display !== 'none').map(getCellText).join('\t');
+    }
+    // --- Custom Context Menu Singleton ---
+    let contextMenuEl = null;
+    function closeContextMenu() {
+        if (contextMenuEl) { contextMenuEl.remove(); contextMenuEl = null; }
+        document.removeEventListener('mousedown', closeContextMenu, true);
+        document.removeEventListener('scroll', closeContextMenu, true);
+        document.removeEventListener('keydown', contextMenuKeyHandler, true);
+    }
+    function contextMenuKeyHandler(e) {
+        if (e.key === 'Escape') closeContextMenu();
+    }
+    function showContextMenu(ev, cell) {
+        closeContextMenu();
+        contextMenuEl = document.createElement('div');
+        contextMenuEl.className = 'context-menu';
+        contextMenuEl.innerHTML = `
+            <div class="item" data-act="cell">Copiază celula</div>
+            <div class="item" data-act="row">Copiază rândul</div>
+        `;
+        document.body.appendChild(contextMenuEl);
+        // Position menu (avoid viewport overflow)
+        let x = ev.clientX, y = ev.clientY;
+        let menuW = 180, menuH = 80;
+        if (x + menuW > window.innerWidth) x = window.innerWidth - menuW - 6;
+        if (y + menuH > window.innerHeight) y = window.innerHeight - menuH - 6;
+        contextMenuEl.style.left = x + 'px';
+        contextMenuEl.style.top = y + 'px';
+        contextMenuEl.querySelector('[data-act=cell]').onclick = function() {
+            copyText(getCellText(cell));
+            showCopyBubble(cell);
+            closeContextMenu();
+        };
+        contextMenuEl.querySelector('[data-act=row]').onclick = function() {
+            copyText(getVisibleRowText(cell.parentElement));
+            showCopyBubble(cell.parentElement);
+            closeContextMenu();
+        };
+        setTimeout(()=>{
+            document.addEventListener('mousedown', closeContextMenu, true);
+            document.addEventListener('scroll', closeContextMenu, true);
+            document.addEventListener('keydown', contextMenuKeyHandler, true);
+        },10);
+    }
+    // --- Touch Long-Press Copy ---
+    function setupCellCopyHandlers(td) {
+        if (td.hasAttribute('data-copy-handler')) return;
+        td.setAttribute('data-copy-handler','1');
+        // Double-click to copy
+        td.addEventListener('dblclick', function(e) {
+            copyText(getCellText(td));
+            showCopyBubble(td);
+            e.preventDefault();
+        });
+        // Right-click
+        td.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            showContextMenu(e, td);
+        });
+        // Long-press
+        let pressTimer = null;
+        td.addEventListener('touchstart', function(e) {
+            if (pressTimer) clearTimeout(pressTimer);
+            pressTimer = setTimeout(()=>{
+                copyText(getCellText(td));
+                showCopyBubble(td);
+            }, 600);
+        }, {passive:true});
+        td.addEventListener('touchend', function(e) { if (pressTimer) clearTimeout(pressTimer); });
+        td.addEventListener('touchcancel', function(e) { if (pressTimer) clearTimeout(pressTimer); });
+    }
+    // --- Responsive Wrapper + Sticky Headers ---
+    function ensureResponsiveTables() {
+        document.querySelectorAll('table.table').forEach(table=>{
+            if (!table.closest('.table-responsive')) {
+                let wrap = document.createElement('div');
+                wrap.className = 'table-responsive';
+                table.parentNode.insertBefore(wrap, table);
+                wrap.appendChild(table);
+            }
+            table.classList.add('table-sticky-header');
+        });
+    }
+    ensureResponsiveTables();
+    // --- Enhance All Table Cells for Copy ---
+    function enhanceTableCells() {
+        document.querySelectorAll('table.table tbody td').forEach(setupCellCopyHandlers);
+    }
+    // --- Coachmark for Copy ---
+    function showCopyCoachmark() {
+        if (localStorage.getItem('coach:copy') === '1') return;
+        const firstTable = document.querySelector('.table');
+        if (!firstTable) return;
+        let coach = document.createElement('div');
+        coach.className = 'coachmark-copy';
+        coach.innerHTML = `<span><i class="fas fa-mouse-pointer"></i> Dublu-click pentru a copia celula. Click dreapta pentru opțiuni.</span><button class="close" tabindex="0">&times;</button>`;
+        let container = firstTable.closest('.table-responsive')?.parentElement || firstTable.parentElement;
+        container.insertBefore(coach, firstTable.closest('.table-responsive') || firstTable);
+        coach.querySelector('.close').onclick = () => { coach.remove(); localStorage.setItem('coach:copy','1'); };
+    }
+
+    // ---- Table tools: Quick filter, Column visibility, Density toggle ----
+    function enhanceTable(table) {
+        const thead = table.querySelector('thead');
+        const tbody = table.querySelector('tbody');
+        if (!thead || !tbody) return;
+
+        // Create tools container
+        const tools = document.createElement('div');
+        tools.className = 'table-tools d-flex flex-wrap align-items-center gap-2 mb-2';
+
+        // Quick filter input
+        const filterInput = document.createElement('input');
+        filterInput.className = 'form-control form-control-sm table-filter-input';
+        filterInput.type = 'search';
+        filterInput.placeholder = 'Filtrează rânduri (Shift+F)';
+        filterInput.autocomplete = 'off';
+        tools.appendChild(filterInput);
+
+        // Density toggle
+        const densityBtn = document.createElement('button');
+        densityBtn.className = 'btn btn-outline-secondary btn-sm';
+        densityBtn.type = 'button';
+        densityBtn.title = 'Comută densitatea tabelului';
+        densityBtn.innerHTML = '<i class="fas fa-compress-arrows-alt"></i>';
+        densityBtn.addEventListener('click', () => {
+            table.classList.toggle('table-compact');
+        });
+        tools.appendChild(densityBtn);
+
+        // Column visibility dropdown
+        const dropdown = document.createElement('div');
+        dropdown.className = 'dropdown d-inline-block';
+        dropdown.innerHTML = '<button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">Coloane</button><div class="dropdown-menu p-2 columns-menu" style="min-width: 220px;"></div>';
+        const menu = dropdown.querySelector('.columns-menu');
+        tools.appendChild(dropdown);
+
+        // Insert tools before table
+        const wrap = table.closest('.table-responsive');
+        if (wrap && wrap.parentElement) wrap.parentElement.insertBefore(tools, wrap);
+        else table.parentElement.insertBefore(tools, table);
+
+        const ths = Array.from(thead.querySelectorAll('th'));
+        const storageKey = 'columns:' + location.pathname;
+        let visible = ths.map(() => true);
+        try { const saved = JSON.parse(localStorage.getItem(storageKey) || 'null'); if (Array.isArray(saved) && saved.length === visible.length) visible = saved; } catch (e) {}
+
+        function applyColumnVisibility() {
+            Array.from(table.querySelectorAll('tr')).forEach(tr => {
+                ths.forEach((_, idx) => {
+                    const cell = tr.children[idx];
+                    if (cell) cell.style.display = (visible[idx] ? '' : 'none');
+                });
+            });
+        }
+        function saveVisibility() {
+            try { localStorage.setItem(storageKey, JSON.stringify(visible)); } catch (e) {}
+        }
+
+        // Build menu
+        ths.forEach((th, idx) => {
+            const label = document.createElement('label');
+            label.className = 'dropdown-item d-flex align-items-center gap-2';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'form-check-input';
+            cb.checked = visible[idx];
+            cb.addEventListener('change', () => { visible[idx] = cb.checked; applyColumnVisibility(); saveVisibility(); });
+            label.appendChild(cb);
+            const span = document.createElement('span');
+            span.textContent = (th.innerText || th.textContent || `Col ${idx+1}`).trim() || `Col ${idx+1}`;
+            label.appendChild(span);
+            menu.appendChild(label);
+        });
+        applyColumnVisibility();
+
+        // Quick filter behavior
+        function filterRows() {
+            const q = filterInput.value.trim().toLowerCase();
+            const trs = Array.from(tbody.querySelectorAll('tr'));
+            if (!q) { trs.forEach(tr => tr.style.display = ''); return; }
+            trs.forEach(tr => {
+                const text = (tr.innerText || '').toLowerCase();
+                tr.style.display = text.includes(q) ? '' : 'none';
+            });
+        }
+        filterInput.addEventListener('input', filterRows);
+        document.addEventListener('keydown', (e) => { if (e.shiftKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'f') { filterInput.focus(); e.preventDefault(); }});
+
+        // Add "Copiază tabelul" button
+        const copyTableBtn = document.createElement('button');
+        copyTableBtn.className = 'btn btn-outline-secondary btn-sm';
+        copyTableBtn.type = 'button';
+        copyTableBtn.title = 'Copiază tabelul vizibil';
+        copyTableBtn.innerHTML = '<i class="fas fa-copy"></i> Copiază tabelul';
+        copyTableBtn.addEventListener('click', () => {
+            // Compose visible headers and rows as TSV
+            let out = [];
+            // Only visible th
+            let head = [];
+            ths.forEach((th, idx) => {
+                if (th.offsetParent !== null && th.style.display !== 'none' && !/ac.tiuni/i.test(th.innerText)) // skip "Acțiuni"
+                    head.push((th.innerText||'').trim());
+            });
+            out.push(head.join('\t'));
+            Array.from(tbody.querySelectorAll('tr')).forEach(tr => {
+                if (tr.style.display === 'none') return;
+                let row = [];
+                Array.from(tr.children).forEach((td, idx) => {
+                    if (td.offsetParent !== null && td.style.display !== 'none')
+                        row.push(getCellText(td));
+                });
+                if (row.length) out.push(row.join('\t'));
+            });
+            copyText(out.join('\n'));
+            showCopyBubble(copyTableBtn, 'Tabel copiat');
+        });
+        tools.appendChild(copyTableBtn);
+
+    }
+    document.querySelectorAll('table.table').forEach(enhanceTable);
+
+    // Enhance all table cells for copy/cmenu/long-press
+    enhanceTableCells();
+
+    // Show coachmark if needed
+    showCopyCoachmark();
+
+    // --- Sticky headers for all tables (add .table-sticky-header class above) ---
+    // (already handled in ensureResponsiveTables above)
+
+    // ---- Floating Utilities: Print ----
+    function hasTableOnPage() {
+        return document.querySelector('.table') !== null;
+    }
+
+    function createFloatingActions() {
+        if (!hasTableOnPage()) return;
+        const container = document.createElement('div');
+        container.className = 'fab-container';
+
+        const printBtn = document.createElement('button');
+        printBtn.className = 'btn btn-secondary fab-button no-loader';
+        printBtn.type = 'button';
+        printBtn.title = 'Printează pagina (Shift+P)';
+        printBtn.innerHTML = '<i class="fas fa-print"></i>';
+        printBtn.addEventListener('click', () => window.print());
+
+        const topBtn = document.createElement('button');
+        topBtn.className = 'btn btn-secondary fab-button no-loader';
+        topBtn.type = 'button';
+        topBtn.title = 'Mergi sus (Shift+T)';
+        topBtn.innerHTML = '<i class="fas fa-arrow-up"></i>';
+        topBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+        container.appendChild(printBtn);
+        container.appendChild(topBtn);
+        document.body.appendChild(container);
+    }
+
+    createFloatingActions();
+
+    // ---- Keyboard Shortcuts ----
+    document.addEventListener('keydown', (e) => {
+        if (e.shiftKey && !e.ctrlKey && !e.altKey) {
+            if (e.key.toLowerCase() === 'd') {
+                // Toggle theme
+                const toggleButton = document.getElementById('darkModeToggle');
+                if (toggleButton) toggleButton.click();
+            } else if (e.key.toLowerCase() === 'p') {
+                // Print
+                window.print();
+            } else if (e.key.toLowerCase() === 't') {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+    });
+
+    // ... (rest of the file remains unchanged, e.g. form helpers, PWA, command palette, etc.) ...
+
+});
 
 
     // Dark Mode Toggle Functionality
