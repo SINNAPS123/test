@@ -45,6 +45,15 @@
                                        value="{{ form_data.end_time or '' }}" required>
                             </div>
                         </div>
+                        <!-- Quick Hour Buttons -->
+                        <div class="mb-2">
+                          <label class="form-label">Ora Rapidă:</label>
+                          <div class="btn-group btn-group-sm">
+                            <button type="button" class="btn btn-outline-secondary quick-hour" data-hour="07:00">07:00</button>
+                            <button type="button" class="btn btn-outline-secondary quick-hour" data-hour="15:00">15:00</button>
+                            <button type="button" class="btn btn-outline-secondary quick-hour" data-hour="22:00">22:00</button>
+                          </div>
+                        </div>
                         <small class="form-text text-muted d-block mb-3">
                             Intervale permise: <strong>07:00 - 14:20</strong> (în timpul programului) sau <strong>22:00 - 07:00</strong> (în afara programului, poate trece în ziua următoare).
                         </small>
@@ -76,4 +85,16 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('.quick-hour').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    let hour=btn.dataset.hour;
+    document.getElementById('start_time').value=hour;
+    document.getElementById('end_time').value='';
+  });
+});
+</script>
 {% endblock %}
