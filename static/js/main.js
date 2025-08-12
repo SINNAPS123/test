@@ -1,4 +1,4 @@
-// Main JS for GradatFinal Application - Genie Modernized
+// Genie Modernized Main JS with Legacy Modules Restored (no selection/CSV)
 document.addEventListener('DOMContentLoaded', function () {
     // === Loader Overlay ===
     const loadingOverlay = document.getElementById('loading-overlay');
@@ -260,11 +260,9 @@ document.addEventListener('DOMContentLoaded', function () {
     ensureResponsiveTables();
 
     // === Universal Copy Features ===
-    // --- Helper: Visible row text (respects column visibility) ---
     function getVisibleRowText(tr) {
         return Array.from(tr.querySelectorAll('td')).filter(td => td.offsetParent !== null && td.style.display !== 'none').map(getCellText).join('\t');
     }
-    // --- In-place bubble ---
     function showCopyBubble(targetEl, text = 'Copiat') {
         let bubble = document.createElement('div');
         bubble.className = 'copy-bubble';
@@ -276,7 +274,6 @@ document.addEventListener('DOMContentLoaded', function () {
         setTimeout(() => bubble.classList.add('show'), 10);
         setTimeout(() => { bubble.classList.remove('show'); setTimeout(() => bubble.remove(), 180); }, 1200);
     }
-    // --- Custom context menu (singleton) ---
     let contextMenuEl = null;
     function closeContextMenu() {
         if (contextMenuEl) { contextMenuEl.remove(); contextMenuEl = null; }
@@ -316,7 +313,6 @@ document.addEventListener('DOMContentLoaded', function () {
             document.addEventListener('keydown', contextMenuKeyHandler, true);
         }, 10);
     }
-    // --- Attach copy handlers to all tds ---
     function setupCellCopyHandlers(td) {
         if (td.hasAttribute('data-copy-handler')) return;
         td.setAttribute('data-copy-handler', '1');
@@ -422,7 +418,6 @@ document.addEventListener('DOMContentLoaded', function () {
         copyTableBtn.innerHTML = '<i class="fas fa-copy"></i> Copiază tabelul';
         copyTableBtn.addEventListener('click', () => {
             let out = [];
-            // Visible ths except "Acțiuni"
             let head = [];
             ths.forEach((th, idx) => {
                 if (th.offsetParent !== null && th.style.display !== 'none' && !/ac.tiuni/i.test(th.innerText))
@@ -465,56 +460,177 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     showCopyCoachmark();
 
-    // === Remaining features (PWA, cmd palette, reminders, etc.) ===
-    // ---- PWA: Register Service Worker ----
-    (function swRegister() {
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/static/sw.js').catch(() => { });
+    // === RESTORED MODULES BELOW (NO SELECTION/CSV) ===
+
+    // 1. Favorites Module
+    (function favorites(){
+        const KEY='favorites:links';
+        const current = { href: location.pathname + location.search, title: (document.title || location.pathname).replace(/\s*[-|].*$/,'').trim() };
+        function get(){ try { return JSON.parse(localStorage.getItem(KEY)||'[]'); } catch(_){ return []; } }
+        function set(v){ try { localStorage.setItem(KEY, JSON.stringify(v)); } catch(_){ } }
+        function isFav(favs){ return !!favs.find(x=>x.href===current.href); }
+        const favToggle = document.createElement('button');
+        favToggle.className='btn btn-outline-secondary btn-sm no-loader ms-2';
+        favToggle.title='Adaugă/șterge din Favorite';
+        favToggle.innerHTML='<i class="far fa-star"></i>';
+        const nav = document.querySelector('#navbarNav .navbar-nav');
+        if (nav) { const li=document.createElement('li'); li.className='nav-item d-flex align-items-center'; li.appendChild(favToggle); nav.appendChild(li);}
+        function refreshIcon(){ const favs=get(); favToggle.innerHTML = isFav(favs) ? '<i class="fas fa-star"></i>' : '<i class="far fa-star"></i>'; }
+        favToggle.addEventListener('click',()=>{ const favs=get(); const i=favs.findIndex(x=>x.href===current.href); if(i>=0) favs.splice(i,1); else favs.unshift(current); set(favs.slice(0,15)); refreshIcon(); renderMenu(); });
+        refreshIcon();
+        function renderMenu(){
+            const dd = document.querySelector('#favoritesDropdown'); if (!dd) return;
+            const ul = dd.querySelector('.dropdown-menu');
+            const favs = get();
+            dd.style.display = favs.length ? '' : 'none';
+            ul.innerHTML = '<li class="dropdown-header">Favorite</li><li><hr class="dropdown-divider"></li>' + (favs.map(x=>`<li><a class="dropdown-item" href="${x.href}"><i class=\"fas fa-star text-warning\"></i> ${x.title}</a></li>`).join('') || '<li class="px-3 text-muted small">Nicio pagină favorită încă</li>');
         }
+        renderMenu();
     })();
-    // ---- Command Palette (Ctrl+K) ----
-    (function initCommandPalette() {
-        const allLinks = Array.from(document.querySelectorAll('a[href]'))
-            .filter(a => a.href && !a.href.startsWith('javascript:') && !a.getAttribute('href').startsWith('#'))
-            .map(a => ({ href: a.getAttribute('href'), text: (a.innerText || a.title || a.href).replace(/\s+/g, ' ').trim() }))
-            .filter(x => x.text)
-            .reduce((acc, cur) => { if (!acc.find(y => y.href === cur.href)) acc.push(cur); return acc; }, []);
-        const modal = document.createElement('div');
-        modal.className = 'modal';
-        modal.tabIndex = -1;
-        modal.innerHTML = '<div class="modal-dialog modal-dialog-centered"><div class="modal-content command-palette">'
-            + '<div class="modal-header py-2"><input type="search" class="form-control form-control-lg cp-input" placeholder="Caută... (Ctrl+K)"/></div>'
-            + '<div class="modal-body p-0"><ul class="list-group list-group-flush cp-list" style="max-height:50vh;overflow:auto"></ul></div>'
-            + '</div></div>';
-        document.body.appendChild(modal);
-        let bsModal = null;
-        try { bsModal = new bootstrap.Modal(modal, { backdrop: true }); } catch (_) { }
-        const input = modal.querySelector('.cp-input');
-        const list = modal.querySelector('.cp-list');
-        function render(items) {
-            list.innerHTML = '';
-            items.slice(0, 50).forEach(it => {
-                const li = document.createElement('li');
-                li.className = 'list-group-item list-group-item-action';
-                li.textContent = it.text;
-                li.addEventListener('click', () => { window.location.href = it.href; });
-                list.appendChild(li);
+
+    // 2. Saved Views Module (Filter Presets for GET Forms)
+    (function savedViews(){
+        const forms = Array.from(document.querySelectorAll('form')).filter(f=> (f.method||'GET').toUpperCase()==='GET' && !/login|logout|password/i.test(f.action||''));
+        if (!forms.length) return;
+        const container = document.createElement('div');
+        container.className = 'd-inline-block ms-2';
+        container.innerHTML = '<div class="dropdown d-inline-block">\
+            <button class="btn btn-outline-secondary btn-sm dropdown-toggle no-loader" type="button" data-bs-toggle="dropdown">Vederi</button>\
+            <div class="dropdown-menu p-2" style="min-width:260px">\
+            <div class="d-flex gap-2 mb-2">\
+              <input type="text" class="form-control form-control-sm sv-name" placeholder="Nume vedere">\
+              <button class="btn btn-sm btn-primary sv-save">Salvează</button>\
+            </div>\
+            <div class="sv-list small"></div>\
+            </div>\
+        </div>';
+        const toolInsertTarget = document.querySelector('.table-responsive')?.parentElement || document.querySelector('.container');
+        if (toolInsertTarget) toolInsertTarget.insertBefore(container, toolInsertTarget.firstChild);
+        const key='views:'+location.pathname;
+        function get(){ try { return JSON.parse(localStorage.getItem(key)||'[]'); }catch(_){ return [];}}
+        function set(v){ try { localStorage.setItem(key, JSON.stringify(v)); }catch(_){ }}
+        function capture(){ const data={}; forms.forEach(f=> Array.from(f.elements).forEach(el=>{ if(!el.name) return; if(el.type==='checkbox') data[el.name]=el.checked; else if(el.type==='radio'){ if(el.checked) data[el.name]=el.value; } else if(el.tagName==='SELECT' && el.multiple){ data[el.name]=Array.from(el.selectedOptions).map(o=>o.value);} else { data[el.name]=el.value; } })); return data; }
+        function apply(data){ forms.forEach(f=> Array.from(f.elements).forEach(el=>{ if(!el.name) return; if(el.type==='checkbox') el.checked=!!data[el.name]; else if(el.type==='radio'){ el.checked = data[el.name]===el.value; } else if(el.tagName==='SELECT' && el.multiple){ Array.from(el.options).forEach(o=>o.selected=(data[el.name]||[]).includes(o.value)); } else { if(data[el.name]!==undefined) el.value=data[el.name]; } })); }
+        function render(){ const list=container.querySelector('.sv-list'); const views=get(); list.innerHTML=''; if(!views.length){ list.textContent='Nu există vederi salvate.'; return;} views.forEach((v,i)=>{ const row=document.createElement('div'); row.className='d-flex justify-content-between align-items-center py-1'; row.innerHTML=`<span>${v.name}</span><span><button class=\"btn btn-sm btn-outline-secondary me-1\">Aplică</button><button class=\"btn btn-sm btn-outline-danger\">Șterge</button></span>`; const [btnApply, btnDel]=row.querySelectorAll('button'); btnApply.addEventListener('click',()=>{ apply(v.data); forms[0].submit(); }); btnDel.addEventListener('click',()=>{ const vs=get(); vs.splice(i,1); set(vs); render(); }); list.appendChild(row); }); }
+        container.querySelector('.sv-save').addEventListener('click',()=>{ const name=container.querySelector('.sv-name').value.trim()||'Vedere'; const vs=get(); vs.unshift({ name, data: capture() }); set(vs.slice(0,20)); render(); });
+        render();
+    })();
+
+    // 3. Daily Leave Date Validation
+    (function dailyLeaveDateValidation() {
+        const dateInput = document.getElementById('leave_date');
+        if (dateInput) {
+            dateInput.addEventListener('input', function(e) {
+                const selectedDate = new Date(e.target.value);
+                const day = selectedDate.getUTCDay(); // Sunday = 0, Monday = 1, ..., Saturday = 6
+                if (day === 0 || day === 5 || day === 6) { // Sunday, Friday, Saturday
+                    e.target.setCustomValidity('Învoirile zilnice sunt permise doar de Luni până Joi.');
+                    e.target.reportValidity();
+                } else {
+                    e.target.setCustomValidity('');
+                }
             });
         }
-        function openPalette() { render(allLinks); if (bsModal) bsModal.show(); else modal.style.display = 'block'; setTimeout(() => input.focus(), 100); }
-        function closePalette() { if (bsModal) bsModal.hide(); else modal.style.display = 'none'; }
-        input.addEventListener('input', () => {
-            const q = input.value.toLowerCase().trim();
-            if (!q) return render(allLinks);
-            const filtered = allLinks.filter(x => x.text.toLowerCase().includes(q));
-            render(filtered);
-        });
-        input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closePalette(); } });
-        document.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); }
+    })();
+
+    // 4. Online/Offline indicator (netStatus)
+    (function netStatus(){
+        function toast(msg, variant){
+            const el = document.createElement('div');
+            el.className = `toast align-items-center text-bg-${variant||'secondary'} border-0 show`;
+            el.setAttribute('role','status'); el.setAttribute('aria-live','polite'); el.setAttribute('aria-atomic','true');
+            el.style.position='fixed'; el.style.right='12px'; el.style.bottom='12px'; el.style.zIndex='1060';
+            el.innerHTML = `<div class="d-flex"><div class="toast-body">${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>`;
+            document.body.appendChild(el);
+            setTimeout(()=>{ try{ el.remove(); }catch(_){ } }, 3000);
+        }
+        window.addEventListener('online', ()=> toast('Conexiune restabilită', 'success'));
+        window.addEventListener('offline', ()=> toast('Ești offline', 'warning'));
+    })();
+
+    // 5. Local Reminders (no backend)
+    (function localReminders(){
+        if (!('Notification' in window)) return;
+        const KEY = 'reminders:enabled';
+        const debugBar = document.querySelector('.container-fluid .text-muted.small');
+        if (debugBar) {
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-sm btn-outline-secondary no-loader';
+            btn.textContent = localStorage.getItem(KEY) === '1' ? 'Remindere: ON' : 'Remindere: OFF';
+            btn.addEventListener('click', async ()=>{
+                if (localStorage.getItem(KEY) === '1') { localStorage.removeItem(KEY); btn.textContent='Remindere: OFF'; return; }
+                const perm = await Notification.requestPermission();
+                if (perm === 'granted') { localStorage.setItem(KEY, '1'); btn.textContent='Remindere: ON'; }
+            });
+            debugBar.parentElement.appendChild(btn);
+        }
+        if (localStorage.getItem(KEY) !== '1') return;
+        const now = Date.now();
+        document.querySelectorAll('[data-reminder="true"]').forEach(el => {
+            const start = el.getAttribute('data-start');
+            const title = el.getAttribute('data-title') || document.title;
+            if (!start) return;
+            const ts = new Date(start).getTime();
+            const delta = ts - now - 5*60*1000; // 5 minutes before
+            if (delta > 0 && delta < 24*60*60*1000) {
+                setTimeout(()=>{
+                    try { new Notification('Reminder', { body: title }); } catch(_){ }
+                }, delta);
+            }
         });
     })();
 
-    // (Other modules: form helpers, reminders, favorites, netStatus, savedViews ...)
-    // ... all other features as previously implemented, unchanged ...
+    // 6. Form Helpers (date/time quick-fill)
+    (function formHelpers() {
+        const candidates = Array.from(document.querySelectorAll('input.has-time-helpers'));
+        if (!candidates.length) return;
+        function getBucharestDateTimeParts() {
+            const now = new Date();
+            const options = { timeZone: 'Europe/Bucharest', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
+            const formatter = new Intl.DateTimeFormat('sv-SE', options);
+            const [datePart, timePart] = formatter.format(now).split(' ');
+            return { date: datePart, time: timePart };
+        }
+        candidates.forEach(input => {
+            const container = document.createElement('div');
+            container.className = 'd-flex flex-wrap align-items-center gap-2 mt-1';
+            const quickHours = ['07:00', '15:00', '22:00'];
+            quickHours.forEach(hour => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-sm btn-outline-info';
+                btn.textContent = hour;
+                btn.title = `Setează ora la ${hour}`;
+                btn.addEventListener('click', () => {
+                    if (input.type === 'time') {
+                        input.value = hour;
+                    } else if (input.type === 'datetime-local') {
+                        const currentVal = input.value;
+                        const datePart = currentVal ? currentVal.split('T')[0] : getBucharestDateTimeParts().date;
+                        input.value = `${datePart}T${hour}`;
+                    }
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+                container.appendChild(btn);
+            });
+            const btnNow = document.createElement('button');
+            btnNow.type = 'button';
+            btnNow.className = 'btn btn-sm btn-outline-secondary';
+            btnNow.textContent = 'Acum';
+            btnNow.title = 'Setează data și ora curentă';
+            btnNow.addEventListener('click', () => {
+                const parts = getBucharestDateTimeParts();
+                if (input.type === 'time') {
+                    input.value = parts.time;
+                } else if (input.type === 'datetime-local') {
+                    input.value = `${parts.date}T${parts.time}`;
+                }
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            container.appendChild(btnNow);
+            input.parentNode.insertBefore(container, input.nextSibling);
+        });
+    })();
+
+    // === PWA SW Registration, Command Palette already present above ===
 });
