@@ -2192,18 +2192,20 @@ def _calculate_presence_data(student_list, check_datetime):
             all_absent_details.append(f"{student_display_name} - SMT")
             status_found = True
         else:
-            # Temporary exemption (scutire temporară) -> present but not in formation
+            # Temporary exemption (scutire temporară) is independent of presence.
+            # We record it for reporting, but DO NOT force a presence category here.
             ex_det = (getattr(s, "exemption_details", "") or "").strip()
             ex_det_lower = ex_det.lower()
             if ex_det and ex_det_lower not in {"none", "null", "-", "n/a", "na"}:
-                # Mark as present but not in formation, clearly labeled as 'Scutire temporară'
                 label = f"{student_display_name} - Scutire temporară"
                 if ex_det:
                     label += f": {ex_det}"
                 present_exempt_not_in_formation.append(label)
-                # Keep a secondary list for backward compatibility stats (not used in totals anymore)
-                exempt_other_students_details.append(f"{student_display_name} - Scutire temporară: {ex_det}" if ex_det else f"{student_display_name} - Scutire temporară")
-                status_found = True
+                # Backward-compatible bucket for any other exemption aggregations
+                exempt_other_students_details.append(
+                    f"{student_display_name} - Scutire temporară: {ex_det}" if ex_det else f"{student_display_name} - Scutire temporară"
+                )
+                # Do not set status_found here.
 
         # Service/leave/volunteer checks
         if not status_found and s.id in active_services_map:
@@ -2228,7 +2230,7 @@ def _calculate_presence_data(student_list, check_datetime):
             status_found = True
 
         if not status_found:
-            # Student is present at the unit, but might not be in formation
+            # Student is present at the unit; determine their presence category.
             # is_platoon_graded_duty is for platoon leaders (own platoon)
             # assigned_graded_platoon indicates assigned to lead another platoon or unit (e.g., '99' for battalion/company level)
             # pluton == '0' is used for company/battalion staff
@@ -2252,7 +2254,8 @@ def _calculate_presence_data(student_list, check_datetime):
     present_exempt_count = len(present_exempt_not_in_formation)
     absent_total_count = len(all_absent_details)
 
-    efectiv_prezent_total = in_formation_count + on_duty_count + graded_staff_count + present_exempt_count
+    # Exemptions are independent of presence; do not add them to totals.
+    efectiv_prezent_total = in_formation_count + on_duty_count + graded_staff_count
     efectiv_absent_total = absent_total_count
 
     # Consistency check
@@ -5908,7 +5911,7 @@ def text_report_display_company():
         report_lines.append("\nGRADAȚI (în afara formației):")
         for detail in company_presence_data['platoon_graded_duty_students_details']: report_lines.append(f"  - {detail}")
     if company_presence_data.get('present_exempt_not_in_formation_details'):
-        report_lines.append("\nSCUTIȚI TEMPORAR (prezenți – nu în formație):")
+        report_lines.append("\nSCUTIȚI TEMPORAR (prezenți):")
         for detail in company_presence_data['present_exempt_not_in_formation_details']:
             report_lines.append(f"  - {detail}")
 
@@ -5977,7 +5980,7 @@ def text_report_display_battalion():
             for detail in company_presence_data['platoon_graded_duty_students_details']:
                 report_lines.append(f"      - {detail}")
         if company_presence_data.get('present_exempt_not_in_formation_details'):
-            report_lines.append("    Scutiți temporar (prezenți – nu în formație):")
+            report_lines.append("    Scutiți temporar (prezenți):")
             for detail in company_presence_data['present_exempt_not_in_formation_details']:
                 report_lines.append(f"      - {detail}")
         if company_presence_data['absent_students_details']:
