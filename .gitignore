@@ -12,3 +12,6 @@ instance/
 
 # Build artifacts
 /static/css/output.css
+
+# Log files
+*.log
