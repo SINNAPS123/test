@@ -96,6 +96,9 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['REMEMBER_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_COOKIE_SECURE', '0') in ['1', 'true', 'True']
+# Keep users logged in unless they explicitly logout
+app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
+app.config['REMEMBER_COOKIE_REFRESH_EACH_REQUEST'] = True
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db) # Initialize Flask-Migrate
@@ -2117,6 +2120,8 @@ def _calculate_presence_data(student_list, check_datetime):
             "efectiv_control": 0, "efectiv_prezent_total": 0, "efectiv_absent_total": 0,
             "in_formation_count": 0, "on_duty_count": 0, "platoon_graded_duty_count": 0,
             "all_present_details": [], "all_absent_details": [],
+            "in_formation_students_details": [], "absent_students_details": [],
+            "smt_students_details": [], "exempt_other_students_details": []
         }
 
     # --- Step 1: Bulk Data Fetch ---
@@ -2142,6 +2147,13 @@ def _calculate_presence_data(student_list, check_datetime):
         WeekendLeave.student_id.in_(student_ids),
         WeekendLeave.status == 'Aprobată'
     ).all()
+    # Volunteers active on the specific date (treated as absent on that day)
+    vol_entries = db.session.query(ActivityParticipant, VolunteerActivity).join(
+        VolunteerActivity, ActivityParticipant.activity_id == VolunteerActivity.id
+    ).filter(
+        ActivityParticipant.student_id.in_(student_ids),
+        VolunteerActivity.activity_date == check_datetime.date()
+    ).all()
 
     # --- Step 2: Process into Fast-Lookup Maps ---
     active_services_map = {sa.student_id: sa for sa in active_services}
@@ -2153,44 +2165,68 @@ def _calculate_presence_data(student_list, check_datetime):
             active_interval = next((interval for interval in wl.get_intervals() if interval['start'] <= check_datetime <= interval['end']), None)
             if active_interval:
                 active_weekend_leaves_map[wl.student_id] = {"leave": wl, "interval": active_interval}
+    active_volunteer_map = {}
+    for ap, act in vol_entries:
+        # If multiple activities in a day, keep the first name encountered
+        active_volunteer_map.setdefault(ap.student_id, act.name)
 
     # --- Step 3: Categorize Students ---
     efectiv_control = len(student_list)
     present_in_formation = []
     present_on_duty = []
-    present_graded_staff = [] # Combined list for platoon leaders and company/battalion staff
+    present_graded_staff = []  # Combined list for platoon leaders and company/battalion staff
     all_absent_details = []
+    general_absent_details = []  # Leaves/permits/weekend/daily/volunteer (excludes SMT and other exemptions)
+    smt_students_details = []
+    exempt_other_students_details = []
 
     for s in student_list:
         student_display_name = f"{s.grad_militar} {s.nume} {s.prenume}"
         status_found = False
 
-        if s.is_smt:
+        # SMT first
+        if getattr(s, "is_smt", False):
+            smt_students_details.append(f"{student_display_name} - SMT")
             all_absent_details.append(f"{student_display_name} - SMT")
             status_found = True
-        elif s.exemption_details:
-            all_absent_details.append(f"{student_display_name} - Scutit: {s.exemption_details}")
-            status_found = True
-        elif s.id in active_services_map:
+        else:
+            # Consider 'exemption_details' only if meaningful (ignore strings like 'None', '-', 'null')
+            ex_det = (s.exemption_details or "").strip()
+            ex_det_lower = ex_det.lower()
+            if ex_det and ex_det_lower not in {"none", "null", "-", "n/a", "na"}:
+                exempt_other_students_details.append(f"{student_display_name} - Scutit: {ex_det}")
+                all_absent_details.append(f"{student_display_name} - Scutit: {ex_det}")
+                status_found = True
+
+        if not status_found and s.id in active_services_map:
             present_on_duty.append(f"{student_display_name} - Serviciu ({active_services_map[s.id].service_type})")
             status_found = True
-        elif s.id in active_permissions_map:
+        elif not status_found and s.id in active_permissions_map:
+            general_absent_details.append(f"{student_display_name} - Permisie")
             all_absent_details.append(f"{student_display_name} - Permisie")
             status_found = True
-        elif s.id in active_weekend_leaves_map:
+        elif not status_found and s.id in active_weekend_leaves_map:
             wl_data = active_weekend_leaves_map[s.id]
+            general_absent_details.append(f"{student_display_name} - Învoire Weekend ({wl_data['interval']['day_name']})")
             all_absent_details.append(f"{student_display_name} - Învoire Weekend ({wl_data['interval']['day_name']})")
             status_found = True
-        elif s.id in active_daily_leaves_map:
+        elif not status_found and s.id in active_daily_leaves_map:
+            general_absent_details.append(f"{student_display_name} - Învoire Zilnică ({active_daily_leaves_map[s.id].leave_type_display})")
             all_absent_details.append(f"{student_display_name} - Învoire Zilnică ({active_daily_leaves_map[s.id].leave_type_display})")
+            status_found = True
+        elif not status_found and s.id in active_volunteer_map:
+            general_absent_details.append(f"{student_display_name} - Voluntariat ({active_volunteer_map[s.id]})")
+            all_absent_details.append(f"{student_display_name} - Voluntariat ({active_volunteer_map[s.id]})")
             status_found = True
 
         if not status_found:
             # Student is present at the unit, but might not be in formation
             # is_platoon_graded_duty is for platoon leaders
             # pluton == '0' is for company/battalion staff
-            if s.is_platoon_graded_duty or (s.pluton == '0'):
-                present_graded_staff.append(student_display_name)
+            if getattr(s, "is_platoon_graded_duty", False) or (str(getattr(s, "pluton", "")).strip() == '0'):
+                # Annotate explicitly to make the status clear in lists
+                suffix = " - Gradat Pluton" if str(getattr(s, "pluton", "")).strip() != '0' else " - Gradat (Comp./Bat.)"
+                present_graded_staff.append(student_display_name + suffix)
             else:
                 present_in_formation.append(student_display_name)
 
@@ -2213,11 +2249,19 @@ def _calculate_presence_data(student_list, check_datetime):
         "efectiv_absent_total": efectiv_absent_total,
         "in_formation_count": in_formation_count,
         "on_duty_count": on_duty_count,
-        "platoon_graded_duty_count": graded_staff_count, # Renamed for consistency
-        "all_present_details": sorted(present_in_formation), # For potential future use
-        "on_duty_students_details": sorted(present_on_duty), # Kept for backward compat with some templates
-        "platoon_graded_duty_students_details": sorted(present_graded_staff), # Kept for backward compat
-        "all_absent_details": sorted(all_absent_details) # The new consolidated list
+        "platoon_graded_duty_count": graded_staff_count,
+        # Details
+        "all_present_details": sorted(present_in_formation),
+        "in_formation_students_details": sorted(present_in_formation),  # Backward compatible key for templates
+        "on_duty_students_details": sorted(present_on_duty),
+        "platoon_graded_duty_students_details": sorted(present_graded_staff),
+        "all_absent_details": sorted(all_absent_details),
+        "absent_students_details": sorted(general_absent_details),  # Excludes SMT/other exemptions
+        "smt_students_details": sorted(smt_students_details),
+        "exempt_other_students_details": sorted(exempt_other_students_details),
+        # Convenience counters
+        "smt_count": len(smt_students_details),
+        "exempt_other_count": len(exempt_other_students_details)
     }
 
 # --- Commander Dashboards ---
@@ -2230,8 +2274,44 @@ def company_commander_dashboard():
 
     company_id_str = _get_commander_unit_id(current_user.username, "CmdC")
     if not company_id_str:
-        flash('ID-ul companiei nu a putut fi determinat din numele de utilizator.', 'warning')
-        return redirect(url_for('dashboard'))
+        # Avoid redirect loop; render dashboard with empty datasets and guidance
+        flash('ID-ul companiei nu a putut fi determinat din numele de utilizator. Numele trebuie să conțină modelul „CmdC<NUMĂR>”, ex: „Popescu_CmdC1”.', 'warning')
+        roll_call_datetime = get_standard_roll_call_datetime()
+        roll_call_time_str = roll_call_datetime.strftime('%d %B %Y, %H:%M')
+        empty_presence = {
+            "efectiv_control": 0,
+            "efectiv_prezent_total": 0,
+            "efectiv_absent_total": 0,
+            "in_formation_count": 0,
+            "on_duty_count": 0,
+            "platoon_graded_duty_count": 0,
+            "in_formation_students_details": [],
+            "on_duty_students_details": [],
+            "platoon_graded_duty_students_details": [],
+            "all_absent_details": []
+        }
+        return render_template('company_commander_dashboard.html',
+                               company_id="N/A",
+                               roll_call_time_str=roll_call_time_str,
+                               total_company_presence=empty_presence,
+                               platoons_data={},
+                               platoons_data_now={},
+                               permissions_today_count=0,
+                               daily_leaves_today_company=0,
+                               weekend_leaves_today_company=0,
+                               total_leaves_today_count=0,
+                               services_today_count=0,
+                               total_students_company=0,
+                               permissions_active_now_company=0,
+                               daily_leaves_active_now_company=0,
+                               weekend_leaves_active_now_company=0,
+                               total_on_leave_now_company=0,
+                               services_active_now_company=0,
+                               current_time_for_display=get_localized_now(),
+                               active_public_codes=[],
+                               services_last_7_days_count=0,
+                               services_today_breakdown={},
+                               todays_services=[])
 
     roll_call_datetime = get_standard_roll_call_datetime()
     roll_call_time_str = roll_call_datetime.strftime('%d %B %Y, %H:%M')
@@ -2575,8 +2655,44 @@ def battalion_commander_dashboard():
 
     battalion_id_str = _get_commander_unit_id(current_user.username, "CmdB")
     if not battalion_id_str:
-        flash('ID-ul batalionului nu a putut fi determinat din numele de utilizator.', 'warning')
-        return redirect(url_for('dashboard'))
+        # Avoid redirect loop; render dashboard with empty datasets and guidance
+        flash('ID-ul batalionului nu a putut fi determinat din numele de utilizator. Numele trebuie să conțină modelul „CmdB<NUMĂR>”, ex: „Ionescu_CmdB2”.', 'warning')
+        roll_call_datetime = get_standard_roll_call_datetime()
+        roll_call_time_str = roll_call_datetime.strftime('%d %B %Y, %H:%M')
+        empty_presence = {
+            "efectiv_control": 0,
+            "efectiv_prezent_total": 0,
+            "efectiv_absent_total": 0,
+            "in_formation_count": 0,
+            "on_duty_count": 0,
+            "platoon_graded_duty_count": 0,
+            "in_formation_students_details": [],
+            "on_duty_students_details": [],
+            "platoon_graded_duty_students_details": [],
+            "all_absent_details": []
+        }
+        return render_template('battalion_commander_dashboard.html',
+                               battalion_id="N/A",
+                               roll_call_time_str=roll_call_time_str,
+                               total_battalion_presence=empty_presence,
+                               companies_data={},
+                               companies_data_now={},
+                               permissions_today_count=0,
+                               daily_leaves_today_battalion=0,
+                               weekend_leaves_today_battalion=0,
+                               total_leaves_today_count=0,
+                               services_today_count=0,
+                               total_students_battalion=0,
+                               permissions_active_now_battalion=0,
+                               daily_leaves_active_now_battalion=0,
+                               weekend_leaves_active_now_battalion=0,
+                               total_on_leave_now_battalion=0,
+                               services_active_now_battalion=0,
+                               current_time_for_display=get_localized_now(),
+                               active_public_codes=[],
+                               services_last_7_days_count=0,
+                               services_today_breakdown={},
+                               todays_services=[])
 
     roll_call_datetime = get_standard_roll_call_datetime()
     roll_call_time_str = roll_call_datetime.strftime('%d %B %Y, %H:%M')
@@ -3936,14 +4052,23 @@ def add_edit_permission(permission_id=None):
             'transport_mode': permission.transport_mode or '',
             'reason': permission.reason or ''
         }
+    else:
+        # Pre-fill from query parameters to allow quick \"alte scutiri\" creation from student management
+        prefill_student_id = request.args.get('student_id', type=int)
+        prefill_reason = request.args.get('prefill_reason', type=str)
+        if prefill_student_id:
+            form_data_on_get['student_id'] = str(prefill_student_id)
+        if prefill_reason:
+            form_data_on_get['reason'] = prefill_reason
+
     # If it's a POST request that failed validation and re-rendered, current_form_data_post (passed as form_data) will be used by template.
-    # If it's a fresh GET for 'add', form_data_on_get remains empty, template shows empty fields.
+    # If it's a fresh GET for 'add', form_data_on_get may contain prefilled values from query params.
 
     return render_template('add_edit_permission.html',
                            form_title=form_title,
                            permission=permission, # Pass the permission object itself for the template
                            students=students_managed,
-                           form_data=form_data_on_get if request.method == 'GET' and permission else request.form if request.method == 'POST' else {})
+                           form_data=form_data_on_get if request.method == 'GET' else request.form if request.method == 'POST' else {})
 
 
 
