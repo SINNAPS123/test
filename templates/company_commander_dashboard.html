@@ -195,11 +195,23 @@
 
         {% if data.platoon_graded_duty_students_details %}
             <h6 class="mt-2 mb-1">
-                Gradați Pluton ({{ data.platoon_graded_duty_count }})
+                Gradați (în afara formației) ({{ data.platoon_graded_duty_count }})
                 <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-platoon-graded-details" aria-expanded="false" aria-controls="{{ id_prefix }}-platoon-graded-details">Detalii</button>
             </h6>
             <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-platoon-graded-details">
                 {% for item in data.platoon_graded_duty_students_details %}
+                    <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        {% if data.present_exempt_not_in_formation_details %}
+            <h6 class="mt-2 mb-1">
+                Scutiți temporar ({{ data.present_exempt_not_in_formation_count }})
+                <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-exempt-details" aria-expanded="false" aria-controls="{{ id_prefix }}-exempt-details">Detalii</button>
+            </h6>
+            <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-exempt-details">
+                {% for item in data.present_exempt_not_in_formation_details %}
                     <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
                 {% endfor %}
             </ul>
