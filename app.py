@@ -2121,7 +2121,8 @@ def _calculate_presence_data(student_list, check_datetime):
             "in_formation_count": 0, "on_duty_count": 0, "platoon_graded_duty_count": 0,
             "all_present_details": [], "all_absent_details": [],
             "in_formation_students_details": [], "absent_students_details": [],
-            "smt_students_details": [], "exempt_other_students_details": []
+            "smt_students_details": [], "exempt_other_students_details": [],
+            "present_exempt_not_in_formation_details": [], "present_exempt_not_in_formation_count": 0
         }
 
     # --- Step 1: Bulk Data Fetch ---
@@ -2174,30 +2175,39 @@ def _calculate_presence_data(student_list, check_datetime):
     efectiv_control = len(student_list)
     present_in_formation = []
     present_on_duty = []
-    present_graded_staff = []  # Combined list for platoon leaders and company/battalion staff
+    present_graded_staff = []  # Combined list for platoon leaders, assigned to other platoons, and company/battalion staff
+    present_exempt_not_in_formation = []  # Temporary exemptions: present physically, not in formation
     all_absent_details = []
-    general_absent_details = []  # Leaves/permits/weekend/daily/volunteer (excludes SMT and other exemptions)
+    general_absent_details = []  # Leaves/permits/weekend/daily/volunteer (excludes SMT and other exemptions now treated as present)
     smt_students_details = []
-    exempt_other_students_details = []
+    exempt_other_students_details = []  # Kept for backward compatibility if templates use it anywhere
 
     for s in student_list:
         student_display_name = f"{s.grad_militar} {s.nume} {s.prenume}"
         status_found = False
 
-        # SMT first
+        # SMT first (still considered absent motivated)
         if getattr(s, "is_smt", False):
             smt_students_details.append(f"{student_display_name} - SMT")
             all_absent_details.append(f"{student_display_name} - SMT")
             status_found = True
         else:
-            # Consider 'exemption_details' only if meaningful (ignore strings like 'None', '-', 'null')
-            ex_det = (s.exemption_details or "").strip()
+            # Temporary exemption (scutire temporară) is independent of presence.
+            # We record it for reporting, but DO NOT force a presence category here.
+            ex_det = (getattr(s, "exemption_details", "") or "").strip()
             ex_det_lower = ex_det.lower()
             if ex_det and ex_det_lower not in {"none", "null", "-", "n/a", "na"}:
-                exempt_other_students_details.append(f"{student_display_name} - Scutit: {ex_det}")
-                all_absent_details.append(f"{student_display_name} - Scutit: {ex_det}")
-                status_found = True
+                label = f"{student_display_name} - Scutire temporară"
+                if ex_det:
+                    label += f": {ex_det}"
+                present_exempt_not_in_formation.append(label)
+                # Backward-compatible bucket for any other exemption aggregations
+                exempt_other_students_details.append(
+                    f"{student_display_name} - Scutire temporară: {ex_det}" if ex_det else f"{student_display_name} - Scutire temporară"
+                )
+                # Do not set status_found here.
 
+        # Service/leave/volunteer checks
         if not status_found and s.id in active_services_map:
             present_on_duty.append(f"{student_display_name} - Serviciu ({active_services_map[s.id].service_type})")
             status_found = True
@@ -2220,13 +2230,20 @@ def _calculate_presence_data(student_list, check_datetime):
             status_found = True
 
         if not status_found:
-            # Student is present at the unit, but might not be in formation
-            # is_platoon_graded_duty is for platoon leaders
-            # pluton == '0' is for company/battalion staff
-            if getattr(s, "is_platoon_graded_duty", False) or (str(getattr(s, "pluton", "")).strip() == '0'):
-                # Annotate explicitly to make the status clear in lists
-                suffix = " - Gradat Pluton" if str(getattr(s, "pluton", "")).strip() != '0' else " - Gradat (Comp./Bat.)"
-                present_graded_staff.append(student_display_name + suffix)
+            # Student is present at the unit; determine their presence category.
+            # is_platoon_graded_duty is for platoon leaders (own platoon)
+            # assigned_graded_platoon indicates assigned to lead another platoon or unit (e.g., '99' for battalion/company level)
+            # pluton == '0' is used for company/battalion staff
+            assigned_other_pl = (getattr(s, "assigned_graded_platoon", None) or "").strip()
+            if assigned_other_pl:
+                if assigned_other_pl == "99":
+                    present_graded_staff.append(f"{student_display_name} - Gradat (Comp./Bat.)")
+                else:
+                    present_graded_staff.append(f"{student_display_name} - Gradat la Pl.{assigned_other_pl}")
+            elif getattr(s, "is_platoon_graded_duty", False):
+                present_graded_staff.append(f"{student_display_name} - Gradat Pluton")
+            elif str(getattr(s, "pluton", "")).strip() == '0':
+                present_graded_staff.append(f"{student_display_name} - Gradat (Comp./Bat.)")
             else:
                 present_in_formation.append(student_display_name)
 
@@ -2234,8 +2251,10 @@ def _calculate_presence_data(student_list, check_datetime):
     in_formation_count = len(present_in_formation)
     on_duty_count = len(present_on_duty)
     graded_staff_count = len(present_graded_staff)
+    present_exempt_count = len(present_exempt_not_in_formation)
     absent_total_count = len(all_absent_details)
 
+    # Exemptions are independent of presence; do not add them to totals.
     efectiv_prezent_total = in_formation_count + on_duty_count + graded_staff_count
     efectiv_absent_total = absent_total_count
 
@@ -2255,6 +2274,8 @@ def _calculate_presence_data(student_list, check_datetime):
         "in_formation_students_details": sorted(present_in_formation),  # Backward compatible key for templates
         "on_duty_students_details": sorted(present_on_duty),
         "platoon_graded_duty_students_details": sorted(present_graded_staff),
+        "present_exempt_not_in_formation_details": sorted(present_exempt_not_in_formation),
+        "present_exempt_not_in_formation_count": present_exempt_count,
         "all_absent_details": sorted(all_absent_details),
         "absent_students_details": sorted(general_absent_details),  # Excludes SMT/other exemptions
         "smt_students_details": sorted(smt_students_details),
@@ -5887,8 +5908,12 @@ def text_report_display_company():
         for detail in company_presence_data['on_duty_students_details']: report_lines.append(f"  - {detail}")
 
     if company_presence_data['platoon_graded_duty_students_details']:
-        report_lines.append("\nGRADAȚI PLUTON (prezenți):")
+        report_lines.append("\nGRADAȚI (în afara formației):")
         for detail in company_presence_data['platoon_graded_duty_students_details']: report_lines.append(f"  - {detail}")
+    if company_presence_data.get('present_exempt_not_in_formation_details'):
+        report_lines.append("\nSCUTIȚI TEMPORAR (prezenți):")
+        for detail in company_presence_data['present_exempt_not_in_formation_details']:
+            report_lines.append(f"  - {detail}")
 
     if company_presence_data['absent_students_details']:
         report_lines.append("\nABSENȚI MOTIVAT:")
@@ -5948,8 +5973,16 @@ def text_report_display_battalion():
         report_lines.append(f"  Ec: {company_presence_data['efectiv_control']}, Ep: {company_presence_data['efectiv_prezent_total']}, Ea: {company_presence_data['efectiv_absent_total']}")
         report_lines.append(f"    În formație: {company_presence_data['in_formation_count']}")
         report_lines.append(f"    La Servicii: {company_presence_data['on_duty_count']}") # Changed label
-        report_lines.append(f"    Gradat Pluton (prezent): {company_presence_data['platoon_graded_duty_count']}")
+        report_lines.append(f"    Gradați (în afara formației): {company_presence_data['platoon_graded_duty_count']}")
 
+        if company_presence_data.get('platoon_graded_duty_students_details'):
+            report_lines.append("    Gradați (în afara formației) - detalii:")
+            for detail in company_presence_data['platoon_graded_duty_students_details']:
+                report_lines.append(f"      - {detail}")
+        if company_presence_data.get('present_exempt_not_in_formation_details'):
+            report_lines.append("    Scutiți temporar (prezenți):")
+            for detail in company_presence_data['present_exempt_not_in_formation_details']:
+                report_lines.append(f"      - {detail}")
         if company_presence_data['absent_students_details']:
             report_lines.append("    Absenți motivat:")
             for detail in company_presence_data['absent_students_details']:
