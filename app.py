@@ -1823,8 +1823,8 @@ def admin_edit_student(student_id):
         # student_to_edit.created_by_user_id = form.get('created_by_user_id', student_to_edit.created_by_user_id)
 
 
-        if not all([student_to_edit.nume, student_to_edit.prenume, student_to_edit.grad_militar, student_to_edit.pluton, student_to_edit.companie, student_to_edit.batalion, student_to_edit.gender]):
-            flash('Toate câmpurile marcate cu * (nume, prenume, grad, unități, gen) sunt obligatorii.', 'warning')
+        if not all([student_to_edit.nume, student_to_edit.prenume, student_to_edit.grad_militar, student_to_edit.companie, student_to_edit.batalion, student_to_edit.gender]):
+            flash('Toate câmpurile marcate cu * (cu excepția plutonului pentru gradați) sunt obligatorii.', 'warning')
             # Pass original creator info for display even on error
             return render_template('admin_edit_student.html', form_title=f"Editare Student (Admin): {details_before_edit.get('grad_militar','')} {details_before_edit.get('nume','')}", student=student_to_edit, genders=GENDERS, original_creator_username=original_creator_username, form_data=request.form)
 
@@ -2352,6 +2352,13 @@ def company_commander_dashboard():
     platoons_data_roll_call = {}
     platoons_data_now = {} # New dictionary for current data
     platoons_in_company = sorted(list(set(s.pluton for s in students_in_company_all if s.pluton)))
+
+    students_without_platoon = [s for s in students_in_company_all if not s.pluton]
+    if students_without_platoon:
+        platoon_name = "Gradati / Personal neîncadrat"
+        platoons_data_roll_call[platoon_name] = _calculate_presence_data(students_without_platoon, roll_call_datetime)
+        platoons_data_now[platoon_name] = _calculate_presence_data(students_without_platoon, now_localized)
+
     for pluton_id_str in platoons_in_company:
         students_in_pluton = [s for s in students_in_company_all if s.pluton == pluton_id_str]
         platoon_name = f"Plutonul {pluton_id_str}"
@@ -2688,11 +2695,21 @@ def battalion_commander_dashboard():
     companies_data_roll_call = {}
     companies_data_now = {} # New dictionary for current data
     companies_in_battalion = sorted(list(set(s.companie for s in students_in_battalion_all if s.companie)))
+
+    # Handle students without a platoon at the battalion level
+    students_without_platoon_in_battalion = [s for s in students_in_battalion_all if not s.pluton]
+    if students_without_platoon_in_battalion:
+        category_name = "Gradati / Personal neîncadrat Batalion"
+        companies_data_roll_call[category_name] = _calculate_presence_data(students_without_platoon_in_battalion, roll_call_datetime)
+        companies_data_now[category_name] = _calculate_presence_data(students_without_platoon_in_battalion, now_localized_b)
+
     for company_id_str_loop in companies_in_battalion:
-        students_in_company_loop = [s for s in students_in_battalion_all if s.companie == company_id_str_loop]
-        company_name = f"Compania {company_id_str_loop}"
-        companies_data_roll_call[company_name] = _calculate_presence_data(students_in_company_loop, roll_call_datetime)
-        companies_data_now[company_name] = _calculate_presence_data(students_in_company_loop, now_localized_b) # Calculate for now
+        # We only want to process students *with* platoons here, as the others are handled above.
+        students_in_company_loop = [s for s in students_in_battalion_all if s.companie == company_id_str_loop and s.pluton]
+        if students_in_company_loop: # Only add company if it has students with platoons
+            company_name = f"Compania {company_id_str_loop}"
+            companies_data_roll_call[company_name] = _calculate_presence_data(students_in_company_loop, roll_call_datetime)
+            companies_data_now[company_name] = _calculate_presence_data(students_in_company_loop, now_localized_b) # Calculate for now
 
     active_public_codes = PublicViewCode.query.filter_by(
         created_by_user_id=current_user.id,
@@ -3482,8 +3499,8 @@ def add_student():
         exemption_details_val = form.get('exemption_details', '').strip() or None
         assigned_graded_platoon_val = form.get('assigned_graded_platoon', '').strip() or None
 
-        if not all([nume, prenume, grad_militar, gender, pluton, companie, batalion]):
-            flash('Toate câmpurile marcate cu * sunt obligatorii (inclusiv genul).', 'warning')
+        if not all([nume, prenume, grad_militar, gender, companie, batalion]):
+            flash('Toate câmpurile marcate cu * (cu excepția plutonului pentru gradați) sunt obligatorii.', 'warning')
             return render_template('add_edit_student.html', form_title="Adăugare Student Nou", student=None, genders=GENDERS, form_data=request.form)
 
         if id_unic_student_form and Student.query.filter_by(id_unic_student=id_unic_student_form).first():
@@ -3566,8 +3583,8 @@ def edit_student(student_id):
         s_edit.exemption_details = form.get('exemption_details', '').strip() or None
         new_id_unic = form.get('id_unic_student','').strip() or None
 
-        if not all([s_edit.nume, s_edit.prenume, s_edit.grad_militar, s_edit.pluton, s_edit.companie, s_edit.batalion, s_edit.gender]):
-            flash('Toate câmpurile marcate cu * sunt obligatorii (inclusiv genul).', 'warning')
+        if not all([s_edit.nume, s_edit.prenume, s_edit.grad_militar, s_edit.companie, s_edit.batalion, s_edit.gender]):
+            flash('Toate câmpurile marcate cu * (cu excepția plutonului pentru gradați) sunt obligatorii.', 'warning')
             return render_template('add_edit_student.html', form_title=f"Editare Student: {details_before_edit.get('grad_militar','')} {details_before_edit.get('nume','')}", student=s_edit, genders=GENDERS, form_data=request.form)
 
         if s_edit.gender not in GENDERS:
