@@ -5372,18 +5372,13 @@ def export_weekend_leaves_word():
         flash('Nu aveți studenți pentru a exporta învoiri de weekend.', 'info')
         return redirect(url_for('list_weekend_leaves'))
 
-    # Fetch active and upcoming weekend leaves
     leaves_to_export = WeekendLeave.query.options(joinedload(WeekendLeave.student)).filter(
         WeekendLeave.student_id.in_(student_ids),
         WeekendLeave.status == 'Aprobată'
-        # Further filter by is_overall_active_or_upcoming if only current/future are needed
-        # For a general report, all approved might be fine, or sort them.
-        # Let's fetch all approved and sort them, then decide if we only show active/upcoming ones.
     ).join(Student).order_by(Student.nume, Student.prenume, WeekendLeave.weekend_start_date).all()
 
-    # Filter for only active or upcoming ones for the report
+    # păstrăm doar cele active sau viitoare
     leaves_to_export = [leave for leave in leaves_to_export if leave.is_overall_active_or_upcoming]
-
 
     if not leaves_to_export:
         flash('Nicio învoire de weekend activă sau viitoare de exportat.', 'info')
@@ -5392,107 +5387,104 @@ def export_weekend_leaves_word():
     document = Document()
     document.add_heading('Raport Învoiri Weekend', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}"
     p_user = document.add_paragraph()
     p_user.add_run(user_info_text).italic = True
     p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph()
 
-    table = document.add_table(rows=1, cols=5) # Nr. crt, Grad, Nume și Prenume, Pluton(Grupa), Data
+    # Agregăm intervalele pe student (un rând per student cu toate perioadele listate)
+    from collections import defaultdict
+    student_map = {}
+    periods_map = defaultdict(list)
+
+    for leave in leaves_to_export:
+        st = leave.student
+        student_map[st.id] = st
+        for iv in leave.get_intervals():
+            # includem doar intervale care încă nu au trecut complet
+            if iv['end'] >= get_localized_now():
+                start_local = iv['start'].astimezone(EUROPE_BUCHAREST)
+                end_local = iv['end'].astimezone(EUROPE_BUCHAREST)
+                day_label = iv.get('day_name') or start_local.strftime('%A')
+                date_label = start_local.strftime('%d-%m')
+                periods_map[st.id].append((start_local, f"{day_label} ({date_label}): {start_local.strftime('%H:%M')} - {end_local.strftime('%H:%M')}"))
+
+    # Tabel: Nr., Grad, Nume și Prenume, Plutonul, Perioade
+    table = document.add_table(rows=1, cols=5)
     table.style = 'Table Grid'
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
     hdr_cells = table.rows[0].cells
-    column_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)', 'Data']
-    for i, title in enumerate(column_titles):
+    headers = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)', 'Perioade']
+    for i, title in enumerate(headers):
         hdr_cells[i].text = title
         hdr_cells[i].paragraphs[0].runs[0].font.bold = True
         hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    current_row_idx = 0
-    for leave in leaves_to_export:
-        intervals = leave.get_intervals()
+    # ordonăm după nume
+    ordered_students = sorted(periods_map.keys(), key=lambda sid: (student_map[sid].nume, student_map[sid].prenume))
+    for idx, sid in enumerate(ordered_students, start=1):
+        st = student_map[sid]
+        # sortăm perioadele per student după început
+        periods_sorted = [p for _, p in sorted(periods_map[sid], key=lambda t: t[0])]
+        periods_str = "; ".join(periods_sorted)
+        row = table.add_row().cells
+        row[0].text = str(idx)
+        row[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row[1].text = st.grad_militar
+        row[2].text = f"{st.nume} {st.prenume}"
+        row[3].text = st.pluton
+        row[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row[4].text = periods_str
 
-        for interval in intervals:
-            current_row_idx += 1
-            row_cells = table.add_row().cells
-            row_cells[0].text = str(current_row_idx)
-            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-            row_cells[1].text = leave.student.grad_militar
-            row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}" # Combined Name
-            row_cells[3].text = leave.student.pluton
-            row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-            specific_leave_date = interval['start'].astimezone(EUROPE_BUCHAREST).date()
-            row_cells[4].text = specific_leave_date.strftime('%d.%m.%Y')
-            row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    # Ajustare lățimi coloane pentru noul format
-    # NrCrt(0.5), Grad(0.8), Nume și Prenume(2.5), Pluton(1.0), Data(1.0) -> Total 5.8
-    # Previous total with Nume(1.5), Prenume(1.5) was 6.3.
-    # Let's make Nume și Prenume wider.
+    # Lățimi coloane
     new_widths = {
-        0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.5), # Nume și Prenume
-        3: Inches(1.0), 4: Inches(1.0)
+        0: Inches(0.5),  # Nr
+        1: Inches(0.8),  # Grad
+        2: Inches(2.2),  # Nume Prenume
+        3: Inches(0.9),  # Pluton
+        4: Inches(3.0),  # Perioade
     }
     for col_idx, width_val in new_widths.items():
         for row in table.rows:
             if col_idx < len(row.cells):
-                 row.cells[col_idx].width = width_val
+                row.cells[col_idx].width = width_val
 
-    document.add_paragraph() # Spacer
+    document.add_paragraph()  # spațiu
 
-    # --- Separate table for church attendees ---
+    # --- Tabel separat: participă la Biserică (Duminică) ---
     church_attendees = []
     for leave in leaves_to_export:
         if leave.duminica_biserica:
-            # Check if Sunday is one of the selected days and has the church slot
-            # The duminica_biserica flag implies the 09:00-11:00 slot if Duminica is selected.
-            is_sunday_selected_for_leave = False
-            for interval in leave.get_intervals(): # get_intervals ensures valid day/time
-                if interval['day_name'] == 'Duminica':
-                    # Further check if this interval matches the church time if needed,
-                    # but duminica_biserica flag should be the primary indicator if Sunday is active.
-                    # For simplicity, if duminica_biserica is true and Sunday is *any* part of the leave,
-                    # we list them. The specific time is implied by the "Participă la Biserică (Duminică 09:00-11:00)" title.
-                    is_sunday_selected_for_leave = True
-                    break
-            if is_sunday_selected_for_leave:
+            if any(iv['day_name'] == 'Duminica' for iv in leave.get_intervals()):
                 church_attendees.append(leave.student)
 
     if church_attendees:
         document.add_heading('Studenți care participă la Biserică (Duminică 09:00-11:00)', level=2).alignment = WD_ALIGN_PARAGRAPH.CENTER
-        church_table = document.add_table(rows=1, cols=4) # Nr.crt, Grad, Nume și Prenume, Pluton
+        church_table = document.add_table(rows=1, cols=4)
         church_table.style = 'Table Grid'
         church_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        ch_hdr = church_table.rows[0].cells
+        for i, title in enumerate(['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)']):
+            ch_hdr[i].text = title
+            ch_hdr[i].paragraphs[0].runs[0].font.bold = True
+            ch_hdr[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        church_hdr_cells = church_table.rows[0].cells
-        church_col_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)']
-        for i, title in enumerate(church_col_titles):
-            church_hdr_cells[i].text = title
-            church_hdr_cells[i].paragraphs[0].runs[0].font.bold = True
-            church_hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        church_attendees = sorted({s.id: s for s in church_attendees}.values(), key=lambda s: (s.nume, s.prenume))
+        for idx, s in enumerate(church_attendees, start=1):
+            r = church_table.add_row().cells
+            r[0].text = str(idx)
+            r[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            r[1].text = s.grad_militar
+            r[2].text = f"{s.nume} {s.prenume}"
+            r[3].text = s.pluton
+            r[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        # Sort attendees by name for the separate table
-        church_attendees.sort(key=lambda s: (s.nume, s.prenume))
-
-        for idx, student in enumerate(church_attendees):
-            row_cells = church_table.add_row().cells
-            row_cells[0].text = str(idx + 1)
-            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-            row_cells[1].text = student.grad_militar
-            row_cells[2].text = f"{student.nume} {student.prenume}"
-            row_cells[3].text = student.pluton
-            row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        church_table_widths = {0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.5), 3: Inches(1.0)}
-        for col_idx, width_val in church_table_widths.items():
+        widths = {0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.5), 3: Inches(1.0)}
+        for ci, w in widths.items():
             for row in church_table.rows:
-                if col_idx < len(row.cells):
-                    row.cells[col_idx].width = width_val
-        document.add_paragraph()
-
+                if ci < len(row.cells):
+                    row.cells[ci].width = w
 
     style = document.styles['Normal']
     font = style.font
@@ -5504,11 +5496,7 @@ def export_weekend_leaves_word():
     f.seek(0)
 
     filename = f"Raport_Invoiri_Weekend_{current_user.username}_{date.today().strftime('%Y%m%d')}.docx"
-
-    return send_file(f,
-                     download_name=filename,
-                     as_attachment=True,
-                     mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    return send_file(f, download_name=filename, as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
 
 
 @app.route('/gradat/weekend_leaves/delete/<int:leave_id>', methods=['POST'])
@@ -6908,47 +6896,49 @@ def admin_export_weekend_leaves_word():
 
     document = Document()
     document.add_heading('Raport General Învoiri Weekend (Admin)', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
-    user_info_text = f"Raport generat de: {current_user.username} (Admin)\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    user_info_text = f"Raport generat de: {current_user.username} (Admin)\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}"
     p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True; p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph()
 
-    table = document.add_table(rows=1, cols=5) # Nr. crt, Grad, Nume și Prenume, Pluton(Grupa), Data
+    # Agregare pe student
+    from collections import defaultdict
+    student_map = {}
+    periods_map = defaultdict(list)
+    for leave in leaves_to_export:
+        st = leave.student
+        student_map[st.id] = st
+        for iv in leave.get_intervals():
+            if iv['end'] >= get_localized_now():
+                s_loc = iv['start'].astimezone(EUROPE_BUCHAREST)
+                e_loc = iv['end'].astimezone(EUROPE_BUCHAREST)
+                dname = iv.get('day_name') or s_loc.strftime('%A')
+                periods_map[st.id].append((s_loc, f"{dname} ({s_loc.strftime('%d-%m')}): {s_loc.strftime('%H:%M')} - {e_loc.strftime('%H:%M')}"))
+
+    table = document.add_table(rows=1, cols=5)
     table.style = 'Table Grid'
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr = table.rows[0].cells
+    for i, t in enumerate(['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)', 'Perioade']):
+        hdr[i].text = t
+        hdr[i].paragraphs[0].runs[0].font.bold = True
+        hdr[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    hdr_cells = table.rows[0].cells
-    column_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)', 'Data']
-    for i, title in enumerate(column_titles):
-        hdr_cells[i].text = title
-        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
-        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    ordered = sorted(periods_map.keys(), key=lambda sid: (student_map[sid].nume, student_map[sid].prenume))
+    for idx, sid in enumerate(ordered, start=1):
+        st = student_map[sid]
+        periods_sorted = [p for _, p in sorted(periods_map[sid], key=lambda t: t[0])]
+        row = table.add_row().cells
+        row[0].text = str(idx); row[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row[1].text = st.grad_militar
+        row[2].text = f"{st.nume} {st.prenume}"
+        row[3].text = st.pluton; row[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row[4].text = "; ".join(periods_sorted)
 
-    current_row_idx = 0
-    for leave in leaves_to_export:
-        intervals = leave.get_intervals()
-        for interval in intervals:
-            current_row_idx += 1
-            row_cells = table.add_row().cells
-            row_cells[0].text = str(current_row_idx)
-            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-            row_cells[1].text = leave.student.grad_militar
-            row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}" # Combined Name
-            row_cells[3].text = leave.student.pluton
-            row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-            specific_leave_date = interval['start'].astimezone(EUROPE_BUCHAREST).date()
-            row_cells[4].text = specific_leave_date.strftime('%d.%m.%Y')
-            row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    new_widths = {
-        0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.5), # Nume și Prenume
-        3: Inches(1.0), 4: Inches(1.0)
-    }
-    for col_idx, width_val in new_widths.items():
-        for row in table.rows:
-            if col_idx < len(row.cells):
-                 row.cells[col_idx].width = width_val
+    widths = {0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.2), 3: Inches(0.9), 4: Inches(3.0)}
+    for ci, w in widths.items():
+        for r in table.rows:
+            if ci < len(r.cells):
+                r.cells[ci].width = w
 
     style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
     f = io.BytesIO(); document.save(f); f.seek(0)
@@ -7067,92 +7057,83 @@ def company_commander_export_weekend_leaves_word():
 
     document = Document()
     document.add_heading(f'Raport Învoiri Weekend Compania {company_id_str}', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
-    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}"
     p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True; p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph()
 
-    table = document.add_table(rows=1, cols=5) # Nr. crt, Grad, Nume și Prenume, Pluton(Grupa), Data
+    # Agregare perioade pe student
+    from collections import defaultdict
+    student_map = {}
+    periods_map = defaultdict(list)
+    for leave in leaves_to_export:
+        st = leave.student
+        student_map[st.id] = st
+        for iv in leave.get_intervals():
+            if iv['end'] >= get_localized_now():
+                s_loc = iv['start'].astimezone(EUROPE_BUCHAREST)
+                e_loc = iv['end'].astimezone(EUROPE_BUCHAREST)
+                dname = iv.get('day_name') or s_loc.strftime('%A')
+                periods_map[st.id].append((s_loc, f"{dname} ({s_loc.strftime('%d-%m')}): {s_loc.strftime('%H:%M')} - {e_loc.strftime('%H:%M')}"))
+
+    table = document.add_table(rows=1, cols=5)
     table.style = 'Table Grid'
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr = table.rows[0].cells
+    for i, t in enumerate(['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)', 'Perioade']):
+        hdr[i].text = t
+        hdr[i].paragraphs[0].runs[0].font.bold = True
+        hdr[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    hdr_cells = table.rows[0].cells
-    column_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)', 'Data']
-    for i, title in enumerate(column_titles):
-        hdr_cells[i].text = title
-        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
-        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    ordered = sorted(periods_map.keys(), key=lambda sid: (student_map[sid].nume, student_map[sid].prenume))
+    for idx, sid in enumerate(ordered, start=1):
+        st = student_map[sid]
+        per_sorted = [p for _, p in sorted(periods_map[sid], key=lambda t: t[0])]
+        r = table.add_row().cells
+        r[0].text = str(idx); r[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r[1].text = st.grad_militar
+        r[2].text = f"{st.nume} {st.prenume}"
+        r[3].text = st.pluton; r[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r[4].text = "; ".join(per_sorted)
 
-    current_row_idx = 0
-    for leave in leaves_to_export:
-        intervals = leave.get_intervals()
-        for interval in intervals:
-            current_row_idx += 1
-            row_cells = table.add_row().cells
-            row_cells[0].text = str(current_row_idx)
-            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-            row_cells[1].text = leave.student.grad_militar
-            row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}" # Combined Name
-            row_cells[3].text = leave.student.pluton
-            row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-            specific_leave_date = interval['start'].astimezone(EUROPE_BUCHAREST).date()
-            row_cells[4].text = specific_leave_date.strftime('%d.%m.%Y')
-            row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    new_widths = {
-        0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.5), # Nume și Prenume
-        3: Inches(1.0), 4: Inches(1.0)
-    }
-    for col_idx, width_val in new_widths.items():
+    widths = {0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.2), 3: Inches(0.9), 4: Inches(3.0)}
+    for ci, w in widths.items():
         for row in table.rows:
-            if col_idx < len(row.cells):
-                 row.cells[col_idx].width = width_val
+            if ci < len(row.cells):
+                row.cells[ci].width = w
 
-    document.add_paragraph() # Spacer
+    document.add_paragraph()  # Spacer
 
-    # --- Separate table for church attendees (Company Commander view) ---
+    # --- Biserică (duminică) ---
     church_attendees_company = []
-    for leave in leaves_to_export: # leaves_to_export is already filtered for this company and active/upcoming
-        if leave.duminica_biserica:
-            is_sunday_selected_for_leave = False
-            for interval in leave.get_intervals():
-                if interval['day_name'] == 'Duminica':
-                    is_sunday_selected_for_leave = True
-                    break
-            if is_sunday_selected_for_leave:
-                church_attendees_company.append(leave.student)
+    for leave in leaves_to_export:
+        if leave.duminica_biserica and any(iv['day_name'] == 'Duminica' for iv in leave.get_intervals()):
+            church_attendees_company.append(leave.student)
 
     if church_attendees_company:
         document.add_heading('Studenți care participă la Biserică (Duminică 09:00-11:00)', level=2).alignment = WD_ALIGN_PARAGRAPH.CENTER
-        church_table_company = document.add_table(rows=1, cols=4) # Nr.crt, Grad, Nume și Prenume, Pluton
+        church_table_company = document.add_table(rows=1, cols=4)
         church_table_company.style = 'Table Grid'
         church_table_company.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-        church_hdr_cells_company = church_table_company.rows[0].cells
-        church_col_titles_company = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)']
-        for i, title in enumerate(church_col_titles_company):
-            church_hdr_cells_company[i].text = title
-            church_hdr_cells_company[i].paragraphs[0].runs[0].font.bold = True
-            church_hdr_cells_company[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        ch_hdr = church_table_company.rows[0].cells
+        for i, t in enumerate(['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)']):
+            ch_hdr[i].text = t
+            ch_hdr[i].paragraphs[0].runs[0].font.bold = True
+            ch_hdr[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        church_attendees_company.sort(key=lambda s: (s.pluton, s.nume, s.prenume)) # Sort for company view
+        church_attendees_company = sorted({s.id: s for s in church_attendees_company}.values(), key=lambda s: (s.pluton, s.nume, s.prenume))
+        for idx, s in enumerate(church_attendees_company, start=1):
+            row = church_table_company.add_row().cells
+            row[0].text = str(idx); row[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            row[1].text = s.grad_militar
+            row[2].text = f"{s.nume} {s.prenume}"
+            row[3].text = s.pluton; row[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        for idx, student in enumerate(church_attendees_company):
-            row_cells_company = church_table_company.add_row().cells
-            row_cells_company[0].text = str(idx + 1)
-            row_cells_company[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-            row_cells_company[1].text = student.grad_militar
-            row_cells_company[2].text = f"{student.nume} {student.prenume}"
-            row_cells_company[3].text = student.pluton
-            row_cells_company[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        church_table_widths_company = {0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.5), 3: Inches(1.0)}
-        for col_idx, width_val in church_table_widths_company.items():
+        ch_w = {0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.5), 3: Inches(1.0)}
+        for ci, w in ch_w.items():
             for row in church_table_company.rows:
-                if col_idx < len(row.cells):
-                    row.cells[col_idx].width = width_val
-        document.add_paragraph()
+                if ci < len(row.cells):
+                    row.cells[ci].width = w
 
     style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
     f = io.BytesIO(); document.save(f); f.seek(0)
@@ -7271,103 +7252,84 @@ def battalion_commander_export_weekend_leaves_word():
 
     document = Document()
     document.add_heading(f'Raport Învoiri Weekend Batalionul {battalion_id_str}', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
-    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}"
     p_user = document.add_paragraph(); p_user.add_run(user_info_text).italic = True; p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph()
 
-    table = document.add_table(rows=1, cols=5) # Nr. crt, Grad, Nume și Prenume, Pluton(Grupa), Data
+    # Agregare pe student
+    from collections import defaultdict
+    student_map = {}
+    periods_map = defaultdict(list)
+    for leave in leaves_to_export:
+        st = leave.student
+        student_map[st.id] = st
+        for iv in leave.get_intervals():
+            if iv['end'] >= get_localized_now():
+                s_loc = iv['start'].astimezone(EUROPE_BUCHAREST)
+                e_loc = iv['end'].astimezone(EUROPE_BUCHAREST)
+                dname = iv.get('day_name') or s_loc.strftime('%A')
+                periods_map[st.id].append((s_loc, f"{dname} ({s_loc.strftime('%d-%m')}): {s_loc.strftime('%H:%M')} - {e_loc.strftime('%H:%M')}"))
+
+    table = document.add_table(rows=1, cols=5)
     table.style = 'Table Grid'
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr = table.rows[0].cells
+    for i, t in enumerate(['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)', 'Perioade']):
+        hdr[i].text = t
+        hdr[i].paragraphs[0].runs[0].font.bold = True
+        hdr[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    hdr_cells = table.rows[0].cells
-    column_titles = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Plutonul (Grupa)', 'Data']
-    for i, title in enumerate(column_titles):
-        hdr_cells[i].text = title
-        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
-        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    ordered = sorted(periods_map.keys(), key=lambda sid: (student_map[sid].nume, student_map[sid].prenume))
+    for idx, sid in enumerate(ordered, start=1):
+        st = student_map[sid]
+        per_sorted = [p for _, p in sorted(periods_map[sid], key=lambda t: t[0])]
+        r = table.add_row().cells
+        r[0].text = str(idx); r[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r[1].text = st.grad_militar
+        r[2].text = f"{st.nume} {st.prenume}"
+        r[3].text = st.pluton; r[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r[4].text = "; ".join(per_sorted)
 
-    current_row_idx = 0
-    for leave in leaves_to_export:
-        intervals = leave.get_intervals()
-        for interval in intervals:
-            current_row_idx += 1
-            row_cells = table.add_row().cells
-            row_cells[0].text = str(current_row_idx)
-            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-            row_cells[1].text = leave.student.grad_militar
-            row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}" # Combined Name
-            row_cells[3].text = leave.student.pluton
-            row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-            specific_leave_date = interval['start'].astimezone(EUROPE_BUCHAREST).date()
-            row_cells[4].text = specific_leave_date.strftime('%d.%m.%Y')
-            row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    new_widths = {
-        0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.5), # Nume și Prenume
-        3: Inches(1.0), 4: Inches(1.0)
-    }
-    for col_idx, width_val in new_widths.items():
+    widths = {0: Inches(0.5), 1: Inches(0.8), 2: Inches(2.2), 3: Inches(0.9), 4: Inches(3.0)}
+    for ci, w in widths.items():
         for row in table.rows:
-            if col_idx < len(row.cells):
-                 row.cells[col_idx].width = width_val
+            if ci < len(row.cells):
+                row.cells[ci].width = w
 
-    document.add_paragraph() # Spacer
+    document.add_paragraph()  # Spacer
 
-    # --- Separate table for church attendees (Battalion Commander view) ---
+    # --- Biserică (duminică) ---
     church_attendees_battalion = []
-    # leaves_to_export is already filtered for this battalion and active/upcoming
     for leave in leaves_to_export:
-        if leave.duminica_biserica:
-            is_sunday_selected_for_leave = False
-            for interval in leave.get_intervals():
-                if interval['day_name'] == 'Duminica':
-                    is_sunday_selected_for_leave = True
-                    break
-            if is_sunday_selected_for_leave:
-                church_attendees_battalion.append(leave.student)
+        if leave.duminica_biserica and any(iv['day_name'] == 'Duminica' for iv in leave.get_intervals()):
+            church_attendees_battalion.append(leave.student)
 
     if church_attendees_battalion:
         document.add_heading('Studenți care participă la Biserică (Duminică 09:00-11:00)', level=2).alignment = WD_ALIGN_PARAGRAPH.CENTER
-        # For Battalion, we might want to include Company and Platoon
-        church_table_battalion = document.add_table(rows=1, cols=5) # Nr.crt, Grad, Nume și Prenume, Compania, Plutonul
+        church_table_battalion = document.add_table(rows=1, cols=5)
         church_table_battalion.style = 'Table Grid'
         church_table_battalion.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-        church_hdr_cells_battalion = church_table_battalion.rows[0].cells
-        church_col_titles_battalion = ['Nr. crt.', 'Grad', 'Nume și Prenume', 'Compania', 'Plutonul']
-        for i, title in enumerate(church_col_titles_battalion):
-            church_hdr_cells_battalion[i].text = title
-            church_hdr_cells_battalion[i].paragraphs[0].runs[0].font.bold = True
-            church_hdr_cells_battalion[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        ch_hdr = church_table_battalion.rows[0].cells
+        for i, t in enumerate(['Nr. crt.', 'Grad', 'Nume și Prenume', 'Compania', 'Plutonul']):
+            ch_hdr[i].text = t
+            ch_hdr[i].paragraphs[0].runs[0].font.bold = True
+            ch_hdr[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        # Sort for battalion view: by Company, then Platoon, then Name
-        church_attendees_battalion.sort(key=lambda s: (s.companie, s.pluton, s.nume, s.prenume))
+        church_attendees_battalion = sorted({s.id: s for s in church_attendees_battalion}.values(), key=lambda s: (s.companie, s.pluton, s.nume, s.prenume))
+        for idx, s in enumerate(church_attendees_battalion, start=1):
+            row = church_table_battalion.add_row().cells
+            row[0].text = str(idx); row[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            row[1].text = s.grad_militar
+            row[2].text = f"{s.nume} {s.prenume}"
+            row[3].text = s.companie; row[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            row[4].text = s.pluton; row[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        for idx, student in enumerate(church_attendees_battalion):
-            row_cells_battalion = church_table_battalion.add_row().cells
-            row_cells_battalion[0].text = str(idx + 1)
-            row_cells_battalion[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-            row_cells_battalion[1].text = student.grad_militar
-            row_cells_battalion[2].text = f"{student.nume} {student.prenume}"
-            row_cells_battalion[3].text = student.companie
-            row_cells_battalion[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-            row_cells_battalion[4].text = student.pluton
-            row_cells_battalion[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-
-        # Adjusted widths for 5 columns: Nr(0.4), Grad(0.7), Nume(2.0), Comp(0.8), Plut(0.8) = 4.7 (can expand Nume)
-        # Let's try: Nr(0.4), Grad(0.7), Nume(2.2), Comp(0.8), Plut(0.8) = 4.9
-        church_table_widths_battalion = {
-            0: Inches(0.4), 1: Inches(0.7), 2: Inches(2.2),
-            3: Inches(0.8), 4: Inches(0.8)
-        }
-        for col_idx, width_val in church_table_widths_battalion.items():
+        ch_w = {0: Inches(0.4), 1: Inches(0.7), 2: Inches(2.2), 3: Inches(0.8), 4: Inches(0.8)}
+        for ci, w in ch_w.items():
             for row in church_table_battalion.rows:
-                if col_idx < len(row.cells):
-                    row.cells[col_idx].width = width_val
-        document.add_paragraph()
+                if ci < len(row.cells):
+                    row.cells[ci].width = w
 
     style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
     f = io.BytesIO(); document.save(f); f.seek(0)

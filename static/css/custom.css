@@ -507,3 +507,50 @@ html.dark-mode-preload #loading-overlay {
 .mt-4, .container.mt-4, .content-wrapper-animated {
     margin-top: 1.5rem !important;
 }
+
+/* Dark mode contrast fixes for badges/alerts with light backgrounds */
+body.dark-mode .badge.bg-success,
+[data-theme="dark"] .badge.bg-success,
+html.dark-mode-preload .badge.bg-success {
+    background-color: #166534 !important; /* darker emerald */
+    color: #e6ffed !important;
+}
+body.dark-mode .badge.bg-warning,
+[data-theme="dark"] .badge.bg-warning,
+html.dark-mode-preload .badge.bg-warning {
+    background-color: #a16207 !important; /* darker amber */
+    color: #111827 !important; /* force dark text for contrast */
+}
+body.dark-mode .badge.bg-info,
+[data-theme="dark"] .badge.bg-info,
+html.dark-mode-preload .badge.bg-info {
+    background-color: #075985 !important; /* darker cyan-blue */
+    color: #e0f2fe !important;
+}
+body.dark-mode .badge.bg-light,
+[data-theme="dark"] .badge.bg-light,
+html.dark-mode-preload .badge.bg-light {
+    background-color: #cbd5e1 !important; /* slate-300 */
+    color: #0f172a !important; /* slate-900 */
+    border: 1px solid #94a3b8 !important;
+}
+body.dark-mode .alert-success,
+[data-theme="dark"] .alert-success,
+html.dark-mode-preload .alert-success {
+    background-color: #0f3b26 !important;
+    color: #d1fae5 !important;
+    border-color: #14532d !important;
+}
+body.dark-mode .list-group-item-success,
+[data-theme="dark"] .list-group-item-success,
+html.dark-mode-preload .list-group-item-success {
+    background-color: #0f3b26 !important;
+    color: #d1fae5 !important;
+}
+
+/* Ensure .text-dark remains readable in dark mode when used with bg-* */
+body.dark-mode .text-dark,
+[data-theme="dark"] .text-dark,
+html.dark-mode-preload .text-dark {
+    color: #0f172a !important;
+}

@@ -68,7 +68,44 @@ Absenti motivat:
 
     <hr>
 
+    <!-- Detalii: Gradați (în afara formației) și Scutiți temporar -->
     <div class="row">
+        {% if current_platoon_situation.platoon_graded_duty_students_details or current_platoon_situation.present_exempt_not_in_formation_details %}
+        <div class="col-md-12 mb-4">
+            <div class="card">
+                <div class="card-header"><i class="fas fa-users-cog me-2"></i>Detalii Formație Speciale</div>
+                <div class="card-body">
+                    <div class="row">
+                        {% if current_platoon_situation.platoon_graded_duty_students_details %}
+                        <div class="col-md-6">
+                            <h6 class="card-title"><i class="fas fa-user-check text-primary me-2"></i>Gradați (în afara formației)
+                                <span class="badge rounded-pill bg-primary ms-1">{{ current_platoon_situation.platoon_graded_duty_count }}</span>
+                            </h6>
+                            <ul class="list-group list-group-flush" style="font-size: 0.9em;">
+                                {% for item in current_platoon_situation.platoon_graded_duty_students_details %}
+                                <li class="list-group-item py-1 ps-2">{{ loop.index }}. {{ item }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                        {% if current_platoon_situation.present_exempt_not_in_formation_details %}
+                        <div class="col-md-6">
+                            <h6 class="card-title"><i class="fas fa-user-minus text-secondary me-2"></i>Scutiți temporar
+                                <span class="badge rounded-pill bg-secondary ms-1">{{ current_platoon_situation.present_exempt_not_in_formation_count }}</span>
+                            </h6>
+                            <ul class="list-group list-group-flush" style="font-size: 0.9em;">
+                                {% for item in current_platoon_situation.present_exempt_not_in_formation_details %}
+                                <li class="list-group-item py-1 ps-2">{{ loop.index }}. {{ item }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="col-md-12 mb-4">
             <div class="card">
                 <div class="card-header"><i class="fas fa-chart-pie me-2"></i>Statistici Rapide</div>
