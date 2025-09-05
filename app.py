@@ -1491,6 +1491,7 @@ def dashboard():
                                sit_total_invoiti_acum=current_platoon_situation.get("efectiv_absent_total", 0),
                                sit_in_serviciu_acum=current_platoon_situation.get("on_duty_count", 0),
                                sit_gradat_pluton_prezent_acum=current_platoon_situation.get("platoon_graded_duty_count",0),
+                               current_platoon_situation=current_platoon_situation,
                                # Statistici Servicii
                                total_services_count = ServiceAssignment.query.filter(ServiceAssignment.student_id.in_(student_ids_managed)).count(),
                                upcoming_services_count = ServiceAssignment.query.filter(
@@ -2114,9 +2115,23 @@ def get_standard_roll_call_datetime(for_date=None):
 def _calculate_presence_data(student_list, check_datetime):
     if not student_list:
         return {
-            "efectiv_control": 0, "efectiv_prezent_total": 0, "efectiv_absent_total": 0,
-            "in_formation_count": 0, "on_duty_count": 0, "platoon_graded_duty_count": 0,
-            "all_present_details": [], "all_absent_details": [],
+            "efectiv_control": 0,
+            "efectiv_prezent_total": 0,
+            "efectiv_absent_total": 0,
+            "in_formation_count": 0,
+            "on_duty_count": 0,
+            "platoon_graded_duty_count": 0,
+            # Details (lists)
+            "all_present_details": [],
+            "in_formation_students_details": [],
+            "on_duty_students_details": [],
+            "platoon_graded_duty_students_details": [],
+            "all_absent_details": [],
+            "absent_students_details": [],
+            "smt_students_details": [],
+            "exempt_other_students_details": [],
+            # Counters for special categories
+            "smt_count": 0,
         }
 
     # --- Step 1: Bulk Data Fetch ---
@@ -2150,7 +2165,10 @@ def _calculate_presence_data(student_list, check_datetime):
     active_weekend_leaves_map = {}
     for wl in all_weekend_leaves:
         if wl.is_any_interval_active_now:
-            active_interval = next((interval for interval in wl.get_intervals() if interval['start'] <= check_datetime <= interval['end']), None)
+            active_interval = next(
+                (interval for interval in wl.get_intervals() if interval['start'] <= check_datetime <= interval['end']),
+                None
+            )
             if active_interval:
                 active_weekend_leaves_map[wl.student_id] = {"leave": wl, "interval": active_interval}
 
@@ -2158,38 +2176,45 @@ def _calculate_presence_data(student_list, check_datetime):
     efectiv_control = len(student_list)
     present_in_formation = []
     present_on_duty = []
-    present_graded_staff = [] # Combined list for platoon leaders and company/battalion staff
-    all_absent_details = []
+    present_graded_staff = []  # Combined list for platoon leaders and company/battalion staff
+
+    # Absence categories
+    smt_absences = []
+    exempt_absences = []
+    permission_absences = []
+    weekend_absences = []
+    daily_absences = []
 
     for s in student_list:
         student_display_name = f"{s.grad_militar} {s.nume} {s.prenume}"
         status_found = False
 
-        if s.is_smt:
-            all_absent_details.append(f"{student_display_name} - SMT")
+        # Special medical/exemption statuses are treated as absences but tracked separately
+        if getattr(s, "is_smt", False):
+            smt_absences.append(f"{student_display_name} - SMT")
             status_found = True
-        elif s.exemption_details:
-            all_absent_details.append(f"{student_display_name} - Scutit: {s.exemption_details}")
+        elif getattr(s, "exemption_details", None):
+            exempt_absences.append(f"{student_display_name} - Scutit: {s.exemption_details}")
             status_found = True
         elif s.id in active_services_map:
             present_on_duty.append(f"{student_display_name} - Serviciu ({active_services_map[s.id].service_type})")
             status_found = True
         elif s.id in active_permissions_map:
-            all_absent_details.append(f"{student_display_name} - Permisie")
+            permission_absences.append(f"{student_display_name} - Permisie")
             status_found = True
         elif s.id in active_weekend_leaves_map:
             wl_data = active_weekend_leaves_map[s.id]
-            all_absent_details.append(f"{student_display_name} - Învoire Weekend ({wl_data['interval']['day_name']})")
+            weekend_absences.append(f"{student_display_name} - Învoire Weekend ({wl_data['interval']['day_name']})")
             status_found = True
         elif s.id in active_daily_leaves_map:
-            all_absent_details.append(f"{student_display_name} - Învoire Zilnică ({active_daily_leaves_map[s.id].leave_type_display})")
+            daily_absences.append(f"{student_display_name} - Învoire Zilnică ({active_daily_leaves_map[s.id].leave_type_display})")
             status_found = True
 
         if not status_found:
             # Student is present at the unit, but might not be in formation
             # is_platoon_graded_duty is for platoon leaders
             # pluton == '0' is for company/battalion staff
-            if s.is_platoon_graded_duty or (s.pluton == '0'):
+            if getattr(s, "is_platoon_graded_duty", False) or (getattr(s, "pluton", None) == '0'):
                 present_graded_staff.append(student_display_name)
             else:
                 present_in_formation.append(student_display_name)
@@ -2198,14 +2223,19 @@ def _calculate_presence_data(student_list, check_datetime):
     in_formation_count = len(present_in_formation)
     on_duty_count = len(present_on_duty)
     graded_staff_count = len(present_graded_staff)
-    absent_total_count = len(all_absent_details)
+
+    # Compose absence lists
+    absent_students_details = sorted(permission_absences + weekend_absences + daily_absences)
+    all_absent_details = sorted(smt_absences + exempt_absences + absent_students_details)
 
     efectiv_prezent_total = in_formation_count + on_duty_count + graded_staff_count
-    efectiv_absent_total = absent_total_count
+    efectiv_absent_total = len(all_absent_details)
 
     # Consistency check
     if efectiv_control != efectiv_prezent_total + efectiv_absent_total:
-        app.logger.warning(f"Presence data discrepancy: EC({efectiv_control}) != EP({efectiv_prezent_total}) + EA({efectiv_absent_total})")
+        app.logger.warning(
+            f"Presence data discrepancy: EC({efectiv_control}) != EP({efectiv_prezent_total}) + EA({efectiv_absent_total})"
+        )
 
     return {
         "efectiv_control": efectiv_control,
@@ -2213,11 +2243,18 @@ def _calculate_presence_data(student_list, check_datetime):
         "efectiv_absent_total": efectiv_absent_total,
         "in_formation_count": in_formation_count,
         "on_duty_count": on_duty_count,
-        "platoon_graded_duty_count": graded_staff_count, # Renamed for consistency
-        "all_present_details": sorted(present_in_formation), # For potential future use
-        "on_duty_students_details": sorted(present_on_duty), # Kept for backward compat with some templates
-        "platoon_graded_duty_students_details": sorted(present_graded_staff), # Kept for backward compat
-        "all_absent_details": sorted(all_absent_details) # The new consolidated list
+        "platoon_graded_duty_count": graded_staff_count,
+        # Details (lists)
+        "all_present_details": sorted(present_in_formation),  # kept for backward compatibility
+        "in_formation_students_details": sorted(present_in_formation),
+        "on_duty_students_details": sorted(present_on_duty),
+        "platoon_graded_duty_students_details": sorted(present_graded_staff),
+        "all_absent_details": all_absent_details,
+        "absent_students_details": absent_students_details,
+        "smt_students_details": sorted(smt_absences),
+        "exempt_other_students_details": sorted(exempt_absences),
+        # Counters for special categories
+        "smt_count": len(smt_absences),
     }
 
 # --- Commander Dashboards ---
