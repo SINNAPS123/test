@@ -2114,39 +2114,29 @@ def _calculate_presence_data(student_list, check_datetime):
     if not student_list:
         return {
             "efectiv_control": 0, "efectiv_prezent_total": 0, "efectiv_absent_total": 0,
-            "in_formation_count": 0, "in_formation_students_details": [],
-            "on_duty_count": 0, "on_duty_students_details": [],
-            "platoon_graded_duty_count": 0, "platoon_graded_duty_students_details": [],
-            "smt_count": 0, "smt_students_details": [],
-            "exempt_other_count": 0, "exempt_other_students_details": [],
-            "absent_students_details": []
+            "in_formation_count": 0, "on_duty_count": 0, "platoon_graded_duty_count": 0,
+            "all_present_details": [], "all_absent_details": [],
         }
 
     # --- Step 1: Bulk Data Fetch ---
     student_ids = [s.id for s in student_list]
-    now_naive = check_datetime.replace(tzinfo=None) # Use naive datetime for DB comparison
+    now_naive = check_datetime.replace(tzinfo=None)
 
-    # Bulk fetch all potentially relevant records
     active_services = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids),
         ServiceAssignment.start_datetime <= now_naive,
         ServiceAssignment.end_datetime >= now_naive
     ).all()
-
     active_permissions = Permission.query.filter(
         Permission.student_id.in_(student_ids),
         Permission.status == 'Aprobată',
         Permission.start_datetime <= now_naive,
         Permission.end_datetime >= now_naive
     ).all()
-
-    # For leaves, we fetch all and check the time-based properties in Python
-    # This is safer due to the logic in the properties (e.g., overnight)
     all_daily_leaves = DailyLeave.query.filter(
         DailyLeave.student_id.in_(student_ids),
         DailyLeave.status == 'Aprobată'
     ).all()
-
     all_weekend_leaves = WeekendLeave.query.filter(
         WeekendLeave.student_id.in_(student_ids),
         WeekendLeave.status == 'Aprobată'
@@ -2155,93 +2145,78 @@ def _calculate_presence_data(student_list, check_datetime):
     # --- Step 2: Process into Fast-Lookup Maps ---
     active_services_map = {sa.student_id: sa for sa in active_services}
     active_permissions_map = {p.student_id: p for p in active_permissions}
-
-    active_daily_leaves_map = {}
-    for dl in all_daily_leaves:
-        if dl.is_active: # is_active property checks against localized time
-            if dl.student_id not in active_daily_leaves_map:
-                active_daily_leaves_map[dl.student_id] = dl
-
+    active_daily_leaves_map = {dl.student_id: dl for dl in all_daily_leaves if dl.is_active}
     active_weekend_leaves_map = {}
     for wl in all_weekend_leaves:
         if wl.is_any_interval_active_now:
-            if wl.student_id not in active_weekend_leaves_map:
-                # Find the specific interval that is active now
-                active_interval = next((interval for interval in wl.get_intervals() if interval['start'] <= check_datetime <= interval['end']), None)
-                if active_interval:
-                    active_weekend_leaves_map[wl.student_id] = {"leave": wl, "interval": active_interval}
+            active_interval = next((interval for interval in wl.get_intervals() if interval['start'] <= check_datetime <= interval['end']), None)
+            if active_interval:
+                active_weekend_leaves_map[wl.student_id] = {"leave": wl, "interval": active_interval}
 
     # --- Step 3: Categorize Students ---
     efectiv_control = len(student_list)
-    in_formation_list = []
-    on_duty_list = []
-    platoon_graded_duty_list = [] # Present leaders
-    absent_list = []
-    smt_list = []
-    exempt_other_list = []
+    present_in_formation = []
+    present_on_duty = []
+    present_graded_staff = [] # Combined list for platoon leaders and company/battalion staff
+    all_absent_details = []
 
     for s in student_list:
         student_display_name = f"{s.grad_militar} {s.nume} {s.prenume}"
         status_found = False
 
         if s.is_smt:
-            smt_list.append(f"{student_display_name} - SMT")
+            all_absent_details.append(f"{student_display_name} - SMT")
             status_found = True
         elif s.exemption_details:
-            exempt_other_list.append(f"{student_display_name} - Scutit: {s.exemption_details}")
+            all_absent_details.append(f"{student_display_name} - Scutit: {s.exemption_details}")
             status_found = True
         elif s.id in active_services_map:
-            on_duty_list.append(f"{student_display_name} - Serviciu ({active_services_map[s.id].service_type})")
+            present_on_duty.append(f"{student_display_name} - Serviciu ({active_services_map[s.id].service_type})")
             status_found = True
         elif s.id in active_permissions_map:
-            absent_list.append(f"{student_display_name} - Permisie")
+            all_absent_details.append(f"{student_display_name} - Permisie")
             status_found = True
         elif s.id in active_weekend_leaves_map:
             wl_data = active_weekend_leaves_map[s.id]
-            absent_list.append(f"{student_display_name} - Învoire Weekend ({wl_data['interval']['day_name']})")
+            all_absent_details.append(f"{student_display_name} - Învoire Weekend ({wl_data['interval']['day_name']})")
             status_found = True
         elif s.id in active_daily_leaves_map:
-            absent_list.append(f"{student_display_name} - Învoire Zilnică ({active_daily_leaves_map[s.id].leave_type_display})")
+            all_absent_details.append(f"{student_display_name} - Învoire Zilnică ({active_daily_leaves_map[s.id].leave_type_display})")
             status_found = True
 
         if not status_found:
-            # Student is present. Now check if they are a platoon leader.
-            # This logic assumes the report is for the student's own platoon context.
-            if s.is_platoon_graded_duty:
-                 platoon_graded_duty_list.append(f"{student_display_name} - Gradat Pluton")
+            # Student is present at the unit, but might not be in formation
+            # is_platoon_graded_duty is for platoon leaders
+            # pluton == '0' is for company/battalion staff
+            if s.is_platoon_graded_duty or (s.pluton == '0'):
+                present_graded_staff.append(student_display_name)
             else:
-                 in_formation_list.append(student_display_name)
+                present_in_formation.append(student_display_name)
 
     # --- Step 4: Compile Results ---
-    in_formation_count = len(in_formation_list)
-    on_duty_count = len(on_duty_list)
-    platoon_graded_duty_count = len(platoon_graded_duty_list)
-    smt_count = len(smt_list)
-    exempt_other_count = len(exempt_other_list)
-    absent_leaves_count = len(absent_list)
+    in_formation_count = len(present_in_formation)
+    on_duty_count = len(present_on_duty)
+    graded_staff_count = len(present_graded_staff)
+    absent_total_count = len(all_absent_details)
 
-    efectiv_prezent_total = in_formation_count + on_duty_count + platoon_graded_duty_count
-    efectiv_absent_total = absent_leaves_count + smt_count + exempt_other_count
+    efectiv_prezent_total = in_formation_count + on_duty_count + graded_staff_count
+    efectiv_absent_total = absent_total_count
 
     # Consistency check
     if efectiv_control != efectiv_prezent_total + efectiv_absent_total:
-        app.logger.error(f"Presence data discrepancy: EC({efectiv_control}) != EP({efectiv_prezent_total}) + EA({efectiv_absent_total})")
+        app.logger.warning(f"Presence data discrepancy: EC({efectiv_control}) != EP({efectiv_prezent_total}) + EA({efectiv_absent_total})")
 
     return {
         "efectiv_control": efectiv_control,
         "efectiv_prezent_total": efectiv_prezent_total,
         "efectiv_absent_total": efectiv_absent_total,
         "in_formation_count": in_formation_count,
-        "in_formation_students_details": sorted(in_formation_list),
         "on_duty_count": on_duty_count,
-        "on_duty_students_details": sorted(on_duty_list),
-        "platoon_graded_duty_count": platoon_graded_duty_count,
-        "platoon_graded_duty_students_details": sorted(platoon_graded_duty_list),
-        "smt_count": smt_count,
-        "smt_students_details": sorted(smt_list),
-        "exempt_other_count": exempt_other_count,
-        "exempt_other_students_details": sorted(exempt_other_list),
-        "absent_students_details": sorted(absent_list)
+        "platoon_graded_duty_count": graded_staff_count, # Renamed for consistency
+        "all_present_details": sorted(present_in_formation), # For potential future use
+        "on_duty_students_details": sorted(present_on_duty), # Kept for backward compat with some templates
+        "platoon_graded_duty_students_details": sorted(present_graded_staff), # Kept for backward compat
+        "all_absent_details": sorted(all_absent_details) # The new consolidated list
     }
 
 # --- Commander Dashboards ---
