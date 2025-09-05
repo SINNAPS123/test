@@ -92,6 +92,16 @@
                             <label for="exemption_details" class="form-label">Detalii Scutire/Excepție (Opțional)</label>
                             <input type="text" class="form-control" id="exemption_details" name="exemption_details" value="{{ student.exemption_details if student else (form_data.exemption_details if form_data else '') }}" placeholder="ex: Medicală parțială - efort fizic redus; Comisie examen">
                             <small class="form-text text-muted">Dacă studentul este scutit SMT, bifați căsuța de mai jos. Pentru alte scutiri/excepții, completați aici.</small>
+                            {% if student %}
+                            <div class="alert alert-light border mt-2 py-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">Doriți să setați o scutire temporară cu perioadă (motiv + interval)?</small>
+                                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('add_edit_permission') }}?student_id={{ student.id }}&prefill_reason=Scutire%3A%20">
+                                        <i class="fas fa-calendar-plus me-1"></i> Scutire temporară (perioadă)
+                                    </a>
+                                </div>
+                            </div>
+                            {% endif %}
                         </div>
 
                         <div class="mb-3 form-check">
