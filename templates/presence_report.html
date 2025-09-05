@@ -44,7 +44,7 @@
         <div class="card-header bg-primary text-white">
             <div class="d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">{{ report_data.title }}</h4>
-                <button class="btn btn-sm btn-light copy-btn" data-target="#reportTextForCopy" title="Copiază raportul în format text">
+                <button class="btn btn-sm btn-light copy-btn" onclick="copyReportToClipboard('reportTextForCopy')" title="Copiază raportul în format text">
                     <i class="fas fa-copy"></i> Copiază Raport Text
                 </button>
             </div>
@@ -103,29 +103,13 @@
             {% endif %}
             {% endif %}
 
-            {% if report_data.smt_students_details or report_data.smt_count > 0 %} {# Show if there are SMT students or count > 0 #}
             <h5 class="mt-3">
-                <i class="fas fa-user-md text-secondary me-2"></i>SMT (Scutire Medicală Totală)
-                <span class="badge rounded-pill bg-secondary ms-1">{{ report_data.smt_count }}</span>
-            </h5>
-            {% if report_data.smt_students_details %}
-                <ul class="list-group list-group-flush mb-3" style="font-size: 0.9em;">
-                    {% for smt_student in report_data.smt_students_details %}
-                        <li class="list-group-item py-1 ps-2">{{ loop.index }}. {{ smt_student }}</li>
-                    {% endfor %}
-                </ul>
-            {% elif report_data.smt_count == 0 %}
-                <p class="text-muted ms-3"><small>Niciun student SMT.</small></p>
-            {% endif %}
-            {% endif %}
-
-            <h5 class="mt-3">
-                <i class="fas fa-user-times text-danger me-2"></i>Absenți Motivat
+                <i class="fas fa-user-times text-danger me-2"></i>Absenți Motivat (Total)
                 <span class="badge rounded-pill bg-danger ms-1">{{ report_data.efectiv_absent_total }}</span>
             </h5>
-            {% if report_data.absent_students_details %}
+            {% if report_data.all_absent_details %}
                 <ul class="list-group list-group-flush" style="font-size: 0.9em;">
-                    {% for absent_student in report_data.absent_students_details %}
+                    {% for absent_student in report_data.all_absent_details %}
                         <li class="list-group-item py-1 ps-2">{{ loop.index }}. {{ absent_student }}</li>
                     {% endfor %}
                 </ul>
@@ -136,45 +120,11 @@
             {% endif %}
         </div>
         <pre id="reportTextForCopy" class="report-text-block" style="display: none;">
-{{- report_data.title }}
-Data raport: {{ report_data.datetime_checked }}
-
-Efectiv Control (EC): {{ report_data.efectiv_control }}
-Efectiv Prezent (Ep): {{ report_data.efectiv_prezent_total }}
-Efectiv Absent (Ea): {{ report_data.efectiv_absent_total }}
-
-{% if report_data.in_formation_count > 0 -%}
-PREZENȚI ÎN FORMAȚIE ({{ report_data.in_formation_count }}):
-{% for present_student in report_data.in_formation_students_details -%}
-  - {{ present_student }}
-{% endfor %}
-{% endif %}
-
-{% if (report_data.on_duty_students_details | length) > 0 -%}
-LA SERVICII ({{ report_data.on_duty_students_details | length }}):
-{% for duty_student in report_data.on_duty_students_details -%}
-  - {{ duty_student }}
-{% endfor %}
-{% endif %}
-
-{% if report_data.platoon_graded_duty_count > 0 -%}
-GRADAȚI PLUTON (Activitate Specifică) ({{ report_data.platoon_graded_duty_count }}):
-{% for graded_student in report_data.platoon_graded_duty_students_details -%}
-  - {{ graded_student }}
-{% endfor %}
-{% endif %}
-
-{% if report_data.smt_count > 0 -%} {# New SMT section for text report #}
-SMT (Scutire Medicală Totală) ({{ report_data.smt_count }}):
-{% for smt_student in report_data.smt_students_details -%}
-  - {{ smt_student }}
-{% endfor %}
-{% endif %}
-
-{% if report_data.absent_students_details %} {# This list no longer includes SMT #}
-ABSENȚI MOTIVAT ({{ report_data.absent_students_details | length }}): {# Count based on details list length #}
-{% for absent_student in report_data.absent_students_details -%}
-  - {{ absent_student }}
+EC: {{ report_data.efectiv_control }}, EP: {{ report_data.efectiv_prezent_total }}, EA: {{ report_data.efectiv_absent_total }}
+{% if report_data.all_absent_details %}
+Absenti motivat:
+{% for detail in report_data.all_absent_details %}
+- {{ detail }}
 {% endfor %}
 {% endif %}
         </pre>

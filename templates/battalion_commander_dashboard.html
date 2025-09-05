@@ -201,17 +201,17 @@
             </ul>
         {% endif %}
         
-        {% if data.absent_students_details %}
+        {% if data.all_absent_details %}
             <h6 class="mt-2 mb-1">
                 Absenți Motivat ({{ data.efectiv_absent_total }})
                 <button class="btn btn-outline-info btn-sm toggle-details-btn" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix }}-absent-details" aria-expanded="false" aria-controls="{{ id_prefix }}-absent-details">Detalii</button>
             </h6>
             <ul class="list-group list-group-flush collapse details-list" id="{{ id_prefix }}-absent-details">
-                {% for item in data.absent_students_details %}
+                {% for item in data.all_absent_details %}
                     <li class="list-group-item list-group-item-sm py-1">{{ item }}</li>
                 {% endfor %}
             </ul>
-        {% elif data.efectiv_absent_total == 0 and data.efectiv_control > 0 and data.efectiv_prezent_total == data.efectiv_control %}
+        {% elif data.efectiv_absent_total == 0 and data.efectiv_control > 0 %}
              <p class="text-success mt-2 mb-0"><small>Niciun student absent motivat.</small></p>
         {% endif %}
     {% endmacro %}
@@ -221,7 +221,7 @@
     <div class="card shadow-sm mb-4">
         <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
             <h4 class="mb-0">Efective Totale Batalionul {{ battalion_id }}</h4>
-            <button class="btn btn-light btn-sm copy-btn" data-target="#raport-apel-batalion">
+            <button class="btn btn-light btn-sm copy-btn" onclick="copyReportToClipboard('raport-apel-batalion')">
                 <i class="fas fa-copy"></i> Copiază
             </button>
         </div>
@@ -238,21 +238,16 @@ RAPORT OPERATIV - BATALIONUL {{ battalion_id }}
 Data și ora raportului: {{ roll_call_time_str }}
 ========================================
 SITUAȚIE CENTRALIZATOARE BATALION:
-  Efectiv control (Ec): {{ total_battalion_presence.efectiv_control }}
-  Efectiv prezent (Ep): {{ total_battalion_presence.efectiv_prezent_total }}
-    - În formație: {{ total_battalion_presence.in_formation_count }}
-    - La Servicii: {{ total_battalion_presence.on_duty_count }}
-    - Gradat Pluton (prezent): {{ total_battalion_presence.platoon_graded_duty_count }}
-  Efectiv absent (Ea): {{ total_battalion_presence.efectiv_absent_total }}
+EC: {{ total_battalion_presence.efectiv_control }}, EP: {{ total_battalion_presence.efectiv_prezent_total }}, EA: {{ total_battalion_presence.efectiv_absent_total }}
 ========================================
 {% for company_name, company_data in companies_data.items()|sort %}
 SITUAȚIE {{ company_name }}:
   Ec: {{ company_data.efectiv_control }}, Ep: {{ company_data.efectiv_prezent_total }}, Ea: {{ company_data.efectiv_absent_total }}
-    În formație: {{ company_data.in_formation_count }}
-    La Servicii: {{ company_data.on_duty_count }}
-    Gradat Pluton (prezent): {{ company_data.platoon_graded_duty_count }}
-{% if company_data.absent_students_details %}    Absenți motivat:
-{% for detail in company_data.absent_students_details %}      - {{ detail }}
+    - În formație: {{ company_data.in_formation_count }}
+    - La Servicii: {{ company_data.on_duty_count }}
+    - Gradați (prezenți): {{ company_data.platoon_graded_duty_count }}
+{% if company_data.all_absent_details %}    Absenți motivat ({{ company_data.efectiv_absent_total }}):
+{% for detail in company_data.all_absent_details %}      - {{ detail }}
 {% endfor %}{% endif %}----------------------------------------
 {% endfor %}
             </pre>
@@ -360,7 +355,42 @@ SITUAȚIE {{ company_name }}:
 
 {% block scripts %}
 {{ super() }}
-{# Scriptul pentru toggle este implicit gestionat de Bootstrap 5 Collapse, nu e nevoie de JS custom simplu. #}
-{# Asigură-te că ai Bootstrap JS inclus în base.html sau global. #}
-{# Exemplu: <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"><\/script> #}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Toggle details functionality is handled by Bootstrap 5 Collapse attributes
+});
+
+function copyReportToClipboard(elementId) {
+    const reportTextElement = document.getElementById(elementId);
+    if (!reportTextElement) {
+        alert('Eroare: Elementul text pentru copiere nu a fost găsit.');
+        return;
+    }
+    const reportText = reportTextElement.innerText.trim();
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(reportText).then(function() {
+            alert('Raportul a fost copiat în clipboard!');
+        }, function(err) {
+            console.error('Async: Could not copy text: ', err);
+            alert('Eroare la copierea raportului (navigator).');
+        });
+    } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = reportText;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = 0;
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            alert('Raportul a fost copiat în clipboard! (fallback)');
+        } catch (err) {
+            console.error('Fallback: Oops, unable to copy: ', err);
+            alert('Eroare la copierea raportului (fallback).');
+        }
+        document.body.removeChild(textarea);
+    }
+}
+</script>
 {% endblock %}

@@ -56,12 +56,13 @@
             </div>
         </div>
         <pre id="situatie-pluton-text" class="report-text-block" style="display: none;">
-Situație Pluton ({{ get_localized_now().strftime('%d-%m-%Y %H:%M') }})
-------------------------------
-Total Studenți: {{ sit_total_studenti }}
-Prezenți Formație: {{ sit_prezenti_formatie }}
-Total Învoiți/Absenți: {{ sit_total_invoiti_acum }}
-În Serviciu: {{ sit_in_serviciu_acum }}
+EC: {{ sit_total_studenti }}, EP: {{ sit_prezenti_formatie + sit_in_serviciu_acum + sit_gradat_pluton_prezent_acum }}, EA: {{ sit_total_invoiti_acum }}
+{% if sit_total_invoiti_acum > 0 %}
+Absenti motivat:
+{% for detail in current_platoon_situation.all_absent_details %}
+- {{ detail }}
+{% endfor %}
+{% endif %}
         </pre>
     </div>
 
@@ -144,4 +145,51 @@ Total Învoiți/Absenți: {{ sit_total_invoiti_acum }}
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+function copyReportToClipboard(elementId) {
+    const reportTextElement = document.getElementById(elementId);
+    if (!reportTextElement) {
+        alert('Eroare: Elementul text pentru copiere nu a fost găsit.');
+        return;
+    }
+    const reportText = reportTextElement.innerText.trim();
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(reportText).then(function() {
+            alert('Situația a fost copiată în clipboard!');
+        }, function(err) {
+            console.error('Async: Could not copy text: ', err);
+            alert('Eroare la copierea situației (navigator).');
+        });
+    } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = reportText;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = 0;
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            alert('Situația a fost copiată în clipboard! (fallback)');
+        } catch (err) {
+            console.error('Fallback: Oops, unable to copy: ', err);
+            alert('Eroare la copierea situației (fallback).');
+        }
+        document.body.removeChild(textarea);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const copyButton = document.querySelector('.copy-btn[data-target="#situatie-pluton-text"]');
+    if (copyButton) {
+        copyButton.addEventListener('click', function() {
+            copyReportToClipboard('situatie-pluton-text');
+        });
+    }
+});
+</script>
 {% endblock %}
