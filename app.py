@@ -1484,6 +1484,7 @@ def dashboard():
                                weekend_leaves_today_count=weekend_leaves_active_today, # Statistică veche "azi"
                                services_today_count=services_today_count, # Statistică veche "azi"
                                total_volunteer_activities=total_volunteer_activities,
+                               current_platoon_situation=current_platoon_situation,
                                # Date noi pentru "Mini Situație ACUM"
                                sit_total_studenti=current_platoon_situation.get("efectiv_control", 0),
                                sit_prezenti_formatie=current_platoon_situation.get("in_formation_count", 0),
