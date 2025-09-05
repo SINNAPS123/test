@@ -4,3 +4,6 @@ Flask-Login
 bcrypt
 unidecode
 python-docx
+Flask-Compress
+Flask-Migrate
+pytz

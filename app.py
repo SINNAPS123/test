@@ -517,11 +517,6 @@ def init_db():
         else: print("Admin user already exists.")
         print("DB initialized.")
 
-def get_next_friday(start_date=None):
-    d = start_date if start_date else get_localized_now().date() # Use localized date
-    while d.weekday() != 4: d += timedelta(days=1)
-    return d
-
 # --- Insights / Operational Overview ---
 @app.route('/gradat/insights')
 @login_required
@@ -1330,6 +1325,13 @@ def set_personal_code():
             flash('Codurile personale nu se potrivesc.', 'warning')
             return redirect(url_for('set_personal_code'))
 
+        # Security fix: Check if the personal code is already in use by another user
+        other_users = User.query.filter(User.id != current_user.id, User.role != 'admin', User.personal_code_hash.isnot(None)).all()
+        for other_user in other_users:
+            if other_user.check_personal_code(personal_code):
+                flash('Acest cod personal este deja utilizat de altcineva. Vă rugăm alegeți un alt cod.', 'danger')
+                return redirect(url_for('set_personal_code'))
+
         try:
             details_before = {"is_first_login": current_user.is_first_login, "personal_code_hash_exists": current_user.personal_code_hash is not None}
 
@@ -1681,6 +1683,12 @@ def admin_delete_user(user_id):
         for sa in services_to_orphan:
             sa.created_by_user_id = None
 
+        # Handle VolunteerSession created by this user
+        volunteer_sessions_to_orphan = VolunteerSession.query.filter_by(created_by_user_id=user_to_delete.id).all()
+        num_volunteer_sessions_orphaned = len(volunteer_sessions_to_orphan)
+        for vs in volunteer_sessions_to_orphan:
+            vs.created_by_user_id = None # Or set to a default admin ID if preferred
+
         if user_to_delete.role == 'gradat':
             students_to_delete = Student.query.filter_by(created_by_user_id=user_to_delete.id).all()
             num_students_deleted = len(students_to_delete)
@@ -1695,7 +1703,8 @@ def admin_delete_user(user_id):
             f"Admin {current_user.username} deleted user {username_deleted_log} ({role_deleted_log}). "
             f"{num_students_deleted} students (and their direct data) also deleted if user was gradat. "
             f"Orphaned records: Activities({num_activities_orphaned}), Permissions({num_permissions_orphaned}), "
-            f"DailyLeaves({num_daily_leaves_orphaned}), WeekendLeaves({num_weekend_leaves_orphaned}), Services({num_services_orphaned}). "
+            f"DailyLeaves({num_daily_leaves_orphaned}), WeekendLeaves({num_weekend_leaves_orphaned}), Services({num_services_orphaned}), "
+            f"VolunteerSessions({num_volunteer_sessions_orphaned}). "
             f"IP: {request.remote_addr}"
         )
 
@@ -6147,6 +6156,13 @@ def admin_set_user_personal_code(user_id):
         if new_code != confirm_new_code:
             flash('Codurile personale introduse nu se potrivesc.', 'warning')
             return render_template('admin_set_user_personal_code.html', target_user=target_user)
+
+        # Security fix: Check if the personal code is already in use by another user
+        other_users = User.query.filter(User.id != target_user.id, User.role != 'admin', User.personal_code_hash.isnot(None)).all()
+        for other_user in other_users:
+            if other_user.check_personal_code(new_code):
+                flash('Acest cod personal este deja utilizat de altcineva. Vă rugăm alegeți un alt cod.', 'danger')
+                return render_template('admin_set_user_personal_code.html', target_user=target_user)
 
         details_before = model_to_dict(target_user, exclude_fields=['password_hash', 'unique_code', 'personal_code_hash'])
         details_before['personal_code_was_set'] = target_user.personal_code_hash is not None
