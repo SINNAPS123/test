@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Acces Delegat{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-5">
+            <div class="card shadow-lg">
+                <div class="card-header text-center bg-primary text-white">
+                    <h4><i class="fas fa-key me-2"></i>Autentificare cu Cod de Acces Special</h4>
+                </div>
+                <div class="card-body p-4">
+                    <p class="text-muted text-center">Introduceți codul de acces pe care l-ați primit pentru a accesa modulele permise.</p>
+
+                    {% include '_flash_messages.html' %}
+
+                    <form method="POST" action="{{ url_for('scoped_login') }}">
+                        <div class="form-floating mb-3">
+                            <input type="text" class="form-control" id="access_code" name="access_code" placeholder="Cod de Acces" required autofocus>
+                            <label for="access_code">Cod de Acces</label>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-sign-in-alt me-2"></i>Intră în cont
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <div class="card-footer text-center">
+                    <a href="{{ url_for('home') }}">Înapoi la pagina principală</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
