@@ -505,6 +505,28 @@ class PublicViewCode(db.Model):
     def __repr__(self):
         return f'<PublicViewCode {self.code} for {self.scope_type} {self.scope_id}>'
 
+class ScopedAccessCode(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(16), unique=True, nullable=False)
+    description = db.Column(db.String(255), nullable=True) # e.g., "Acces Voluntariat pentru Sdt. Popescu"
+    # This JSON field will store a list of route prefixes, e.g., '["/volunteer", "/gradat/students"]'
+    permissions = db.Column(db.Text, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # The gradat who created this code and whose data will be accessed
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    creator = db.relationship('User', backref=db.backref('scoped_access_codes_created', lazy=True))
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+
+    def get_permissions_list(self):
+        try:
+            return json.loads(self.permissions)
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def __repr__(self):
+        return f'<ScopedAccessCode {self.code} for User ID {self.created_by_user_id}>'
+
 @login_manager.user_loader
 def load_user(user_id): return db.session.get(User, int(user_id))
 
@@ -1505,7 +1527,8 @@ def dashboard():
                                ).count(),
                                todays_services=todays_services,
                                # Quick Stats
-                                students_with_high_points=Student.query.filter(Student.created_by_user_id==current_user.id, Student.volunteer_points > 10).count()
+                                students_with_high_points=Student.query.filter(Student.created_by_user_id==current_user.id, Student.volunteer_points > 10).count(),
+                                active_scoped_codes=ScopedAccessCode.query.filter_by(created_by_user_id=current_user.id, is_active=True).filter(ScopedAccessCode.expires_at > get_localized_now()).all()
                                )
     elif current_user.role == 'comandant_companie':
         return redirect(url_for('company_commander_dashboard'))
@@ -2875,40 +2898,123 @@ def battalion_commander_dashboard():
                            )
 
 # --- Volunteer Module ---
-@app.route('/volunteer', methods=['GET', 'POST'])
-@login_required
+
+def get_current_user_or_scoped():
+    """Helper to get the active user, either from Flask-Login or the scoped session."""
+    if current_user.is_authenticated:
+        return current_user
+    elif hasattr(g, 'scoped_user'):
+        return g.scoped_user
+    return None
+
+@app.route('/volunteer', methods=['GET'])
+@scoped_access_required
 def volunteer_home():
-    if current_user.role != 'gradat':
+    user = get_current_user_or_scoped()
+    if not user or user.role != 'gradat':
         flash('Acces neautorizat la modulul de voluntariat.', 'danger')
         return redirect(url_for('dashboard'))
 
-    if request.method == 'POST': # Creare activitate nouă
+    # GET request logic
+    activities = VolunteerActivity.query.filter_by(created_by_user_id=user.id).order_by(VolunteerActivity.activity_date.desc()).all()
+    students_with_points = Student.query.filter_by(created_by_user_id=user.id).order_by(Student.volunteer_points.desc(), Student.nume).all()
+
+    return render_template('volunteer_home.html',
+                           activities=activities,
+                           students_with_points=students_with_points)
+
+@app.route('/volunteer/assign_multiple_activities', methods=['GET', 'POST'])
+@scoped_access_required
+def assign_multiple_activities():
+    user = get_current_user_or_scoped()
+    if not user or user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        student_ids = request.form.getlist('student_ids')
+        activity_id = request.form.get('activity_id')
+        points_to_award = request.form.get('points_to_award', 0, type=int)
+
+        if not student_ids or not activity_id:
+            flash('Trebuie să selectați cel puțin un student și o activitate.', 'warning')
+            return redirect(url_for('assign_multiple_activities'))
+
+        activity = VolunteerActivity.query.get_or_404(activity_id)
+        if activity.created_by_user_id != user.id:
+            flash('Acces neautorizat la această activitate.', 'danger')
+            return redirect(url_for('volunteer_home'))
+
+        students_to_assign = Student.query.filter(Student.id.in_(student_ids), Student.created_by_user_id == user.id).all()
+
+        added_count = 0
+        skipped_count = 0
+        for student in students_to_assign:
+            # Verifică dacă studentul este deja participant
+            existing_participant = ActivityParticipant.query.filter_by(activity_id=activity.id, student_id=student.id).first()
+            if not existing_participant:
+                new_participant = ActivityParticipant(
+                    activity_id=activity.id,
+                    student_id=student.id,
+                    points_awarded=points_to_award
+                )
+                db.session.add(new_participant)
+
+                # Actualizează punctajul total al studentului
+                student.volunteer_points = (student.volunteer_points or 0) + points_to_award
+                added_count += 1
+            else:
+                skipped_count += 1
+
+        if added_count > 0:
+            try:
+                db.session.commit()
+                flash(f'{added_count} studenți au fost adăugați cu succes la activitatea "{activity.name}".', 'success')
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Eroare la asignarea studenților: {str(e)}', 'danger')
+
+        if skipped_count > 0:
+            flash(f'{skipped_count} studenți erau deja participanți și au fost omiși.', 'info')
+
+        return redirect(url_for('volunteer_activity_details', activity_id=activity.id))
+
+    # GET request
+    students_managed = Student.query.filter_by(created_by_user_id=user.id).order_by(Student.nume).all()
+    activities = VolunteerActivity.query.filter_by(created_by_user_id=user.id).order_by(VolunteerActivity.activity_date.desc()).all()
+
+    return render_template('assign_multiple_activities.html', students_managed=students_managed, activities=activities)
+
+@app.route('/volunteer/activity/create', methods=['GET', 'POST'])
+@scoped_access_required
+def volunteer_activity_create():
+    user = get_current_user_or_scoped()
+    if not user or user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('volunteer_home'))
+
+    if request.method == 'POST':
         activity_name = request.form.get('activity_name', '').strip()
         activity_description = request.form.get('activity_description', '').strip()
         activity_date_str = request.form.get('activity_date')
 
         if not activity_name or not activity_date_str:
             flash('Numele activității și data sunt obligatorii.', 'warning')
-            # Re-render GET part
-            activities = VolunteerActivity.query.filter_by(created_by_user_id=current_user.id).order_by(VolunteerActivity.activity_date.desc()).all()
-            students_with_points = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.volunteer_points.desc(), Student.nume).all()
-            today_str_for_form = date.today().strftime('%Y-%m-%d')
-            return render_template('volunteer_home.html', activities=activities, students_with_points=students_with_points, today_str=today_str_for_form)
+            today_str_for_form = get_localized_now().date().strftime('%Y-%m-%d')
+            return render_template('volunteer_activity_create.html', today_str=today_str_for_form)
 
         try:
             activity_date_obj = datetime.strptime(activity_date_str, '%Y-%m-%d').date()
         except ValueError:
             flash('Format dată invalid pentru activitate.', 'danger')
-            activities = VolunteerActivity.query.filter_by(created_by_user_id=current_user.id).order_by(VolunteerActivity.activity_date.desc()).all()
-            students_with_points = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.volunteer_points.desc(), Student.nume).all()
-            today_str_for_form = date.today().strftime('%Y-%m-%d')
-            return render_template('volunteer_home.html', activities=activities, students_with_points=students_with_points, today_str=today_str_for_form)
+            today_str_for_form = get_localized_now().date().strftime('%Y-%m-%d')
+            return render_template('volunteer_activity_create.html', today_str=today_str_for_form)
 
         new_activity = VolunteerActivity(
             name=activity_name,
             description=activity_description,
             activity_date=activity_date_obj,
-            created_by_user_id=current_user.id
+            created_by_user_id=user.id
         )
         db.session.add(new_activity)
         try:
@@ -2920,20 +3026,15 @@ def volunteer_home():
         return redirect(url_for('volunteer_home'))
 
     # GET request
-    activities = VolunteerActivity.query.filter_by(created_by_user_id=current_user.id).order_by(VolunteerActivity.activity_date.desc()).all()
-    students_with_points = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.volunteer_points.desc(), Student.nume).all()
-    today_str_for_form = get_localized_now().date().strftime('%Y-%m-%d') # Folosim data localizată
-
-    return render_template('volunteer_home.html',
-                           activities=activities,
-                           students_with_points=students_with_points,
-                           today_str=today_str_for_form)
+    today_str_for_form = get_localized_now().date().strftime('%Y-%m-%d')
+    return render_template('volunteer_activity_create.html', today_str=today_str_for_form)
 
 @app.route('/volunteer/activity/<int:activity_id>', methods=['GET', 'POST'])
-@login_required
+@scoped_access_required
 def volunteer_activity_details(activity_id):
+    user = get_current_user_or_scoped()
     activity = VolunteerActivity.query.get_or_404(activity_id)
-    if current_user.role != 'gradat' or activity.created_by_user_id != current_user.id:
+    if not user or user.role != 'gradat' or activity.created_by_user_id != user.id:
         flash('Acces neautorizat la această activitate de voluntariat.', 'danger')
         return redirect(url_for('volunteer_home'))
 
@@ -2961,7 +3062,7 @@ def volunteer_activity_details(activity_id):
                 exists = ActivityParticipant.query.filter_by(activity_id=activity.id, student_id=student_id_to_add).first()
                 if not exists:
                     # Ensure the student belongs to the current gradat
-                    student_check = Student.query.filter_by(id=student_id_to_add, created_by_user_id=current_user.id).first()
+                    student_check = Student.query.filter_by(id=student_id_to_add, created_by_user_id=user.id).first()
                     if student_check:
                         new_participant = ActivityParticipant(activity_id=activity.id, student_id=student_id_to_add, points_awarded=0)
                         db.session.add(new_participant)
@@ -3021,7 +3122,7 @@ def volunteer_activity_details(activity_id):
         return redirect(url_for('volunteer_activity_details', activity_id=activity.id))
 
     # GET request
-    students_managed = Student.query.filter_by(created_by_user_id=current_user.id).order_by(Student.nume).all()
+    students_managed = Student.query.filter_by(created_by_user_id=user.id).order_by(Student.nume).all()
 
     # Get current participant student IDs for this activity
     current_participant_ids = [ap.student_id for ap in ActivityParticipant.query.filter_by(activity_id=activity.id).all()]
@@ -3101,9 +3202,10 @@ def _generate_eligible_volunteers(gradat_id, num_to_generate, exclude_girls=Fals
 
 
 @app.route('/volunteer/generate', methods=['GET', 'POST'])
-@login_required
+@scoped_access_required
 def volunteer_generate_students():
-    if current_user.role != 'gradat':
+    user = get_current_user_or_scoped()
+    if not user or user.role != 'gradat':
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
 
@@ -3132,7 +3234,7 @@ def volunteer_generate_students():
             form_data['activity_date_for_check'] = activity_date.isoformat()
 
         generated_students_list = _generate_eligible_volunteers(
-            gradat_id=current_user.id,
+            gradat_id=user.id,
             num_to_generate=num_to_generate,
             exclude_girls=form_data['exclude_girls'],
             activity_date=activity_date
@@ -3146,9 +3248,10 @@ def volunteer_generate_students():
                            form_data=form_data)
 
 @app.route('/volunteer/save_session', methods=['POST'], endpoint='save_volunteer_session')
-@login_required
+@scoped_access_required
 def save_volunteer_session():
-    if current_user.role != 'gradat':
+    user = get_current_user_or_scoped()
+    if not user or user.role != 'gradat':
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
 
@@ -3169,11 +3272,11 @@ def save_volunteer_session():
     # Create the new session
     new_session = VolunteerSession(
         name=session_name,
-        created_by_user_id=current_user.id
+        created_by_user_id=user.id
     )
 
     # Find and associate students
-    students_to_add = Student.query.filter(Student.id.in_(student_ids), Student.created_by_user_id == current_user.id).all()
+    students_to_add = Student.query.filter(Student.id.in_(student_ids), Student.created_by_user_id == user.id).all()
     
     if len(students_to_add) != len(student_ids):
         flash('Avertisment: Unii studenți nu au putut fi găsiți sau nu vă aparțin și nu au fost adăugați la listă.', 'warning')
@@ -3187,33 +3290,35 @@ def save_volunteer_session():
     except Exception as e:
         db.session.rollback()
         flash(f'Eroare la salvarea listei de voluntari: {str(e)}', 'danger')
-        app.logger.error(f"Error saving volunteer session for user {current_user.id}: {str(e)}")
+        app.logger.error(f"Error saving volunteer session for user {user.id}: {str(e)}")
 
     # Redirect to the list of saved sessions
     return redirect(url_for('volunteer_sessions_list'))
 
 @app.route('/volunteer/sessions', methods=['GET'], endpoint='volunteer_sessions_list')
-@login_required
+@scoped_access_required
 def volunteer_sessions_list():
-    if current_user.role != 'gradat':
+    user = get_current_user_or_scoped()
+    if not user or user.role != 'gradat':
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
     
-    sessions = VolunteerSession.query.filter_by(created_by_user_id=current_user.id)\
+    sessions = VolunteerSession.query.filter_by(created_by_user_id=user.id)\
         .order_by(VolunteerSession.created_at.desc())\
         .all()
     
     return render_template('volunteer_sessions_list.html', sessions=sessions)
 
 @app.route('/volunteer/session/<int:session_id>', methods=['GET', 'POST'], endpoint='volunteer_session_details')
-@login_required
+@scoped_access_required
 def volunteer_session_details(session_id):
-    if current_user.role != 'gradat':
+    user = get_current_user_or_scoped()
+    if not user or user.role != 'gradat':
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
 
     session = VolunteerSession.query.get_or_404(session_id)
-    if session.created_by_user_id != current_user.id:
+    if session.created_by_user_id != user.id:
         flash('Acces neautorizat la această listă.', 'danger')
         return redirect(url_for('volunteer_sessions_list'))
 
@@ -3227,7 +3332,7 @@ def volunteer_session_details(session_id):
 
             students_to_add = Student.query.filter(
                 Student.id.in_(student_ids_to_add),
-                Student.created_by_user_id == current_user.id
+                Student.created_by_user_id == user.id
             ).all()
 
             added_count = 0
@@ -3275,10 +3380,10 @@ def volunteer_session_details(session_id):
 
     # GET request or if POST action is not 'add_students'
     students_in_session = session.students.all()
-    all_managed_students = Student.query.filter_by(created_by_user_id=current_user.id).all()
+    all_managed_students = Student.query.filter_by(created_by_user_id=user.id).all()
     
     # Get activities created by the user to populate the dropdown
-    available_activities = VolunteerActivity.query.filter_by(created_by_user_id=current_user.id)\
+    available_activities = VolunteerActivity.query.filter_by(created_by_user_id=user.id)\
         .order_by(VolunteerActivity.activity_date.desc()).all()
 
     return render_template('volunteer_session_details.html', 
@@ -3288,14 +3393,15 @@ def volunteer_session_details(session_id):
                            available_activities=available_activities)
 
 @app.route('/volunteer/session/<int:session_id>/assign', methods=['POST'], endpoint='assign_session_to_activity')
-@login_required
+@scoped_access_required
 def assign_session_to_activity(session_id):
-    if current_user.role != 'gradat':
+    user = get_current_user_or_scoped()
+    if not user or user.role != 'gradat':
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
 
     session = VolunteerSession.query.get_or_404(session_id)
-    if session.created_by_user_id != current_user.id:
+    if session.created_by_user_id != user.id:
         flash('Acces neautorizat la această listă.', 'danger')
         return redirect(url_for('volunteer_sessions_list'))
 
@@ -3307,7 +3413,7 @@ def assign_session_to_activity(session_id):
         return redirect(url_for('volunteer_session_details', session_id=session_id))
     
     activity = VolunteerActivity.query.get_or_404(activity_id)
-    if activity.created_by_user_id != current_user.id:
+    if activity.created_by_user_id != user.id:
         flash('Acces neautorizat la activitatea selectată.', 'danger')
         return redirect(url_for('volunteer_session_details', session_id=session_id))
 
@@ -3346,14 +3452,15 @@ def assign_session_to_activity(session_id):
     return redirect(url_for('volunteer_activity_details', activity_id=activity.id))
 
 @app.route('/volunteer/session/<int:session_id>/generate_and_add', methods=['POST'], endpoint='generate_and_add_to_session')
-@login_required
+@scoped_access_required
 def generate_and_add_to_session(session_id):
-    if current_user.role != 'gradat':
+    user = get_current_user_or_scoped()
+    if not user or user.role != 'gradat':
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
 
     session = VolunteerSession.query.get_or_404(session_id)
-    if session.created_by_user_id != current_user.id:
+    if session.created_by_user_id != user.id:
         flash('Acces neautorizat la această listă.', 'danger')
         return redirect(url_for('volunteer_sessions_list'))
 
@@ -3361,7 +3468,7 @@ def generate_and_add_to_session(session_id):
     exclude_girls = 'exclude_girls_generate' in request.form
 
     # Re-use the logic from volunteer_generate_students, but adapt it
-    students_query = Student.query.filter_by(created_by_user_id=current_user.id)
+    students_query = Student.query.filter_by(created_by_user_id=user.id)
 
     if exclude_girls:
         students_query = students_query.filter(Student.gender != 'F')
@@ -3391,15 +3498,16 @@ def generate_and_add_to_session(session_id):
     return redirect(url_for('volunteer_session_details', session_id=session_id))
 
 @app.route('/volunteer/session/delete/<int:session_id>', methods=['POST'], endpoint='delete_volunteer_session')
-@login_required
+@scoped_access_required
 def delete_volunteer_session(session_id):
-    if current_user.role != 'gradat':
+    user = get_current_user_or_scoped()
+    if not user or user.role != 'gradat':
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
 
     session_to_delete = VolunteerSession.query.get_or_404(session_id)
 
-    if session_to_delete.created_by_user_id != current_user.id:
+    if session_to_delete.created_by_user_id != user.id:
         flash('Nu aveți permisiunea să ștergeți această listă.', 'danger')
         return redirect(url_for('volunteer_sessions_list'))
 
@@ -3412,20 +3520,21 @@ def delete_volunteer_session(session_id):
     except Exception as e:
         db.session.rollback()
         flash(f'Eroare la ștergerea listei: {str(e)}', 'danger')
-        app.logger.error(f"Error deleting volunteer session {session_id} for user {current_user.id}: {str(e)}")
+        app.logger.error(f"Error deleting volunteer session {session_id} for user {user.id}: {str(e)}")
 
     return redirect(url_for('volunteer_sessions_list'))
 
 @app.route('/volunteer/activity/delete/<int:activity_id>', methods=['POST'], endpoint='delete_volunteer_activity')
-@login_required
+@scoped_access_required
 def delete_volunteer_activity(activity_id):
-    if current_user.role != 'gradat':
+    user = get_current_user_or_scoped()
+    if not user or user.role != 'gradat':
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('volunteer_home'))
 
     activity_to_delete = VolunteerActivity.query.get_or_404(activity_id)
 
-    if activity_to_delete.created_by_user_id != current_user.id:
+    if activity_to_delete.created_by_user_id != user.id:
         flash('Nu aveți permisiunea să ștergeți această activitate de voluntariat.', 'danger')
         return redirect(url_for('volunteer_home'))
 
@@ -3467,7 +3576,7 @@ def delete_volunteer_activity(activity_id):
 
         # Log principal pentru ștergerea activității
         log_description = (
-            f"User {current_user.username} deleted volunteer activity '{activity_name_for_log}' (ID: {activity_id}). "
+            f"User {user.username} deleted volunteer activity '{activity_name_for_log}' (ID: {activity_id}). "
             f"{len(participants_details_before)} participant records were associated. Points adjusted for students."
         )
         # Adăugăm și detaliile despre ajustarea punctelor la descriere sau ca un JSON separat
@@ -3493,7 +3602,7 @@ def delete_volunteer_activity(activity_id):
                    target_model_name="VolunteerActivity",
                    target_id=activity_id,
                    details_before_dict=details_before_activity_delete, # Log ce s-a încercat să se șteargă
-                   description=f"User {current_user.username} failed to delete volunteer activity '{activity_name_for_log}'. Error: {str(e)}")
+                   description=f"User {user.username} failed to delete volunteer activity '{activity_name_for_log}'. Error: {str(e)}")
         db.session.commit() # Commit log-ul de eroare
 
     return redirect(url_for('volunteer_home'))
@@ -3502,9 +3611,15 @@ def delete_volunteer_activity(activity_id):
 # --- Management Studenți ---
 @app.route('/gradat/students')
 @app.route('/admin/students')
-@login_required
+@scoped_access_required
 def list_students():
-    is_admin_view = current_user.role == 'admin' and request.path.startswith('/admin/')
+    user = get_current_user_or_scoped()
+    # If no user from either login method, deny access.
+    if not user:
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('user_login')) # Or scoped_login if we can determine context
+
+    is_admin_view = user.role == 'admin' and request.path.startswith('/admin/')
     page = request.args.get('page', 1, type=int)
     per_page = 15
 
@@ -3512,13 +3627,13 @@ def list_students():
     # For populating filter dropdowns - consider optimizing if it becomes slow
     # These filters are primarily for admin view.
     batalioane, companii, plutoane = [], [], []
-    if is_admin_view or current_user.role in ['comandant_companie', 'comandant_batalion']:
+    if is_admin_view or user.role in ['comandant_companie', 'comandant_batalion']:
         all_students_for_filters_q = Student.query
-        if current_user.role == 'comandant_companie':
-            company_id = _get_commander_unit_id(current_user.username, "CmdC")
+        if user.role == 'comandant_companie':
+            company_id = _get_commander_unit_id(user.username, "CmdC")
             if company_id: all_students_for_filters_q = all_students_for_filters_q.filter(Student.companie == company_id)
-        elif current_user.role == 'comandant_batalion':
-            battalion_id = _get_commander_unit_id(current_user.username, "CmdB")
+        elif user.role == 'comandant_batalion':
+            battalion_id = _get_commander_unit_id(user.username, "CmdB")
             if battalion_id: all_students_for_filters_q = all_students_for_filters_q.filter(Student.batalion == battalion_id)
 
         all_students_for_filters = all_students_for_filters_q.with_entities(Student.batalion, Student.companie, Student.pluton).distinct().all()
@@ -3538,12 +3653,12 @@ def list_students():
         if filter_companie: students_query = students_query.filter(Student.companie == filter_companie)
         if filter_pluton: students_query = students_query.filter(Student.pluton == filter_pluton)
         students_query = students_query.order_by(Student.batalion, Student.companie, Student.pluton, Student.nume, Student.prenume)
-    elif current_user.role == 'gradat':
-        students_query = students_query.filter_by(created_by_user_id=current_user.id)
+    elif user.role == 'gradat':
+        students_query = students_query.filter_by(created_by_user_id=user.id)
         # Gradat might not need sub-filters for platoon/company as they manage specific students
         students_query = students_query.order_by(Student.nume, Student.prenume)
-    elif current_user.role == 'comandant_companie':
-        company_id = _get_commander_unit_id(current_user.username, "CmdC")
+    elif user.role == 'comandant_companie':
+        company_id = _get_commander_unit_id(user.username, "CmdC")
         if company_id:
             students_query = students_query.filter(Student.companie == company_id)
             if filter_pluton: students_query = students_query.filter(Student.pluton == filter_pluton) # Allow CmdC to filter by platoon
@@ -3551,8 +3666,8 @@ def list_students():
         else:
             flash('ID Companie nevalid pentru comandant.', 'danger')
             students_query = students_query.filter(Student.id == -1) # No results
-    elif current_user.role == 'comandant_batalion':
-        battalion_id = _get_commander_unit_id(current_user.username, "CmdB")
+    elif user.role == 'comandant_batalion':
+        battalion_id = _get_commander_unit_id(user.username, "CmdB")
         if battalion_id:
             students_query = students_query.filter(Student.batalion == battalion_id)
             if filter_companie: students_query = students_query.filter(Student.companie == filter_companie) # Allow CmdB to filter by company
@@ -3580,9 +3695,9 @@ def list_students():
     # Determine title based on role
     view_title = "Listă Studenți"
     if is_admin_view: view_title = "Listă Generală Studenți (Admin)"
-    elif current_user.role == 'gradat': view_title = "Listă Studenți Gestionați"
-    elif current_user.role == 'comandant_companie': view_title = f"Listă Studenți Compania {_get_commander_unit_id(current_user.username, 'CmdC') or 'N/A'}"
-    elif current_user.role == 'comandant_batalion': view_title = f"Listă Studenți Batalionul {_get_commander_unit_id(current_user.username, 'CmdB') or 'N/A'}"
+    elif user.role == 'gradat': view_title = "Listă Studenți Gestionați"
+    elif user.role == 'comandant_companie': view_title = f"Listă Studenți Compania {_get_commander_unit_id(user.username, 'CmdC') or 'N/A'}"
+    elif user.role == 'comandant_batalion': view_title = f"Listă Studenți Batalionul {_get_commander_unit_id(user.username, 'CmdB') or 'N/A'}"
 
 
     return render_template('list_students.html',
@@ -8256,6 +8371,115 @@ def admin_data_management():
         return redirect(url_for('dashboard'))
     return render_template('admin_data_management.html')
 
+# --- Scoped Access Login and Decorator ---
+from functools import wraps
+from flask import g
+
+def scoped_access_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Allow regular logged-in users to pass through without checks
+        if current_user.is_authenticated:
+            return f(*args, **kwargs)
+
+        if 'scoped_access' not in session:
+            flash('Trebuie să vă autentificați cu un cod de acces valid.', 'warning')
+            return redirect(url_for('scoped_login'))
+
+        access_info = session['scoped_access']
+
+        # Check expiry
+        if datetime.fromisoformat(access_info['expires_at']) < datetime.utcnow():
+            session.pop('scoped_access', None)
+            flash('Sesiunea de acces delegat a expirat.', 'info')
+            return redirect(url_for('scoped_login'))
+
+        # Check permission for the requested page
+        allowed_paths = access_info.get('permissions', [])
+        if not any(request.path.startswith(path) for path in allowed_paths):
+            flash('Nu aveți permisiunea să accesați această pagină.', 'danger')
+            # Redirect to a safe page, maybe a scoped dashboard if one exists, or just the login
+            return redirect(url_for('scoped_login'))
+
+        # Set the 'gradat' user for the context of this request
+        g.scoped_user = db.session.get(User, access_info['user_id'])
+        if not g.scoped_user:
+            session.pop('scoped_access', None)
+            flash('Utilizatorul asociat cu acest cod nu mai există.', 'danger')
+            return redirect(url_for('scoped_login'))
+
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/scoped_login', methods=['GET', 'POST'])
+def scoped_login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    if 'scoped_access' in session:
+        # Re-validate session on page load
+        if datetime.fromisoformat(session['scoped_access'].get('expires_at')) < datetime.utcnow():
+            session.pop('scoped_access', None)
+            flash('Sesiunea de acces delegat a expirat.', 'info')
+        else:
+            # If session is valid, maybe redirect to the first permitted page?
+            # For now, let's just show a generic message or redirect to a future scoped dashboard
+            flash('Sunteți deja autentificat cu un cod de acces.', 'info')
+            # This is a bit of a dead end, user should use logout. Or we can create a simple dashboard for them.
+            # Let's redirect to the first accessible path.
+            first_path = session['scoped_access'].get('permissions', [])[0]
+            if first_path:
+                # This is tricky as url_for needs an endpoint name, not a path.
+                # We'll need a mapping or a simple dashboard.
+                # For now, let's just let them logout.
+                return render_template('scoped_login.html') # Or a simple "you are logged in" page
+
+    if request.method == 'POST':
+        code_to_check = request.form.get('access_code', '').strip()
+        if not code_to_check:
+            flash('Vă rugăm introduceți un cod de acces.', 'warning')
+            return redirect(url_for('scoped_login'))
+
+        now_utc = datetime.utcnow()
+        access_code = ScopedAccessCode.query.filter_by(code=code_to_check, is_active=True).first()
+
+        if access_code and access_code.expires_at > now_utc:
+            # Do not consume the code, it can be used by multiple people until it expires
+            # access_code.is_active = False
+            # db.session.commit()
+
+            session['scoped_access'] = {
+                'user_id': access_code.created_by_user_id,
+                'permissions': access_code.get_permissions_list(),
+                'expires_at': access_code.expires_at.isoformat(),
+                'description': access_code.description
+            }
+            session.permanent = True
+
+            flash(f"Autentificare reușită! Acces permis pentru: {access_code.description}", 'success')
+
+            # Redirect to the first available page
+            permissions = access_code.get_permissions_list()
+            if permissions:
+                # This is still tricky. Let's redirect to a known safe endpoint that is likely to be in permissions.
+                if '/volunteer' in permissions:
+                    return redirect(url_for('volunteer_home'))
+                elif '/gradat/students' in permissions:
+                    return redirect(url_for('list_students'))
+
+            return redirect(url_for('scoped_login')) # Fallback
+        else:
+            flash('Codul de acces este invalid, a expirat sau a fost dezactivat.', 'danger')
+            return redirect(url_for('scoped_login'))
+
+    return render_template('scoped_login.html')
+
+@app.route('/scoped_logout')
+def scoped_logout():
+    session.pop('scoped_access', None)
+    flash('Ați fost deconectat din sesiunea de acces delegat.', 'success')
+    return redirect(url_for('scoped_login'))
+
+
 @app.route('/admin/data/export', methods=['POST'], endpoint='admin_export_data')
 @login_required
 def admin_export_data():
@@ -8467,6 +8691,70 @@ def admin_homepage_settings():
                            current_title=current_title,
                            current_badge_text=current_badge_text)
 # END JULES - ADMIN HOME PAGE SETTINGS
+
+
+# --- Scoped Access Code Routes ---
+@app.route('/scoped_access/generate', methods=['POST'], endpoint='generate_scoped_access_code')
+@login_required
+def generate_scoped_access_code():
+    if current_user.role != 'gradat':
+        flash('Acces neautorizat.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    description = request.form.get('description', '').strip()
+    permissions = request.form.getlist('permissions')
+    expiry_hours = request.form.get('expiry_hours', type=int, default=8)
+
+    if not description:
+        flash('Descrierea este obligatorie.', 'warning')
+        return redirect(url_for('dashboard'))
+    if not permissions:
+        flash('Trebuie să selectați cel puțin o permisiune.', 'warning')
+        return redirect(url_for('dashboard'))
+
+    new_code_str = secrets.token_hex(8)
+    while ScopedAccessCode.query.filter_by(code=new_code_str).first():
+        new_code_str = secrets.token_hex(8)
+
+    expires_at_dt = datetime.utcnow() + timedelta(hours=expiry_hours)
+
+    new_code = ScopedAccessCode(
+        code=new_code_str,
+        description=description,
+        permissions=json.dumps(permissions),
+        expires_at=expires_at_dt,
+        created_by_user_id=current_user.id
+    )
+
+    try:
+        db.session.add(new_code)
+        db.session.commit()
+        flash(f'Cod de acces delegat generat: {new_code_str}', 'success')
+        flash(f'Descriere: {description} | Valabil pentru {expiry_hours} ore.', 'info')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la generarea codului: {str(e)}', 'danger')
+
+    return redirect(url_for('dashboard'))
+
+@app.route('/scoped_access/deactivate/<int:code_id>', methods=['POST'], endpoint='deactivate_scoped_access_code')
+@login_required
+def deactivate_scoped_access_code(code_id):
+    code_to_deactivate = ScopedAccessCode.query.get_or_404(code_id)
+
+    if code_to_deactivate.created_by_user_id != current_user.id:
+        flash('Nu aveți permisiunea să dezactivați acest cod.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    code_to_deactivate.is_active = False
+    try:
+        db.session.commit()
+        flash(f'Codul {code_to_deactivate.code} a fost dezactivat.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Eroare la dezactivarea codului: {str(e)}', 'danger')
+
+    return redirect(url_for('dashboard'))
 
 
 # --- Public View Code Routes ---

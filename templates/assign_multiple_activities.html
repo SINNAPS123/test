@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Asignare Multiplă la Activitate{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h3><i class="fas fa-users-plus me-2"></i>Asignează Studenți la o Activitate de Voluntariat</h3>
+                </div>
+                <div class="card-body">
+                    {% if not students_managed or not activities %}
+                    <div class="alert alert-warning text-center">
+                        <p>Pentru a putea asigna studenți, trebuie să aveți cel puțin un student în evidență și cel puțin o activitate de voluntariat creată.</p>
+                        {% if not students_managed %}
+                        <a href="{{ url_for('add_student') }}" class="btn btn-primary btn-sm">Adaugă Student</a>
+                        {% endif %}
+                        {% if not activities %}
+                        <a href="{{ url_for('volunteer_activity_create') }}" class="btn btn-primary btn-sm">Creează Activitate</a>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <form method="POST" action="{{ url_for('assign_multiple_activities') }}">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="student_ids" class="form-label"><strong>1. Selectează Studenții</strong> <span class="text-danger">*</span></label>
+                                <p class="text-muted small">Țineți apăsat Ctrl (sau Cmd pe Mac) pentru a selecta mai mulți studenți.</p>
+                                <select multiple class="form-select" id="student_ids" name="student_ids" size="15" required>
+                                    {% for student in students_managed %}
+                                    <option value="{{ student.id }}">{{ student.grad_militar }} {{ student.nume }} {{ student.prenume }} ({{ student.volunteer_points }} pct.)</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <div class="mb-3">
+                                    <label for="activity_id" class="form-label"><strong>2. Selectează Activitatea</strong> <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="activity_id" name="activity_id" required>
+                                        <option value="" disabled selected>Alege o activitate...</option>
+                                        {% for activity in activities %}
+                                        <option value="{{ activity.id }}">{{ activity.name }} ({{ activity.activity_date|localdate }})</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="points_to_award" class="form-label"><strong>3. Puncte de Acordat (Opțional)</strong></label>
+                                    <input type="number" class="form-control" id="points_to_award" name="points_to_award" value="0" min="0">
+                                    <div class="form-text">
+                                        Aceste puncte vor fi adăugate la totalul fiecărui student selectat și la înregistrarea lor de participare pentru această activitate.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-3">
+                            <a href="{{ url_for('volunteer_home') }}" class="btn btn-secondary me-md-2">
+                                <i class="fas fa-times me-1"></i> Anulează
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-check-circle me-1"></i> Asignează Studenții
+                            </button>
+                        </div>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

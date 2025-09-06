@@ -1,84 +1,100 @@
 {% extends "base.html" %}
 
-{% block title %}Management Voluntariate{% endblock %}
+{% block title %}Clasament Voluntari{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Management Voluntariate</h2>
+        <h2><i class="fas fa-medal me-2"></i>Clasament și Activități Voluntariat</h2>
         <div>
+            <a href="{{ url_for('volunteer_activity_create') }}" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i> Creează Activitate
+            </a>
+            <a href="{{ url_for('assign_multiple_activities') }}" class="btn btn-success">
+                <i class="fas fa-user-plus me-1"></i> Asignare Multiplă
+            </a>
             <a href="{{ url_for('volunteer_sessions_list') }}" class="btn btn-secondary">
-                <i class="fas fa-list-alt me-1"></i> Vezi Liste Salvate
+                <i class="fas fa-list-alt me-1"></i> Liste Salvate
             </a>
             <a href="{{ url_for('volunteer_generate_students') }}" class="btn btn-info">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-person-check-fill" viewBox="0 0 16 16">
-                    <path fill-rule="evenodd" d="M15.854 5.146a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 0 1 .708-.708L12.5 7.793l2.646-2.647a.5.5 0 0 1 .708 0z"/>
-                    <path d="M1 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
-                </svg>
-                Generează o Listă Nouă
+                <i class="fas fa-users-cog me-1"></i> Generează Voluntari
             </a>
         </div>
     </div>
 
     <div class="row">
-        <!-- Secțiunea Creare Activitate Nouă -->
-        <div class="col-md-5 mb-4">
+        <!-- Secțiunea Clasament Studenți -->
+        <div class="col-lg-5 mb-4">
             <div class="card shadow-sm">
                 <div class="card-header">
-                    <h4><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-calendar-plus me-2 icon-rotate-hover" viewBox="0 0 16 16">
-                        <path d="M8 7a.5.5 0 0 1 .5.5V9H10a.5.5 0 0 1 0 1H8.5v1.5a.5.5 0 0 1-1 0V10H6a.5.5 0 0 1 0-1h1.5V7.5A.5.5 0 0 1 8 7z"/>
-                        <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z"/>
-                        </svg> Creare Activitate de Voluntariat Nouă</h4>
+                    <h4><i class="fas fa-award me-2"></i>Clasament Puncte Voluntariat</h4>
                 </div>
                 <div class="card-body">
-                    <form method="POST" action="{{ url_for('volunteer_home') }}">
-                        <div class="mb-3">
-                            <label for="activity_name" class="form-label">Nume Activitate <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="activity_name" name="activity_name" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="activity_description" class="form-label">Descriere (Opțional)</label>
-                            <textarea class="form-control" id="activity_description" name="activity_description" rows="2"></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label for="activity_date" class="form-label">Data Activității <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" id="activity_date" name="activity_date" value="{{ today_str }}" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100">
-                            <i class="fas fa-plus me-1 icon-rotate-hover"></i> Creează Activitate
-                        </button>
-                    </form>
+                    {% if students_with_points %}
+                    <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                        <table class="table table-sm table-hover table-striped">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Nume și Prenume</th>
+                                    <th class="text-center">Puncte</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for student in students_with_points %}
+                                {% set points = student.volunteer_points %}
+                                {% set row_class = 'table-danger' if points == 0 else ('table-warning' if points > 0 and points <= 5 else '') %}
+                                <tr class="{{ row_class }}">
+                                    <td>{{ loop.index }}</td>
+                                    <td>
+                                        <a href="{{ url_for('student_profile', student_id=student.id) }}" class="text-decoration-none">{{ student.grad_militar }} {{ student.nume }} {{ student.prenume }}</a>
+                                        <br>
+                                        <small class="text-muted">Pluton: {{ student.pluton }}</small>
+                                    </td>
+                                    <td class="text-center align-middle">
+                                        <span class="badge fs-6
+                                            {% if points == 0 %} bg-danger
+                                            {% elif points > 0 and points <= 5 %} bg-warning text-dark
+                                            {% elif points > 5 and points <= 10 %} bg-info text-dark
+                                            {% else %} bg-success {% endif %}">
+                                            {{ points }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">Nu există studenți în evidență.</p>
+                    {% endif %}
                 </div>
             </div>
         </div>
 
         <!-- Secțiunea Listă Activități Create -->
-        <div class="col-md-7 mb-4">
+        <div class="col-lg-7 mb-4">
              <div class="card shadow-sm">
                 <div class="card-header">
-                    <h4><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-list-task me-2 icon-rotate-hover" viewBox="0 0 16 16">
-                        <path fill-rule="evenodd" d="M2 2.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5V3a.5.5 0 0 0-.5-.5H2zM3 3H2v1h1V3z"/>
-                        <path d="M5 3.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5zM5.5 7a.5.5 0 0 0 0 1h9a.5.5 0 0 0 0-1h-9zm0 4a.5.5 0 0 0 0 1h9a.5.5 0 0 0 0-1h-9z"/>
-                        <path fill-rule="evenodd" d="M1.5 7a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5H2a.5.5 0 0 1-.5-.5V7zM2 7h1v1H2V7zm0 3.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5H2zM3 10H2v1h1v-1z"/>
-                        </svg> Activități de Voluntariat Create ({{ activities|length }})</h4>
+                    <h4><i class="fas fa-tasks me-2"></i>Activități de Voluntariat Create ({{ activities|length }})</h4>
                 </div>
-                 <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                 <div class="card-body" style="max-height: 500px; overflow-y: auto;">
                     {% if activities %}
                     <ul class="list-group list-group-flush">
                         {% for activity in activities %}
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             <div>
-                                <a href="{{ url_for('volunteer_activity_details', activity_id=activity.id) }}"><strong>{{ activity.name }}</strong></a><br>
+                                <a href="{{ url_for('volunteer_activity_details', activity_id=activity.id) }}" class="fw-bold">{{ activity.name }}</a><br>
                                 <small class="text-muted">{{ activity.activity_date|localdate('%d %B %Y') }} - {{ activity.description if activity.description else 'Fără descriere' }}</small><br>
-                                <small class="text-muted">Participanți: {{ activity.participants.count() }}</small>
+                                <span class="badge bg-light text-dark">Participanți: {{ activity.participants.count() }}</span>
                             </div>
                             <div>
                                 <a href="{{ url_for('volunteer_activity_details', activity_id=activity.id) }}" class="btn btn-sm btn-outline-primary me-2" title="Detalii și Management Participanți">
-                                    <i class="fas fa-users icon-rotate-hover"></i> Detalii
+                                    <i class="fas fa-users"></i> Detalii
                                 </a>
                                 <form method="POST" action="{{ url_for('delete_volunteer_activity', activity_id=activity.id) }}" class="d-inline" onsubmit="return confirm('Ești sigur că vrei să ștergi această activitate și toate punctele asociate? Această acțiune este ireversibilă!');">
                                     <button type="submit" class="btn btn-sm btn-outline-danger" title="Șterge Activitatea">
-                                        <i class="fas fa-trash-alt icon-rotate-hover"></i>
+                                        <i class="fas fa-trash-alt"></i>
                                     </button>
                                 </form>
                             </div>
@@ -92,42 +108,6 @@
             </div>
         </div>
     </div>
-
-    <hr class="my-4">
-
-    <!-- Secțiunea Clasament Studenți -->
-    <h4><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-award-fill me-2 icon-rotate-hover" viewBox="0 0 16 16">
-        <path d="m8 0 1.669.864 1.858.282.842 1.68 1.337 1.32L13.4 6l.306 1.854-1.337 1.32-.842 1.68-1.858.282L8 12l-1.669-.864-1.858-.282-.842-1.68-1.337-1.32L2.6 6l-.306-1.854 1.337-1.32.842-1.68L6.331.864 8 0z"/>
-        <path d="M4 11.794V16l4-1 4 1v-4.206l-2.018.306L8 13.126 6.018 12.1 4 11.794z"/>
-        </svg> Clasament Studenți după Puncte de Voluntariat</h4>
-    {% if students_with_points %}
-    <div class="table-responsive shadow-sm">
-        <table class="table table-sm table-hover">
-            <thead class="table-light">
-                <tr>
-                    <th>#</th>
-                    <th>Nume și Prenume</th>
-                    <th>Grad</th>
-                    <th>Pluton</th>
-                    <th>Puncte Voluntariat</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for student in students_with_points %}
-                <tr>
-                    <td>{{ loop.index }}</td>
-                    <td>{{ student.nume }} {{ student.prenume }}</td>
-                    <td>{{ student.grad_militar }}</td>
-                    <td>{{ student.pluton }}</td>
-                    <td><span class="badge bg-info text-dark fs-6">{{ student.volunteer_points }}</span></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <p class="text-muted">Nu există studenți în evidență sau nu au puncte de voluntariat.</p>
-    {% endif %}
 
     <p class="mt-4">
         <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
