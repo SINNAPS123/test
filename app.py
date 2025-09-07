@@ -1040,36 +1040,67 @@ def validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj):
 # și nu mai este necesară separat dacă _calculate_presence_data este singurul apelant.
 
 def check_leave_conflict(student_id, leave_start_dt, leave_end_dt, existing_leave_id=None, leave_type=None):
+    """
+    Verifică conflictele pentru un student într-un interval dat, excluzând opțional o învoire existentă.
+    """
+    # 1. Verifică conflicte cu servicii blocante
     blocking_services = ['GSS', 'Intervenție']
-    conflicting_service = ServiceAssignment.query.filter(
+    conflicting_service_query = ServiceAssignment.query.filter(
         ServiceAssignment.student_id == student_id,
         ServiceAssignment.service_type.in_(blocking_services),
         ServiceAssignment.start_datetime < leave_end_dt,
         ServiceAssignment.end_datetime > leave_start_dt
-    ).first()
+    )
+    conflicting_service = conflicting_service_query.first()
     if conflicting_service:
         return f"serviciu ({conflicting_service.service_type}) pe {conflicting_service.service_date.strftime('%d-%m-%Y')}"
-    query_permissions = Permission.query.filter(
-        Permission.student_id == student_id, Permission.status == 'Aprobată',
-        Permission.start_datetime < leave_end_dt, Permission.end_datetime > leave_start_dt
+
+    # 2. Verifică conflicte cu Permisii
+    perm_query = Permission.query.filter(
+        Permission.student_id == student_id,
+        Permission.status == 'Aprobată',
+        Permission.start_datetime < leave_end_dt,
+        Permission.end_datetime > leave_start_dt
     )
     if leave_type == 'permission' and existing_leave_id:
-        query_permissions = query_permissions.filter(Permission.id != existing_leave_id)
-    if query_permissions.first():
-        if not (leave_type == 'permission' and existing_leave_id): return "o permisie existentă"
-    daily_leaves_query = DailyLeave.query.filter(DailyLeave.student_id == student_id, DailyLeave.status == 'Aprobată')
+        perm_query = perm_query.filter(Permission.id != existing_leave_id)
+    conflicting_permission = perm_query.first()
+    if conflicting_permission:
+        return f"o permisie existentă ({conflicting_permission.start_datetime.strftime('%d.%m %H:%M')} - {conflicting_permission.end_datetime.strftime('%d.%m %H:%M')})"
+
+    # 3. Verifică conflicte cu Învoiri Zilnice
+    daily_leaves_query = DailyLeave.query.filter(
+        DailyLeave.student_id == student_id,
+        DailyLeave.status == 'Aprobată'
+    )
     if leave_type == 'daily_leave' and existing_leave_id:
         daily_leaves_query = daily_leaves_query.filter(DailyLeave.id != existing_leave_id)
+
     for dl in daily_leaves_query.all():
         if dl.start_datetime < leave_end_dt and dl.end_datetime > leave_start_dt:
-            if not (leave_type == 'daily_leave' and existing_leave_id and dl.id == existing_leave_id): return f"o învoire zilnică pe {dl.leave_date.strftime('%d.%m')}"
-    weekend_leaves_query = WeekendLeave.query.filter(WeekendLeave.student_id == student_id, WeekendLeave.status == 'Aprobată')
+            return f"o învoire zilnică pe {dl.leave_date.strftime('%d.%m')}"
+
+    # 4. Verifică conflicte cu Învoiri de Weekend
+    weekend_leaves_query = WeekendLeave.query.filter(
+        WeekendLeave.student_id == student_id,
+        WeekendLeave.status == 'Aprobată'
+    )
     if leave_type == 'weekend_leave' and existing_leave_id:
         weekend_leaves_query = weekend_leaves_query.filter(WeekendLeave.id != existing_leave_id)
+
+    # Make the incoming naive datetimes aware for comparison with aware datetimes from get_intervals()
+    try:
+        leave_start_dt_aware = EUROPE_BUCHAREST.localize(leave_start_dt)
+        leave_end_dt_aware = EUROPE_BUCHAREST.localize(leave_end_dt)
+    except ValueError: # Already aware
+        leave_start_dt_aware = leave_start_dt.astimezone(EUROPE_BUCHAREST)
+        leave_end_dt_aware = leave_end_dt.astimezone(EUROPE_BUCHAREST)
+
     for wl in weekend_leaves_query.all():
         for interval in wl.get_intervals():
-            if interval['start'] < leave_end_dt and interval['end'] > leave_start_dt:
-                if not (leave_type == 'weekend_leave' and existing_leave_id and wl.id == existing_leave_id): return f"o învoire de weekend ({interval['day_name']})"
+            if interval['start'] < leave_end_dt_aware and interval['end'] > leave_start_dt_aware:
+                return f"o învoire de weekend ({interval['day_name']})"
+
     return None
 
 def check_service_conflict_for_student(student_id, service_start_dt, service_end_dt, service_type, current_service_id=None):
@@ -2897,6 +2928,117 @@ def battalion_commander_dashboard():
                             todays_services=todays_services_battalion
                            )
 
+
+
+# --- Scoped Access Login and Decorator ---
+from functools import wraps
+from flask import g
+
+def scoped_access_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Allow regular logged-in users to pass through without checks
+        if current_user.is_authenticated:
+            return f(*args, **kwargs)
+
+        if 'scoped_access' not in session:
+            flash('Trebuie să vă autentificați cu un cod de acces valid.', 'warning')
+            return redirect(url_for('scoped_login'))
+
+        access_info = session['scoped_access']
+
+        # Check expiry
+        if datetime.fromisoformat(access_info['expires_at']) < datetime.utcnow():
+            session.pop('scoped_access', None)
+            flash('Sesiunea de acces delegat a expirat.', 'info')
+            return redirect(url_for('scoped_login'))
+
+        # Check permission for the requested page
+        allowed_paths = access_info.get('permissions', [])
+        if not any(request.path.startswith(path) for path in allowed_paths):
+            flash('Nu aveți permisiunea să accesați această pagină.', 'danger')
+            # Redirect to a safe page, maybe a scoped dashboard if one exists, or just the login
+            return redirect(url_for('scoped_login'))
+
+        # Set the 'gradat' user for the context of this request
+        g.scoped_user = db.session.get(User, access_info['user_id'])
+        if not g.scoped_user:
+            session.pop('scoped_access', None)
+            flash('Utilizatorul asociat cu acest cod nu mai există.', 'danger')
+            return redirect(url_for('scoped_login'))
+
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/scoped_login', methods=['GET', 'POST'])
+def scoped_login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    if 'scoped_access' in session:
+        # Re-validate session on page load
+        if datetime.fromisoformat(session['scoped_access'].get('expires_at')) < datetime.utcnow():
+            session.pop('scoped_access', None)
+            flash('Sesiunea de acces delegat a expirat.', 'info')
+        else:
+            # If session is valid, maybe redirect to the first permitted page?
+            # For now, let's just show a generic message or redirect to a future scoped dashboard
+            flash('Sunteți deja autentificat cu un cod de acces.', 'info')
+            # This is a bit of a dead end, user should use logout. Or we can create a simple dashboard for them.
+            # Let's redirect to the first accessible path.
+            first_path = session['scoped_access'].get('permissions', [])[0]
+            if first_path:
+                # This is tricky as url_for needs an endpoint name, not a path.
+                # We'll need a mapping or a simple dashboard.
+                # For now, let's just let them logout.
+                return render_template('scoped_login.html') # Or a simple "you are logged in" page
+
+    if request.method == 'POST':
+        code_to_check = request.form.get('access_code', '').strip()
+        if not code_to_check:
+            flash('Vă rugăm introduceți un cod de acces.', 'warning')
+            return redirect(url_for('scoped_login'))
+
+        now_utc = datetime.utcnow()
+        access_code = ScopedAccessCode.query.filter_by(code=code_to_check, is_active=True).first()
+
+        if access_code and access_code.expires_at > now_utc:
+            # Do not consume the code, it can be used by multiple people until it expires
+            # access_code.is_active = False
+            # db.session.commit()
+
+            session['scoped_access'] = {
+                'user_id': access_code.created_by_user_id,
+                'permissions': access_code.get_permissions_list(),
+                'expires_at': access_code.expires_at.isoformat(),
+                'description': access_code.description
+            }
+            session.permanent = True
+
+            flash(f"Autentificare reușită! Acces permis pentru: {access_code.description}", 'success')
+
+            # Redirect to the first available page
+            permissions = access_code.get_permissions_list()
+            if permissions:
+                # This is still tricky. Let's redirect to a known safe endpoint that is likely to be in permissions.
+                if '/volunteer' in permissions:
+                    return redirect(url_for('volunteer_home'))
+                elif '/gradat/students' in permissions:
+                    return redirect(url_for('list_students'))
+
+            return redirect(url_for('scoped_login')) # Fallback
+        else:
+            flash('Codul de acces este invalid, a expirat sau a fost dezactivat.', 'danger')
+            return redirect(url_for('scoped_login'))
+
+    return render_template('scoped_login.html')
+
+@app.route('/scoped_logout')
+def scoped_logout():
+    session.pop('scoped_access', None)
+    flash('Ați fost deconectat din sesiunea de acces delegat.', 'success')
+    return redirect(url_for('scoped_login'))
+
+
 # --- Volunteer Module ---
 
 def get_current_user_or_scoped():
@@ -4354,15 +4496,15 @@ def bulk_import_permissions():
 
         if num_actual_lines_for_entry < 3:
             if num_actual_lines_for_entry > 0:
-                 error_details.append(f"Intrare incompletă începând cu '{lines_for_this_entry[0]}'. Necesită cel puțin Nume, Interval, Destinație.")
+                 error_details.append(f"Intrare incompletă începând cu '{current_block_lines[0]}'. Necesită cel puțin Nume, Interval, Destinație.")
                  error_count += 1
             continue
 
-        name_line = lines_for_this_entry[0]
-        datetime_line = lines_for_this_entry[1]
-        destination_line = lines_for_this_entry[2]
-        transport_mode_line = lines_for_this_entry[3] if num_actual_lines_for_entry > 3 else ""
-        reason_car_plate_line = lines_for_this_entry[4] if num_actual_lines_for_entry > 4 else ""
+        name_line = current_block_lines[0]
+        datetime_line = current_block_lines[1]
+        destination_line = current_block_lines[2]
+        transport_mode_line = current_block_lines[3] if num_actual_lines_for_entry > 3 else ""
+        reason_car_plate_line = current_block_lines[4] if num_actual_lines_for_entry > 4 else ""
 
         # Use the pre-fetched list of students
         student_obj, student_error = find_student_for_bulk_import(name_line, students_managed)
@@ -8370,114 +8512,6 @@ def admin_data_management():
         flash('Acces neautorizat.', 'danger')
         return redirect(url_for('dashboard'))
     return render_template('admin_data_management.html')
-
-# --- Scoped Access Login and Decorator ---
-from functools import wraps
-from flask import g
-
-def scoped_access_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Allow regular logged-in users to pass through without checks
-        if current_user.is_authenticated:
-            return f(*args, **kwargs)
-
-        if 'scoped_access' not in session:
-            flash('Trebuie să vă autentificați cu un cod de acces valid.', 'warning')
-            return redirect(url_for('scoped_login'))
-
-        access_info = session['scoped_access']
-
-        # Check expiry
-        if datetime.fromisoformat(access_info['expires_at']) < datetime.utcnow():
-            session.pop('scoped_access', None)
-            flash('Sesiunea de acces delegat a expirat.', 'info')
-            return redirect(url_for('scoped_login'))
-
-        # Check permission for the requested page
-        allowed_paths = access_info.get('permissions', [])
-        if not any(request.path.startswith(path) for path in allowed_paths):
-            flash('Nu aveți permisiunea să accesați această pagină.', 'danger')
-            # Redirect to a safe page, maybe a scoped dashboard if one exists, or just the login
-            return redirect(url_for('scoped_login'))
-
-        # Set the 'gradat' user for the context of this request
-        g.scoped_user = db.session.get(User, access_info['user_id'])
-        if not g.scoped_user:
-            session.pop('scoped_access', None)
-            flash('Utilizatorul asociat cu acest cod nu mai există.', 'danger')
-            return redirect(url_for('scoped_login'))
-
-        return f(*args, **kwargs)
-    return decorated_function
-
-@app.route('/scoped_login', methods=['GET', 'POST'])
-def scoped_login():
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
-    if 'scoped_access' in session:
-        # Re-validate session on page load
-        if datetime.fromisoformat(session['scoped_access'].get('expires_at')) < datetime.utcnow():
-            session.pop('scoped_access', None)
-            flash('Sesiunea de acces delegat a expirat.', 'info')
-        else:
-            # If session is valid, maybe redirect to the first permitted page?
-            # For now, let's just show a generic message or redirect to a future scoped dashboard
-            flash('Sunteți deja autentificat cu un cod de acces.', 'info')
-            # This is a bit of a dead end, user should use logout. Or we can create a simple dashboard for them.
-            # Let's redirect to the first accessible path.
-            first_path = session['scoped_access'].get('permissions', [])[0]
-            if first_path:
-                # This is tricky as url_for needs an endpoint name, not a path.
-                # We'll need a mapping or a simple dashboard.
-                # For now, let's just let them logout.
-                return render_template('scoped_login.html') # Or a simple "you are logged in" page
-
-    if request.method == 'POST':
-        code_to_check = request.form.get('access_code', '').strip()
-        if not code_to_check:
-            flash('Vă rugăm introduceți un cod de acces.', 'warning')
-            return redirect(url_for('scoped_login'))
-
-        now_utc = datetime.utcnow()
-        access_code = ScopedAccessCode.query.filter_by(code=code_to_check, is_active=True).first()
-
-        if access_code and access_code.expires_at > now_utc:
-            # Do not consume the code, it can be used by multiple people until it expires
-            # access_code.is_active = False
-            # db.session.commit()
-
-            session['scoped_access'] = {
-                'user_id': access_code.created_by_user_id,
-                'permissions': access_code.get_permissions_list(),
-                'expires_at': access_code.expires_at.isoformat(),
-                'description': access_code.description
-            }
-            session.permanent = True
-
-            flash(f"Autentificare reușită! Acces permis pentru: {access_code.description}", 'success')
-
-            # Redirect to the first available page
-            permissions = access_code.get_permissions_list()
-            if permissions:
-                # This is still tricky. Let's redirect to a known safe endpoint that is likely to be in permissions.
-                if '/volunteer' in permissions:
-                    return redirect(url_for('volunteer_home'))
-                elif '/gradat/students' in permissions:
-                    return redirect(url_for('list_students'))
-
-            return redirect(url_for('scoped_login')) # Fallback
-        else:
-            flash('Codul de acces este invalid, a expirat sau a fost dezactivat.', 'danger')
-            return redirect(url_for('scoped_login'))
-
-    return render_template('scoped_login.html')
-
-@app.route('/scoped_logout')
-def scoped_logout():
-    session.pop('scoped_access', None)
-    flash('Ați fost deconectat din sesiunea de acces delegat.', 'success')
-    return redirect(url_for('scoped_login'))
 
 
 @app.route('/admin/data/export', methods=['POST'], endpoint='admin_export_data')
