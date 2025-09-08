@@ -47,7 +47,44 @@
         </div>
     </form>
     {% else %}
-    <!-- Step 2: Provide details per selected student -->
+    <!-- Step 2: Provide details per selected student OR apply the same interval to all -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header">
+            <strong>Aplică același interval pentru toți studenții selectați</strong>
+        </div>
+        <form method="POST" action="{{ url_for('gradat_bulk_add_daily_leave') }}">
+            <input type="hidden" name="mode" value="same_for_all">
+            {% for s in students_to_prepare %}
+                <input type="hidden" name="student_ids[]" value="{{ s.id }}">
+            {% endfor %}
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <label class="form-label">Data Învoirii</label>
+                        <input type="date" name="leave_date_all" class="form-control" value="{{ today_str }}" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Început</label>
+                        <input type="time" name="start_time_all" class="form-control" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Sfârșit</label>
+                        <input type="time" name="end_time_all" class="form-control" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Motiv (opțional)</label>
+                        <input type="text" name="reason_all" class="form-control" placeholder="Ex. medical, familie, etc.">
+                    </div>
+                </div>
+                <p class="text-muted small mt-2 mb-0">Se vor aplica validările și verificările de conflict pentru fiecare student.</p>
+            </div>
+            <div class="card-footer d-flex justify-content-between">
+                <a href="{{ url_for('gradat_bulk_add_daily_leave') }}" class="btn btn-outline-secondary">Înapoi</a>
+                <button type="submit" class="btn btn-success">Aplică la toți</button>
+            </div>
+        </form>
+    </div>
+
     <form method="POST" action="{{ url_for('gradat_bulk_add_daily_leave') }}" class="card shadow-sm">
         <div class="card-header d-flex justify-content-between align-items-center">
             <strong>Completează detaliile învoirii pentru fiecare student selectat</strong>

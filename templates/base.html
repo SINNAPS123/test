@@ -242,6 +242,48 @@
         <script src="{{ url_for('static', filename='js/main.min.js') }}" defer></script>
     {% endif %}
     <script src="https://cdn.jsdelivr.net/npm/instant.page@5.2.0/instantpage.min.js" type="module" defer></script>
+
+    <!-- Global client-side form validation (Bootstrap 5) -->
+    <script>
+        // Apply Bootstrap validation styles to all forms automatically
+        (function () {
+            'use strict';
+            window.addEventListener('load', function () {
+                // Find all forms that haven't explicitly opted out
+                var forms = document.querySelectorAll('form');
+                Array.prototype.slice.call(forms).forEach(function (form) {
+                    // Ensure visual validation without breaking native browser validation
+                    form.setAttribute('novalidate', 'novalidate');
+                    form.classList.add('needs-validation');
+
+                    form.addEventListener('submit', function (event) {
+                        if (!form.checkValidity()) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                        }
+                        form.classList.add('was-validated');
+                    }, false);
+
+                    // Live validation feedback on inputs
+                    form.querySelectorAll('input, select, textarea').forEach(function (el) {
+                        el.addEventListener('input', function () {
+                            if (form.classList.contains('was-validated')) {
+                                // Toggle is-valid / is-invalid for immediate feedback
+                                if (el.checkValidity()) {
+                                    el.classList.add('is-valid');
+                                    el.classList.remove('is-invalid');
+                                } else {
+                                    el.classList.add('is-invalid');
+                                    el.classList.remove('is-valid');
+                                }
+                            }
+                        });
+                    });
+                });
+            }, false);
+        })();
+    </script>
+
     {% block extra_js %}{% endblock %}
 </body>
 </html>
