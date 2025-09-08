@@ -418,6 +418,26 @@ html.dark-mode-preload #loading-overlay {
   }
 }
 
+/* Sticky table tools on mobile */
+@media (max-width: 576px) {
+  .table-tools {
+    position: sticky;
+    top: var(--navbar-height);
+    z-index: 1020;
+    background: var(--bg);
+    padding: .5rem .25rem;
+    border-bottom: 1px solid var(--border);
+  }
+  #admin-debug-bar + .container .table-tools {
+    top: calc(var(--navbar-height) + 36px);
+  }
+  .table-tools .btn,
+  .table-tools .form-control {
+    min-height: var(--tap-size);
+  }
+}
+}
+
 /* === Genie Modern Table Copy & Context Menu Enhancements === */
 
 /* Table sticky headers */

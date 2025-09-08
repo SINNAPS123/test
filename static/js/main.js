@@ -459,6 +459,67 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     enhanceTableCells();
 
+    // === Mobile-first enhancements for dense pages ===
+    (function mobileDenseTables(){
+        const isSmall = () => window.matchMedia('(max-width: 576px)').matches;
+        function apply() {
+            document.querySelectorAll('table.table').forEach(t => {
+                if (isSmall()) t.classList.add('table-compact');
+                else t.classList.remove('table-compact');
+            });
+        }
+        apply();
+        window.addEventListener('resize', apply);
+        window.addEventListener('orientationchange', () => setTimeout(apply, 150));
+    })();
+
+    // === Mobile collapsible cards (compact sections) ===
+    (function mobileCollapsibleCards(){
+        const isSmall = () => window.matchMedia('(max-width: 576px)').matches;
+        function enhance() {
+            if (!isSmall()) return;
+            document.querySelectorAll('.card').forEach((card, idx) => {
+                if (card.getAttribute('data-collapsible-init') === '1') return;
+                const header = card.querySelector('.card-header');
+                const body = card.querySelector('.card-body');
+                if (!header || !body) return;
+                const id = card.id || ('card_' + Math.random().toString(36).slice(2));
+                card.id = id;
+                const collapseId = id + '_c';
+                body.id = collapseId;
+
+                // Start expanded by default
+                body.classList.add('collapse', 'show');
+
+                // Add toggle button to header (right aligned)
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-sm btn-outline-secondary no-loader';
+                btn.setAttribute('data-bs-toggle', 'collapse');
+                btn.setAttribute('data-bs-target', '#' + collapseId);
+                btn.setAttribute('aria-expanded', 'true');
+                btn.setAttribute('aria-controls', collapseId);
+                btn.innerHTML = '<i class="fas fa-chevron-up"></i>';
+
+                // Wrap header content to align toggle right
+                const hdr = document.createElement('div');
+                while (header.firstChild) hdr.appendChild(header.firstChild);
+                header.appendChild(hdr);
+                const right = document.createElement('div');
+                right.appendChild(btn);
+                header.classList.add('d-flex','justify-content-between','align-items-center','gap-2');
+                header.appendChild(right);
+
+                body.addEventListener('shown.bs.collapse', () => { btn.innerHTML = '<i class="fas fa-chevron-up"></i>'; btn.setAttribute('aria-expanded','true'); });
+                body.addEventListener('hidden.bs.collapse', () => { btn.innerHTML = '<i class="fas fa-chevron-down"></i>'; btn.setAttribute('aria-expanded','false'); });
+                card.setAttribute('data-collapsible-init','1');
+            });
+        }
+        enhance();
+        window.addEventListener('resize', () => { /* no-op; only enhances on first entry to small */ });
+        window.addEventListener('orientationchange', () => setTimeout(enhance, 150));
+    })();
+
     // === Coachmark for Copy, once ===
     function showCopyCoachmark() {
         if (localStorage.getItem('coach:copy') === '1') return;
