@@ -15,7 +15,10 @@
                     </p>
                     <p class="text-muted mb-0">ID Unic: {{ student.id_unic_student or 'N/A' }}</p>
                 </div>
-                <div>
+                <div class="btn-group">
+                    <a href="{{ url_for('student_audit_log', student_id=student.id) }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-history"></i> Jurnal Audit
+                    </a>
                     {% if current_user.role == 'gradat' and student.created_by_user_id == current_user.id %}
                         <a href="{{ url_for('edit_student', student_id=student.id) }}" class="btn btn-primary"><i class="fas fa-edit"></i> Editează Student</a>
                     {% elif current_user.role == 'admin' %}

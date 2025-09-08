@@ -7,10 +7,11 @@
     <div class="row justify-content-center">
         <div class="col-md-6 col-lg-5">
             <div class="card shadow-lg">
-                <div class="card-header text-center bg-primary text-white">
-                    <h4><i class="fas fa-key me-2"></i>Autentificare cu Cod de Acces Special</h4>
-                </div>
                 <div class="card-body p-4">
+                    <div class="text-center mb-4">
+                        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="main-page-logo">
+                        <h4 class="mt-3">Autentificare cu Cod de Acces Special</h4>
+                    </div>
                     <p class="text-muted text-center">Introduceți codul de acces pe care l-ați primit pentru a accesa modulele permise.</p>
 
                     {% include '_flash_messages.html' %}

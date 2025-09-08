@@ -76,8 +76,14 @@ a:hover {
   transition: background 0.2s;
   border-bottom: 1px solid var(--border);
 }
-.navbar .navbar-brand img {
-  max-height: 40px;
+.navbar .navbar-brand img.logo-img {
+  max-height: 50px; /* Increased from 40px */
+}
+
+.main-page-logo {
+    max-height: 150px; /* Increased from 120px */
+    width: auto;
+    margin-bottom: 1rem;
 }
 .unap-logo-text {
   font-weight: 600;

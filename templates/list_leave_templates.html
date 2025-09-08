@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from '_form_helpers.html' import render_field %}
+
+{% block title %}Management Șabloane{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0"><i class="fas fa-file-alt me-2"></i> Management Șabloane</h2>
+    <a href="{{ url_for('create_leave_template') }}" class="btn btn-primary">
+        <i class="fas fa-plus me-2"></i>Creează Șablon Nou
+    </a>
+</div>
+
+<p class="text-muted">
+    Creați șabloane pentru a adăuga rapid și consistent învoiri, permisii sau servicii pentru unul sau mai mulți studenți.
+</p>
+
+<div class="row">
+    {% set templates_by_type = templates|groupby('template_type') %}
+    {% for type, tpls in templates_by_type %}
+        <div class="col-md-12 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        {% if type == 'daily_leave' %}
+                            <i class="fas fa-sun me-2"></i> Șabloane Învoiri Zilnice
+                        {% elif type == 'permission' %}
+                            <i class="fas fa-file-signature me-2"></i> Șabloane Permisii
+                        {% elif type == 'service' %}
+                            <i class="fas fa-concierge-bell me-2"></i> Șabloane Servicii
+                        {% else %}
+                            {{ type|capitalize }}
+                        {% endif %}
+                    </h4>
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for template in tpls %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-1">{{ template.name }}</h5>
+                            <small class="text-muted">
+                                {% set data = template.get_data() %}
+                                {% if template.template_type == 'daily_leave' %}
+                                    Interval: {{ data.start_time }} - {{ data.end_time }}
+                                {% elif template.template_type == 'permission' %}
+                                    Durata: {{ data.duration_hours }} ore | Destinație: {{ data.destination or 'N/A' }}
+                                {% elif template.template_type == 'service' %}
+                                    Tip: {{ data.service_type }} | Durata: {{ data.duration_hours }} ore
+                                {% endif %}
+                            </small>
+                        </div>
+                        <div class="btn-group">
+                            <a href="{{ url_for('edit_leave_template', template_id=template.id) }}" class="btn btn-outline-secondary btn-sm">
+                                <i class="fas fa-edit"></i> Editează
+                            </a>
+                            <form action="{{ url_for('delete_leave_template', template_id=template.id) }}" method="POST" onsubmit="return confirm('Sunteți sigur că doriți să ștergeți acest șablon?');" style="display: inline;">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">
+                                    <i class="fas fa-trash"></i> Șterge
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="col-12">
+            <div class="alert alert-info text-center">
+                Nu ați creat niciun șablon încă. Apăsați pe "Creează Șablon Nou" pentru a începe.
+            </div>
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}
