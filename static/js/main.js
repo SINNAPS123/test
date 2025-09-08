@@ -459,6 +459,67 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     enhanceTableCells();
 
+    // === Mobile-first enhancements for dense pages ===
+    (function mobileDenseTables(){
+        const isSmall = () => window.matchMedia('(max-width: 576px)').matches;
+        function apply() {
+            document.querySelectorAll('table.table').forEach(t => {
+                if (isSmall()) t.classList.add('table-compact');
+                else t.classList.remove('table-compact');
+            });
+        }
+        apply();
+        window.addEventListener('resize', apply);
+        window.addEventListener('orientationchange', () => setTimeout(apply, 150));
+    })();
+
+    // === Mobile collapsible cards (compact sections) ===
+    (function mobileCollapsibleCards(){
+        const isSmall = () => window.matchMedia('(max-width: 576px)').matches;
+        function enhance() {
+            if (!isSmall()) return;
+            document.querySelectorAll('.card').forEach((card, idx) => {
+                if (card.getAttribute('data-collapsible-init') === '1') return;
+                const header = card.querySelector('.card-header');
+                const body = card.querySelector('.card-body');
+                if (!header || !body) return;
+                const id = card.id || ('card_' + Math.random().toString(36).slice(2));
+                card.id = id;
+                const collapseId = id + '_c';
+                body.id = collapseId;
+
+                // Start expanded by default
+                body.classList.add('collapse', 'show');
+
+                // Add toggle button to header (right aligned)
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-sm btn-outline-secondary no-loader';
+                btn.setAttribute('data-bs-toggle', 'collapse');
+                btn.setAttribute('data-bs-target', '#' + collapseId);
+                btn.setAttribute('aria-expanded', 'true');
+                btn.setAttribute('aria-controls', collapseId);
+                btn.innerHTML = '<i class="fas fa-chevron-up"></i>';
+
+                // Wrap header content to align toggle right
+                const hdr = document.createElement('div');
+                while (header.firstChild) hdr.appendChild(header.firstChild);
+                header.appendChild(hdr);
+                const right = document.createElement('div');
+                right.appendChild(btn);
+                header.classList.add('d-flex','justify-content-between','align-items-center','gap-2');
+                header.appendChild(right);
+
+                body.addEventListener('shown.bs.collapse', () => { btn.innerHTML = '<i class="fas fa-chevron-up"></i>'; btn.setAttribute('aria-expanded','true'); });
+                body.addEventListener('hidden.bs.collapse', () => { btn.innerHTML = '<i class="fas fa-chevron-down"></i>'; btn.setAttribute('aria-expanded','false'); });
+                card.setAttribute('data-collapsible-init','1');
+            });
+        }
+        enhance();
+        window.addEventListener('resize', () => { /* no-op; only enhances on first entry to small */ });
+        window.addEventListener('orientationchange', () => setTimeout(enhance, 150));
+    })();
+
     // === Coachmark for Copy, once ===
     function showCopyCoachmark() {
         if (localStorage.getItem('coach:copy') === '1') return;
@@ -645,5 +706,85 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     })();
 
-    // === PWA SW Registration, Command Palette already present above ===
+    // === Sticky Mobile Action Bar for primary actions ===
+(function mobileStickyActions(){
+    const isSmall = () => window.matchMedia('(max-width: 576px)').matches;
+    function findPrimarySubmit(form) {
+        // Prefer an explicit primary button
+        let btn = form.querySelector('button.btn-primary[type="submit"], button[type="submit"].btn.btn-primary');
+        if (!btn) {
+            // Fallback: any submit button
+            btn = form.querySelector('button[type="submit"], input[type="submit"]');
+        }
+        return btn || null;
+    }
+    function createBar() {
+        const bar = document.createElement('div');
+        bar.className = 'mobile-sticky-actions';
+        const primary = document.createElement('button');
+        primary.type = 'button';
+        primary.className = 'btn btn-primary';
+        primary.textContent = 'Salvează';
+        bar.appendChild(primary);
+        document.body.appendChild(bar);
+        return { bar, primary };
+    }
+    let state = { bar: null, primary: null, targetBtn: null, form: null };
+    function sync() {
+        if (!isSmall()) { teardown(); return; }
+        // Choose the main form on page (longest form)
+        const forms = Array.from(document.querySelectorAll('form')).filter(f => {
+            // Skip auth forms or those explicitly marked
+            const isAuth = /login|logout|password/i.test(f.action || '') || f.querySelector('input[type="password"]');
+            return !isAuth && f.offsetParent !== null;
+        });
+        if (!forms.length) { teardown(); return; }
+        const form = forms.sort((a,b) => (b.innerText||'').length - (a.innerText||'').length)[0];
+        const actionBtn = findPrimarySubmit(form);
+        if (!actionBtn) { teardown(); return; }
+
+        if (!state.bar) {
+            const created = createBar();
+            state.bar = created.bar;
+            state.primary = created.primary;
+            state.primary.addEventListener('click', () => {
+                if (state.targetBtn && !state.targetBtn.disabled) {
+                    state.targetBtn.click();
+                } else if (state.form) {
+                    state.form.requestSubmit ? state.form.requestSubmit() : state.form.submit();
+                }
+            });
+        }
+        state.targetBtn = actionBtn;
+        state.form = form;
+
+        // Label from target button
+        const label = (actionBtn.innerText || actionBtn.value || 'Salvează').trim() || 'Salvează';
+        state.primary.innerHTML = actionBtn.innerHTML && actionBtn.tagName === 'BUTTON' ? actionBtn.innerHTML : label;
+
+        // Mirror disabled state
+        const observer = new MutationObserver(() => {
+            state.primary.disabled = actionBtn.disabled;
+        });
+        observer.observe(actionBtn, { attributes: true, attributeFilter: ['disabled', 'class'] });
+        state.primary.disabled = actionBtn.disabled;
+
+        // Show the bar
+        state.bar.classList.add('show');
+        document.body.classList.add('has-sticky-actions');
+    }
+    function teardown() {
+        if (state.bar) {
+            state.bar.remove();
+            state = { bar: null, primary: null, targetBtn: null, form: null };
+            document.body.classList.remove('has-sticky-actions');
+        }
+    }
+    // Init and bind listeners
+    sync();
+    window.addEventListener('resize', () => { sync(); });
+    window.addEventListener('orientationchange', () => { setTimeout(sync, 150); });
+})();
+
+// === PWA SW Registration, Command Palette already present above ===
 });
