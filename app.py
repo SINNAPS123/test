@@ -396,6 +396,14 @@ class Student(db.Model):
         db.String(255), nullable=True
     )  # Details for other/partial exemptions
 
+    __table_args__ = (
+        sa.Index("ix_student_creator", "created_by_user_id"),
+        sa.Index("ix_student_company", "companie"),
+        sa.Index("ix_student_battalion", "batalion"),
+        sa.Index("ix_student_platoon", "pluton"),
+        sa.Index("ix_student_name", "nume", "prenume"),
+    )
+
     def __repr__(self):
         details = []
         if self.is_platoon_graded_duty:
@@ -438,6 +446,14 @@ class Permission(db.Model):
     )  # Made nullable
     creator = db.relationship(
         "User", backref=db.backref("permissions_created", lazy=True)
+    )
+
+    __table_args__ = (
+        sa.Index("ix_permission_student", "student_id"),
+        sa.Index("ix_permission_status", "status"),
+        sa.Index("ix_permission_start", "start_datetime"),
+        sa.Index("ix_permission_end", "end_datetime"),
+        sa.Index("ix_permission_creator", "created_by_user_id"),
     )
 
     @property
@@ -501,6 +517,13 @@ class DailyLeave(db.Model):
     )  # Made nullable
     creator = db.relationship(
         "User", backref=db.backref("daily_leaves_created", lazy=True)
+    )
+
+    __table_args__ = (
+        sa.Index("ix_daily_leave_student", "student_id"),
+        sa.Index("ix_daily_leave_status", "status"),
+        sa.Index("ix_daily_leave_date", "leave_date"),
+        sa.Index("ix_daily_leave_creator", "created_by_user_id"),
     )
 
     @property
@@ -605,6 +628,13 @@ class WeekendLeave(db.Model):
     )  # Made nullable
     creator = db.relationship(
         "User", backref=db.backref("weekend_leaves_created", lazy=True)
+    )
+
+    __table_args__ = (
+        sa.Index("ix_weekend_leave_student", "student_id"),
+        sa.Index("ix_weekend_leave_status", "status"),
+        sa.Index("ix_weekend_leave_weekend", "weekend_start_date"),
+        sa.Index("ix_weekend_leave_creator", "created_by_user_id"),
     )
 
     def get_intervals(self):
@@ -796,6 +826,15 @@ class ServiceAssignment(db.Model):
         "User", backref=db.backref("service_assignments_created", lazy=True)
     )
 
+    __table_args__ = (
+        sa.Index("ix_service_student", "student_id"),
+        sa.Index("ix_service_type", "service_type"),
+        sa.Index("ix_service_date", "service_date"),
+        sa.Index("ix_service_start", "start_datetime"),
+        sa.Index("ix_service_end", "end_datetime"),
+        sa.Index("ix_service_creator", "created_by_user_id"),
+    )
+
     @property
     def is_active(self):
         now = get_localized_now()
@@ -860,6 +899,12 @@ class ActionLog(db.Model):
     user = db.relationship(
         "User", backref=db.backref("action_logs", lazy="dynamic")
     )  # Changed to lazy='dynamic'
+
+    __table_args__ = (
+        sa.Index("ix_actionlog_user", "user_id"),
+        sa.Index("ix_actionlog_timestamp", "timestamp"),
+        sa.Index("ix_actionlog_target", "target_model", "target_id"),
+    )
 
     def __repr__(self):
         user_desc = (
@@ -2508,6 +2553,27 @@ def _apply_subuser_scope_and_permissions():
                 return redirect(url_for("dashboard"))
     except Exception:
         # Fail-open to avoid locking users out on unexpected errors
+        pass
+
+
+# Lightweight CSRF mitigation for authenticated sessions:
+# Enforce same-origin on state-changing requests to reduce CSRF risk without changing templates.
+@app.before_request
+def _enforce_same_origin_for_state_changes():
+    try:
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            # Apply only when a session is likely to be present/used
+            if current_user.is_authenticated or "scoped_access" in session or "public_view_access" in session:
+                origin = request.headers.get("Origin") or ""
+                referer = request.headers.get("Referer") or ""
+                host = request.host_url.rstrip("/")
+                # Accept if Origin/Referer is same-origin or absent (some clients omit Origin on same-site)
+                if origin and not origin.startswith(host):
+                    return "CSRF check failed (invalid Origin).", 400
+                if referer and not referer.startswith(host):
+                    return "CSRF check failed (invalid Referer).", 400
+    except Exception:
+        # Do not block requests on unexpected errors
         pass
 
 
@@ -15623,6 +15689,57 @@ def public_situation_submit(code):
     return render_template("public_situation_submit.html", situation=sit, fields=fields, form_data={}, students_options=students_options)
 
 
+def _ensure_runtime_indexes():
+    """
+    Create important indexes at runtime if Alembic migrations are not run.
+    Safe to call multiple times; uses IF NOT EXISTS.
+    """
+    try:
+        engine_name = db.engine.dialect.name
+        if engine_name == "sqlite":
+            stmts = [
+                # Student
+                "CREATE INDEX IF NOT EXISTS ix_student_creator ON student (created_by_user_id)",
+                "CREATE INDEX IF NOT EXISTS ix_student_company ON student (companie)",
+                "CREATE INDEX IF NOT EXISTS ix_student_battalion ON student (batalion)",
+                "CREATE INDEX IF NOT EXISTS ix_student_platoon ON student (pluton)",
+                "CREATE INDEX IF NOT EXISTS ix_student_name ON student (nume, prenume)",
+                # Permission
+                "CREATE INDEX IF NOT EXISTS ix_permission_student ON permission (student_id)",
+                "CREATE INDEX IF NOT EXISTS ix_permission_status ON permission (status)",
+                "CREATE INDEX IF NOT EXISTS ix_permission_start ON permission (start_datetime)",
+                "CREATE INDEX IF NOT EXISTS ix_permission_end ON permission (end_datetime)",
+                "CREATE INDEX IF NOT EXISTS ix_permission_creator ON permission (created_by_user_id)",
+                # DailyLeave
+                "CREATE INDEX IF NOT EXISTS ix_daily_leave_student ON daily_leave (student_id)",
+                "CREATE INDEX IF NOT EXISTS ix_daily_leave_status ON daily_leave (status)",
+                "CREATE INDEX IF NOT EXISTS ix_daily_leave_date ON daily_leave (leave_date)",
+                "CREATE INDEX IF NOT EXISTS ix_daily_leave_creator ON daily_leave (created_by_user_id)",
+                # WeekendLeave
+                "CREATE INDEX IF NOT EXISTS ix_weekend_leave_student ON weekend_leave (student_id)",
+                "CREATE INDEX IF NOT EXISTS ix_weekend_leave_status ON weekend_leave (status)",
+                "CREATE INDEX IF NOT EXISTS ix_weekend_leave_weekend ON weekend_leave (weekend_start_date)",
+                "CREATE INDEX IF NOT EXISTS ix_weekend_leave_creator ON weekend_leave (created_by_user_id)",
+                # ServiceAssignment
+                "CREATE INDEX IF NOT EXISTS ix_service_student ON service_assignment (student_id)",
+                "CREATE INDEX IF NOT EXISTS ix_service_type ON service_assignment (service_type)",
+                "CREATE INDEX IF NOT EXISTS ix_service_date ON service_assignment (service_date)",
+                "CREATE INDEX IF NOT EXISTS ix_service_start ON service_assignment (start_datetime)",
+                "CREATE INDEX IF NOT EXISTS ix_service_end ON service_assignment (end_datetime)",
+                "CREATE INDEX IF NOT EXISTS ix_service_creator ON service_assignment (created_by_user_id)",
+                # ActionLog
+                "CREATE INDEX IF NOT EXISTS ix_actionlog_user ON action_log (user_id)",
+                "CREATE INDEX IF NOT EXISTS ix_actionlog_timestamp ON action_log (timestamp)",
+                "CREATE INDEX IF NOT EXISTS ix_actionlog_target ON action_log (target_model, target_id)",
+            ]
+            with db.engine.begin() as conn:
+                for s in stmts:
+                    conn.execute(sa.text(s))
+    except Exception as _e:
+        # Non-fatal; indexes are an optimization
+        app.logger.error(f"Failed to ensure runtime indexes: {_e}")
+
+
 if __name__ == "__main__":
     with app.app_context():
         print("Applying database migrations...")
@@ -15637,5 +15754,9 @@ if __name__ == "__main__":
         print("Initializing database (if needed)...")
         init_db()
         print("Database initialization complete.")
+
+        print("Ensuring runtime indexes (if needed)...")
+        _ensure_runtime_indexes()
+        print("Indexes ensured (or already present).")
 
     app.run(host="0.0.0.0", port=5001, debug=True)
