@@ -194,9 +194,14 @@ Absenti motivat:
                             </form>
                         </div>
                         <div class="col-lg-6">
-                            <h5>Coduri Active</h5>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5>Coduri Active</h5>
+                                <a href="{{ url_for('scoped_login') }}" class="btn btn-sm btn-outline-info" target="_blank">
+                                    <i class="fas fa-sign-in-alt me-1"></i> Pagină Login Delegat
+                                </a>
+                            </div>
                             {% if active_scoped_codes %}
-                                <ul class="list-group">
+                                <ul class="list-group mt-2">
                                     {% for code in active_scoped_codes %}
                                         <li class="list-group-item">
                                             <strong>{{ code.code }}</strong> - {{ code.description }}
@@ -245,6 +250,7 @@ Absenti motivat:
                         <a href="{{ url_for('list_weekend_leaves') }}" class="btn btn-outline-secondary"><i class="fas fa-calendar-week me-2"></i>Management Învoiri Weekend</a>
                         <a href="{{ url_for('list_services') }}" class="btn btn-outline-secondary"><i class="fas fa-shield-alt me-2"></i>Management Servicii</a>
                         <a href="{{ url_for('volunteer_home') }}" class="btn btn-outline-secondary"><i class="fas fa-hands-helping me-2"></i>Management Voluntariate</a>
+                        <a href="{{ url_for('list_leave_templates') }}" class="btn btn-outline-info mt-2"><i class="fas fa-file-alt me-2"></i>Management Șabloane</a>
                     </div>
                 </div>
             </div>

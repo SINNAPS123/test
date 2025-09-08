@@ -83,6 +83,8 @@
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarRoleSpecificLinks">
                                 {% if current_user.role == 'gradat' %}
+                                    <li><a class="dropdown-item" href="{{ url_for('calendar_view') }}"><i class="fas fa-calendar-alt fa-fw me-2"></i>Calendar Evenimente</a></li>
+                                    <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="{{ url_for('list_students') }}">Studenți</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('list_permissions') }}">Permisii</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('list_daily_leaves') }}">Învoiri Zilnice</a></li>
@@ -92,6 +94,8 @@
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="{{ url_for('presence_report') }}">Raport Prezență</a></li>
                                 {% elif current_user.role == 'admin' %}
+                                    <li><a class="dropdown-item" href="{{ url_for('calendar_view') }}"><i class="fas fa-calendar-alt fa-fw me-2"></i>Calendar Evenimente</a></li>
+                                    <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="{{ url_for('admin_dashboard_route') }}">Management Utilizatori</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('list_students') }}">Listă Studenți (Admin)</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('admin_insights') }}">Insights Sistem</a></li>

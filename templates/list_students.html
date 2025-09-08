@@ -95,11 +95,29 @@
 
     {% set student_list = students_pagination.items if students_pagination else students %}
 
+    <!-- Secțiune Acțiuni Multiple -->
+    <div id="batch-actions-section" class="mb-3 p-3 border rounded bg-light" style="display: none;">
+        <div class="d-flex align-items-center">
+            <strong class="me-3">Cu <span id="selected-count">0</span> studenți selectați:</strong>
+            <div class="btn-group">
+                <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-play me-2"></i>Aplică Acțiune
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item batch-action-trigger" href="#" data-bs-toggle="modal" data-bs-target="#batchActionModal" data-action-type="permission">Adaugă Permisie</a></li>
+                    <li><a class="dropdown-item batch-action-trigger" href="#" data-bs-toggle="modal" data-bs-target="#batchActionModal" data-action-type="daily_leave">Adaugă Învoire Zilnică</a></li>
+                    <li><a class="dropdown-item batch-action-trigger" href="#" data-bs-toggle="modal" data-bs-target="#batchActionModal" data-action-type="service">Asignează Serviciu</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
     {% if student_list %}
-    <div class="table-responsive shadow-sm"> <!-- Added shadow-sm for consistency with cards -->
+    <div class="table-responsive shadow-sm">
         <table class="table table-striped table-hover table-sm">
             <thead class="table-light"> 
                 <tr>
+                    <th style="width: 30px;"><input type="checkbox" class="form-check-input" id="select-all-students"></th>
                     <th>Nr. Crt.</th>
                     <th>Grad</th>
                     <th>Nume și Prenume</th>
@@ -122,6 +140,7 @@
             <tbody>
                 {% for student in student_list %}
                 <tr>
+                    <td><input type="checkbox" class="form-check-input student-checkbox" name="student_ids" value="{{ student.id }}"></td>
                     <td>
                         {% if is_admin_view and students_pagination %}
                             {{ students_pagination.first + loop.index0 }}
@@ -174,7 +193,7 @@
                             <small class="text-muted">N/A</small>
                         {% endif %}
                     </td>
-                    {% endif %} {# end is_admin_view for creator column #}
+                    {% endif %}
                     <td>
                         <div class="btn-group">
                             <a href="{{ url_for('student_profile', student_id=student.id) }}" class="btn btn-primary btn-sm py-0 px-1" title="Vezi Profilul Complet">
@@ -202,7 +221,6 @@
         </table>
     </div>
 
-    {# Generalized Pagination for both Admin and Gradat #}
     {% if students_pagination and students_pagination.total > students_pagination.per_page %}
     <nav aria-label="Page navigation">
         <ul class="pagination pagination-sm justify-content-center">
@@ -220,7 +238,7 @@
                     <li class="page-item {% if students_pagination.page == page_num %}active{% endif %}">
                         <a class="page-link" href="{{ url_for('list_students', page=page_num, **base_args) }}">{{ page_num }}</a>
                     </li>
-                {% elif loop.index != 1 and loop.index != students_pagination.pages +1 %} {# Avoids multiple '...' for short lists #}
+                {% elif loop.index != 1 and loop.index != students_pagination.pages +1 %}
                      <li class="page-item disabled"><span class="page-link">...</span></li>
                 {% endif %}
             {% endfor %}
@@ -231,7 +249,7 @@
         </ul>
     </nav>
     <p class="text-center text-muted small">Afișare {{ students_pagination.items|length }} din {{ students_pagination.total }} studenți (Pagina {{ students_pagination.page }} din {{ students_pagination.pages }}).</p>
-    {% elif students and not students_pagination %} {# Case where there are students but not enough for pagination (e.g. gradat with few students) #}
+    {% elif students and not students_pagination %}
         <p class="text-center text-muted small">Total studenți: {{ student_list|length }}</p>
     {% endif %}
 
@@ -252,6 +270,194 @@
     {% endif %}
 </div>
 
-<!-- Modal pentru Bulk Import a fost eliminat. Funcționalitatea este pe o pagină separată. -->
+<!-- Modal pentru Acțiuni Multiple -->
+<div class="modal fade" id="batchActionModal" tabindex="-1" aria-labelledby="batchActionModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="batchActionModalLabel">Aplică Acțiune în Masă</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="batch-action-form" method="POST" action="{{ url_for('batch_action_students') }}">
+          <div class="modal-body">
+                <input type="hidden" name="action_type" id="modal-action-type">
+                <div id="selected-student-ids-container">
+                    <!-- Hidden input-uri pentru ID-urile studenților vor fi adăugate aici de JS -->
+                </div>
+
+                <p>Se va aplica acțiunea pentru <strong id="modal-selected-count">0</strong> studenți.</p>
+                <hr>
+
+                <!-- Aici vor fi inserate dinamic câmpurile formularului -->
+                <div id="modal-form-content">
+                    <p class="text-muted">Vă rugăm selectați o acțiune.</p>
+                </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anulează</button>
+            <button type="submit" class="btn btn-primary">Aplică</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden Form Snippets for Batch Actions -->
+<div id="batch-action-form-templates" style="display: none;">
+
+    <!-- Snippet pentru Permisii -->
+    <div id="form-snippet-permission">
+        <div class="mb-3">
+            <label class="form-label">Folosește un Șablon (Opțional)</label>
+            <select class="form-select template-selector" data-action-type="permission">
+                <option value="">-- Manual --</option>
+                {% for t in leave_templates if t.template_type == 'permission' %}
+                <option value='{{ t.get_data()|tojson|forceescape }}'>{{ t.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="row">
+            <div class="col-md-6 mb-3"><label class="form-label">Data și Ora de Început</label><input type="datetime-local" name="start_datetime" class="form-control" required></div>
+            <div class="col-md-6 mb-3"><label class="form-label">Data și Ora de Sfârșit</label><input type="datetime-local" name="end_datetime" class="form-control" required></div>
+            <div class="col-md-6 mb-3"><label class="form-label">Destinație</label><input type="text" name="destination" class="form-control"></div>
+            <div class="col-md-6 mb-3"><label class="form-label">Mod Transport</label><input type="text" name="transport_mode" class="form-control"></div>
+            <div class="col-12 mb-3"><label class="form-label">Motiv (Opțional)</label><input type="text" name="reason" class="form-control"></div>
+        </div>
+    </div>
+
+    <!-- Snippet pentru Învoiri Zilnice -->
+    <div id="form-snippet-daily_leave">
+        <div class="mb-3">
+            <label class="form-label">Folosește un Șablon (Opțional)</label>
+            <select class="form-select template-selector" data-action-type="daily_leave">
+                <option value="">-- Manual --</option>
+                {% for t in leave_templates if t.template_type == 'daily_leave' %}
+                <option value='{{ t.get_data()|tojson|forceescape }}'>{{ t.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="row">
+            <div class="col-md-4 mb-3"><label class="form-label">Data Învoirii</label><input type="date" name="leave_date" class="form-control" required></div>
+            <div class="col-md-4 mb-3"><label class="form-label">Ora de Început</label><input type="time" name="start_time" class="form-control" required></div>
+            <div class="col-md-4 mb-3"><label class="form-label">Ora de Sfârșit</label><input type="time" name="end_time" class="form-control" required></div>
+        </div>
+    </div>
+
+    <!-- Snippet pentru Servicii -->
+    <div id="form-snippet-service">
+        <div class="mb-3">
+            <label class="form-label">Folosește un Șablon (Opțional)</label>
+            <select class="form-select template-selector" data-action-type="service">
+                <option value="">-- Manual --</option>
+                {% for t in leave_templates if t.template_type == 'service' %}
+                <option value='{{ t.get_data()|tojson|forceescape }}'>{{ t.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="row">
+            <div class="col-md-6 mb-3"><label class="form-label">Tip Serviciu</label>
+                <select name="service_type" class="form-select" required>
+                    {% for st in service_types %}<option value="{{ st }}">{{ st }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6 mb-3"><label class="form-label">Data Serviciului</label><input type="date" name="service_date" class="form-control" required></div>
+            <div class="col-md-6 mb-3"><label class="form-label">Ora de Început</label><input type="time" name="start_time" class="form-control" required></div>
+            <div class="col-md-6 mb-3"><label class="form-label">Ora de Sfârșit</label><input type="time" name="end_time" class="form-control" required></div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const selectAllCheckbox = document.getElementById('select-all-students');
+    const studentCheckboxes = document.querySelectorAll('.student-checkbox');
+    const batchActionsSection = document.getElementById('batch-actions-section');
+    const selectedCountSpan = document.getElementById('selected-count');
+    const batchActionModal = document.getElementById('batchActionModal');
+    const modalSelectedCountSpan = batchActionModal.querySelector('#modal-selected-count');
+    const selectedIdsContainer = batchActionModal.querySelector('#selected-student-ids-container');
+    const modalFormContent = batchActionModal.querySelector('#modal-form-content');
+    const modalActionTypeInput = batchActionModal.querySelector('#modal-action-type');
+    const batchActionForm = batchActionModal.querySelector('#batch-action-form');
+
+    function updateBatchActionUI() {
+        const selectedCheckboxes = document.querySelectorAll('.student-checkbox:checked');
+        const count = selectedCheckboxes.length;
+
+        batchActionsSection.style.display = count > 0 ? 'block' : 'none';
+        selectedCountSpan.textContent = count;
+        selectAllCheckbox.checked = (count > 0 && count === studentCheckboxes.length);
+        selectAllCheckbox.indeterminate = (count > 0 && count < studentCheckboxes.length);
+    }
+
+    selectAllCheckbox.addEventListener('change', function () {
+        studentCheckboxes.forEach(checkbox => {
+            checkbox.checked = selectAllCheckbox.checked;
+        });
+        updateBatchActionUI();
+    });
+
+    studentCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateBatchActionUI);
+    });
+
+    batchActionModal.addEventListener('show.bs.modal', function (event) {
+        const button = event.relatedTarget;
+        const actionType = button.dataset.actionType;
+
+        modalActionTypeInput.value = actionType;
+
+        const selectedStudents = document.querySelectorAll('.student-checkbox:checked');
+        modalSelectedCountSpan.textContent = selectedStudents.length;
+        selectedIdsContainer.innerHTML = '';
+        selectedStudents.forEach(cb => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'student_ids[]';
+            input.value = cb.value;
+            selectedIdsContainer.appendChild(input);
+        });
+
+        const formSnippet = document.getElementById(`form-snippet-${actionType}`);
+        if (formSnippet) {
+            modalFormContent.innerHTML = formSnippet.innerHTML;
+            const templateSelector = modalFormContent.querySelector('.template-selector');
+            if(templateSelector) {
+                templateSelector.addEventListener('change', handleTemplateSelection);
+            }
+        } else {
+            modalFormContent.innerHTML = '<p class="text-danger">Eroare: Nu s-a găsit formularul pentru această acțiune.</p>';
+        }
+    });
+
+    function handleTemplateSelection(event) {
+        const selector = event.target;
+        const selectedOption = selector.options[selector.selectedIndex];
+        const formContainer = selector.closest('#modal-form-content');
+
+        if (!selectedOption.value) return;
+
+        try {
+            const data = JSON.parse(selectedOption.value);
+            const actionType = selector.dataset.actionType;
+
+            if (actionType === 'daily_leave') {
+                formContainer.querySelector('[name="start_time"]').value = data.start_time || '';
+                formContainer.querySelector('[name="end_time"]').value = data.end_time || '';
+            } else if (actionType === 'permission') {
+                formContainer.querySelector('[name="destination"]').value = data.destination || '';
+                formContainer.querySelector('[name="transport_mode"]').value = data.transport_mode || '';
+            } else if (actionType === 'service') {
+                formContainer.querySelector('[name="service_type"]').value = data.service_type || '';
+            }
+        } catch (e) {
+            console.error("Error parsing template data:", e);
+        }
+    }
+
+    updateBatchActionUI();
+});
+</script>
+{% endblock %}

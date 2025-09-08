@@ -29,18 +29,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // === Dark Mode Toggle ===
     const toggleButton = document.getElementById('darkModeToggle');
-    const body = document.body;
+    const htmlElement = document.documentElement;
     const toggleIcon = toggleButton ? toggleButton.querySelector('i') : null;
     function applyTheme(theme) {
-        if (theme === 'dark') {
-            body.classList.add('dark-mode');
-            if (toggleIcon) { toggleIcon.classList.remove('fa-moon'); toggleIcon.classList.add('fa-sun'); }
-            localStorage.setItem('theme', 'dark');
-        } else {
-            body.classList.remove('dark-mode');
-            if (toggleIcon) { toggleIcon.classList.remove('fa-sun'); toggleIcon.classList.add('fa-moon'); }
-            localStorage.setItem('theme', 'light');
+        htmlElement.setAttribute('data-theme', theme);
+        if (toggleIcon) {
+            if (theme === 'dark') {
+                toggleIcon.classList.remove('fa-moon');
+                toggleIcon.classList.add('fa-sun');
+            } else {
+                toggleIcon.classList.remove('fa-sun');
+                toggleIcon.classList.add('fa-moon');
+            }
         }
+        localStorage.setItem('theme', theme);
         try {
             const metaLight = document.querySelector('meta[media="(prefers-color-scheme: light)"][name="theme-color"]');
             const metaDark = document.querySelector('meta[media="(prefers-color-scheme: dark)"][name="theme-color"]');
@@ -59,8 +61,8 @@ document.addEventListener('DOMContentLoaded', function () {
             toggleButton.setAttribute('title', currentTheme === 'dark' ? 'Comută la tema luminoasă' : 'Comută la tema întunecată');
         } catch (e) {}
         toggleButton.addEventListener('click', function () {
-            currentTheme = body.classList.contains('dark-mode') ? 'light' : 'dark';
-            applyTheme(currentTheme);
+            const newTheme = htmlElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            applyTheme(newTheme);
             try {
                 const isPressed = this.getAttribute('aria-pressed') === 'true';
                 this.setAttribute('aria-pressed', (!isPressed).toString());

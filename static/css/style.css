@@ -60,7 +60,7 @@ html.dark-mode-preload body {
 html { scroll-behavior: smooth; }
 
 /* Dark Mode Variables */
-body.dark-mode {
+[data-theme="dark"] {
     --bg-main: #1a1a1a;                     /* Very dark grey */
     --bg-surface: #2c2c2c;                  /* Dark grey for cards, surfaces */
     --bg-surface-hover: #383838;           /* Slightly lighter grey for hover */
@@ -95,103 +95,103 @@ body.dark-mode {
     }
 }
 
-body.dark-mode ::selection {
+[data-theme="dark"] ::selection {
     background-color: var(--accent-primary);
     color: var(--text-on-accent);
 }
 
 /* Dacă se folosește clasa .text-dark de la Bootstrap, trebuie suprascrisă în dark mode */
-body.dark-mode .text-dark {
+[data-theme="dark"] .text-dark {
     color: var(--text-primary) !important;
 }
 /* Similar pentru .text-black dacă este folosită */
-body.dark-mode .text-black {
+[data-theme="dark"] .text-black {
     color: var(--text-primary) !important;
 }
 
 /* Style for .bg-light in dark mode */
-body.dark-mode .bg-light {
+[data-theme="dark"] .bg-light {
     background-color: var(--bg-surface-hover) !important; /* A slightly lighter dark background */
     color: var(--text-primary) !important; /* Ensure text on this background is light */
 }
 /* Ensure elements within .bg-light also inherit text color if needed, e.g., labels */
-body.dark-mode .bg-light label,
-body.dark-mode .bg-light .form-label {
+[data-theme="dark"] .bg-light label,
+[data-theme="dark"] .bg-light .form-label {
     color: var(--text-primary) !important;
 }
 
 
-body.dark-mode .table-striped > tbody > tr:nth-of-type(odd) > * {
+[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
     background-color: rgba(0, 0, 0, 0.1); /* Darker subtle stripe for dark mode */
 }
-body.dark-mode .table-hover > tbody > tr:hover > * {
+[data-theme="dark"] .table-hover > tbody > tr:hover > * {
     background-color: rgba(0, 0, 0, 0.15); /* Darker subtle hover for dark mode */
 }
 
 /* Ensure text in table-danger is light and background is dark enough in dark mode */
-body.dark-mode .table-danger,
-body.dark-mode .table-danger > th,
-body.dark-mode .table-danger > td {
+[data-theme="dark"] .table-danger,
+[data-theme="dark"] .table-danger > th,
+[data-theme="dark"] .table-danger > td {
     background-color: rgba(220, 53, 69, 0.25) !important; /* Darker, more transparent red */
     color: #f8d7da !important; /* Light red/pinkish text for readability on dark red background */
     border-color: rgba(220, 53, 69, 0.35) !important; /* Adjusted border color */
 }
-body.dark-mode .table-danger a {
+[data-theme="dark"] .table-danger a {
     color: #fcc9cf !important; /* Lighter links for visibility */
 }
 
 
-body.dark-mode .badge.bg-light { /* Make .bg-light distinct in dark mode */
+[data-theme="dark"] .badge.bg-light { /* Make .bg-light distinct in dark mode */
     background-color: var(--border-color) !important; /* Using a variable that's dark, like a dark grey */
     color: var(--text-primary) !important; /* Text should be light */
 }
 /* Light button in dark mode should look subtle */
-body.dark-mode .btn-light {
+[data-theme="dark"] .btn-light {
     background-color: var(--bg-surface-hover) !important;
     border-color: var(--border-color) !important;
     color: var(--text-primary) !important;
 }
 /* Ensure text on .badge.bg-warning is dark for readability */
-body.dark-mode .badge.bg-warning,
-body.dark-mode .badge.status-urmeaza, /* Common class for "upcoming" status */
-body.dark-mode .badge[class*="bg-warning"] { /* Catch any badge with bg-warning */
+[data-theme="dark"] .badge.bg-warning,
+[data-theme="dark"] .badge.status-urmeaza, /* Common class for "upcoming" status */
+[data-theme="dark"] .badge[class*="bg-warning"] { /* Catch any badge with bg-warning */
     color: #212529 !important; /* Keep dark text on yellow */
     /* background-color remains var(--accent-warning) or Bootstrap's default yellow */
 }
 
 
 /* Ensure any element with a warning background (yellow) has dark text in dark mode for readability */
-body.dark-mode [style*="background-color: var(--accent-warning)"],
-body.dark-mode .bg-warning, /* This includes .alert-warning if it uses .bg-warning */
-body.dark-mode [class*="status-urmeaza"], /* Catch classes like status-urmeaza, status-upcoming etc. */
-body.dark-mode [style*="background-color: yellow"],
-body.dark-mode [style*="background: yellow"] {
+[data-theme="dark"] [style*="background-color: var(--accent-warning)"],
+[data-theme="dark"] .bg-warning, /* This includes .alert-warning if it uses .bg-warning */
+[data-theme="dark"] [class*="status-urmeaza"], /* Catch classes like status-urmeaza, status-upcoming etc. */
+[data-theme="dark"] [style*="background-color: yellow"],
+[data-theme="dark"] [style*="background: yellow"] {
     color: #212529 !important;
 }
 /* If text-white is explicitly used on a warning background, override it */
-body.dark-mode .bg-warning.text-white,
-body.dark-mode [style*="background-color: var(--accent-warning)"].text-white,
-body.dark-mode [style*="background-color: yellow"].text-white,
-body.dark-mode [style*="background: yellow"].text-white {
+[data-theme="dark"] .bg-warning.text-white,
+[data-theme="dark"] [style*="background-color: var(--accent-warning)"].text-white,
+[data-theme="dark"] [style*="background-color: yellow"].text-white,
+[data-theme="dark"] [style*="background: yellow"].text-white {
     color: #212529 !important;
 }
 
 
-body.dark-mode .navbar-toggler-icon {
+[data-theme="dark"] .navbar-toggler-icon {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28224, 224, 224, 0.75%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e"); /* Lighter stroke for dark mode */
 }
 
-body.dark-mode .btn-close {
+[data-theme="dark"] .btn-close {
     filter: invert(1) grayscale(100%) brightness(200%); /* Common trick to make black SVGs white */
 }
 
-body.dark-mode input[type="date"]::-webkit-calendar-picker-indicator,
-body.dark-mode input[type="time"]::-webkit-calendar-picker-indicator,
-body.dark-mode input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="datetime-local"]::-webkit-calendar-picker-indicator {
     filter: invert(1);
 }
 
-body.dark-mode .card-header:not([class*="bg-"]) {
+[data-theme="dark"] .card-header:not([class*="bg-"]) {
     background-color: var(--bg-surface-hover);
     border-bottom: 1px solid var(--border-color);
     color: var(--text-primary); /* Ensure header text is also correct */
@@ -208,7 +208,7 @@ body.dark-mode .table td {
 }
 
 /* Table header specific styling */
-body.dark-mode .table thead th {
+[data-theme="dark"] .table thead th {
     background-color: var(--bg-surface-hover) !important; /* Slightly different header bg */
     color: var(--text-primary) !important;
     border-bottom-width: 2px;
@@ -216,7 +216,7 @@ body.dark-mode .table thead th {
 }
 
 /* Subtle striping for table rows in dark mode */
-body.dark-mode .table-striped > tbody > tr:nth-of-type(odd) > * {
+[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
     /* A very subtle difference from the default (even) rows */
     /* Default even rows will be transparent over --bg-surface */
     /* Odd rows will be slightly darker than --bg-surface */
@@ -224,7 +224,7 @@ body.dark-mode .table-striped > tbody > tr:nth-of-type(odd) > * {
 }
 
 /* Hover effect for table rows */
-body.dark-mode .table-hover > tbody > tr:hover > * {
+[data-theme="dark"] .table-hover > tbody > tr:hover > * {
     background-color: rgba(255, 255, 255, 0.07) !important; /* Slightly lighter subtle hover */
     color: var(--text-primary) !important; /* Ensure text color remains high contrast on hover */
 }
@@ -233,57 +233,57 @@ body.dark-mode .table-hover > tbody > tr:hover > * {
 /* If these are not used for student lists, this might be less critical for the described issue */
 /* For now, we'll keep them subtle but distinct from fully transparent */
 
-body.dark-mode .table-success > td, body.dark-mode .table-success > th {
+[data-theme="dark"] .table-success > td, [data-theme="dark"] .table-success > th {
     background-color: rgba(40, 167, 69, 0.15) !important; /* Subtle green indication */
     color: var(--text-primary) !important;
 }
-body.dark-mode .table-warning > td, body.dark-mode .table-warning > th {
+[data-theme="dark"] .table-warning > td, [data-theme="dark"] .table-warning > th {
     background-color: rgba(255, 193, 7, 0.15) !important; /* Subtle yellow indication */
     color: #dfa100 !important; /* Darker yellow/gold text for better contrast on subtle yellow bg */
 }
-body.dark-mode .table-danger > td, body.dark-mode .table-danger > th {
+[data-theme="dark"] .table-danger > td, [data-theme="dark"] .table-danger > th {
     background-color: rgba(220, 53, 69, 0.15) !important; /* Subtle red indication */
     color: var(--text-primary) !important;
 }
-body.dark-mode .table-info > td, body.dark-mode .table-info > th {
+[data-theme="dark"] .table-info > td, [data-theme="dark"] .table-info > th {
     background-color: rgba(13, 202, 240, 0.1) !important; /* Subtle cyan indication */
     color: var(--text-primary) !important;
 }
 
 /* Ensure links within tables are also styled for dark mode */
-body.dark-mode .table a {
+[data-theme="dark"] .table a {
     color: var(--link-color) !important;
 }
-body.dark-mode .table a:hover {
+[data-theme="dark"] .table a:hover {
     color: var(--link-hover-color) !important;
 }
 
 /* List group items (used for services/leaves display in some cards) */
-body.dark-mode .list-group-item {
+[data-theme="dark"] .list-group-item {
     background-color: var(--bg-surface) !important; /* Ensure consistent surface background */
     color: var(--text-primary) !important;         /* Ensure high contrast text */
     border-color: var(--border-color) !important;   /* Dark mode appropriate border */
 }
 /* For striped list groups, if any are used */
-body.dark-mode .list-group-item-striped:nth-of-type(odd) {
+[data-theme="dark"] .list-group-item-striped:nth-of-type(odd) {
      background-color: rgba(0, 0, 0, 0.05) !important; /* Subtle striping */
 }
 /* Ensure text on specific status list items is readable */
-body.dark-mode .list-group-item-success {
+[data-theme="dark"] .list-group-item-success {
     background-color: rgba(40, 167, 69, 0.15) !important;
     color: var(--text-primary) !important;
 }
-body.dark-mode .list-group-item-warning {
+[data-theme="dark"] .list-group-item-warning {
     background-color: rgba(255, 193, 7, 0.15) !important;
     color: #dfa100 !important;
 }
-body.dark-mode .list-group-item-danger {
+[data-theme="dark"] .list-group-item-danger {
     background-color: rgba(220, 53, 69, 0.15) !important;
     color: var(--text-primary) !important;
 }
 /* === END JULES' REVISED MODIFICATIONS FOR DARK MODE TABLE/LIST STYLING === */
 
-body.dark-mode .table thead th { /* This rule was already present, ensure it's not conflicting or duplicate if my additions are above */
+[data-theme="dark"] .table thead th { /* This rule was already present, ensure it's not conflicting or duplicate if my additions are above */
     background-color: var(--bg-surface-hover);
     border-bottom: 2px solid var(--border-color);
     color: var(--text-primary); /* Ensure table header text is correct */
@@ -302,69 +302,69 @@ body.dark-mode .table thead th { /* This rule was already present, ensure it's n
 }
 
 /* Dark Mode Modals */
-body.dark-mode .modal-content {
+[data-theme="dark"] .modal-content {
     background-color: var(--bg-surface);
     color: var(--text-primary);
     border: 1px solid var(--border-color);
 }
-body.dark-mode .modal-header {
+[data-theme="dark"] .modal-header {
     background-color: var(--bg-surface-hover); /* Slightly different background for header */
     color: var(--text-primary);
     border-bottom: 1px solid var(--border-color);
 }
-body.dark-mode .modal-header .btn-close {
+[data-theme="dark"] .modal-header .btn-close {
     filter: invert(1) grayscale(100%) brightness(200%); /* Make the 'X' button white */
 }
-body.dark-mode .modal-body {
+[data-theme="dark"] .modal-body {
     color: var(--text-primary);
 }
 /* Ensure form elements inside modals are also styled correctly for dark mode */
-body.dark-mode .modal-body .form-label {
+[data-theme="dark"] .modal-body .form-label {
     color: var(--text-primary);
 }
-body.dark-mode .modal-body .form-control {
+[data-theme="dark"] .modal-body .form-control {
     background-color: var(--input-bg);
     color: var(--text-primary);
     border-color: var(--input-border);
 }
-body.dark-mode .modal-body .form-control::placeholder {
+[data-theme="dark"] .modal-body .form-control::placeholder {
     color: var(--text-secondary);
 }
-body.dark-mode .modal-body .form-select {
+[data-theme="dark"] .modal-body .form-select {
     background-color: var(--input-bg);
     color: var(--text-primary);
     border-color: var(--input-border);
 }
 
 
-body.dark-mode .modal-footer {
+[data-theme="dark"] .modal-footer {
     background-color: var(--bg-surface-hover); /* Slightly different background for footer */
     border-top: 1px solid var(--border-color);
 }
 /* Ensure buttons in modal footer are styled correctly if they are e.g. btn-secondary */
-body.dark-mode .modal-footer .btn-secondary {
+[data-theme="dark"] .modal-footer .btn-secondary {
     color: var(--text-on-accent); /* Or var(--text-primary) if background is light enough */
     background-color: var(--accent-secondary); /* Or a darker variant if needed */
     border-color: var(--accent-secondary);
 }
-body.dark-mode .modal-footer .btn-secondary:hover {
+[data-theme="dark"] .modal-footer .btn-secondary:hover {
     background-color: var(--accent-secondary-darker);
     border-color: var(--accent-secondary-darker);
 }
 
 
 /* Asigură contrast pentru rândurile de tabel colorate în dark mode */
-body.dark-mode .table-success,
-body.dark-mode .table-success > th,
-body.dark-mode .table-success > td {
+[data-theme="dark"] .table-success,
+[data-theme="dark"] .table-success > th,
+[data-theme="dark"] .table-success > td {
     background-color: rgba(40, 167, 69, 0.2) !important; /* Verde mai transparent și mai puțin intens */
     color: var(--text-primary) !important; /* Text primar din dark-mode (ex. #f0f0f0) pentru contrast maxim */
 }
-body.dark-mode .table-success .badge {
+[data-theme="dark"] .table-success .badge {
     color: #000 !important; /* Text negru pentru badge-uri pe fundal verde deschis, pentru contrast */
     background-color: rgba(40, 167, 69, 0.5) !important; /* Fundal badge mai opac */
 }
-body.dark-mode .table-success a {
+[data-theme="dark"] .table-success a {
     color: #b3ffc6 !important; /* Linkuri mai vizibile - acestea pot rămâne așa sau ajustate dacă este necesar */
     /* Dacă linkurile trebuie să fie și ele var(--text-primary), atunci se modifică aici. Momentan le las. */
     /* O alternativă pentru linkuri, dacă se dorește aceeași culoare ca textul normal: */
@@ -373,51 +373,51 @@ body.dark-mode .table-success a {
 }
 
 
-body.dark-mode .table-warning,
-body.dark-mode .table-warning > th,
-body.dark-mode .table-warning > td {
+[data-theme="dark"] .table-warning,
+[data-theme="dark"] .table-warning > th,
+[data-theme="dark"] .table-warning > td {
     background-color: rgba(255, 193, 7, 0.2) !important; /* Galben mai transparent */
     color: #ffeeba !important; /* Text galben deschis, lizibil pe fundal închis */
 }
-body.dark-mode .table-warning .badge.bg-info.text-dark {
+[data-theme="dark"] .table-warning .badge.bg-info.text-dark {
     color: #000 !important;
     background-color: rgba(13, 202, 240, 0.5) !important;
 }
-body.dark-mode .table-warning a {
+[data-theme="dark"] .table-warning a {
     color: #ffeca0 !important;
 }
 
 
-body.dark-mode .table-secondary,
-body.dark-mode .table-secondary > th,
-body.dark-mode .table-secondary > td {
+[data-theme="dark"] .table-secondary,
+[data-theme="dark"] .table-secondary > th,
+[data-theme="dark"] .table-secondary > td {
     background-color: rgba(108, 117, 125, 0.2) !important; /* Gri mai transparent */
     color: #e2e3e5 !important; /* Text gri deschis, lizibil pe fundal închis */
 }
-body.dark-mode .table-secondary a {
+[data-theme="dark"] .table-secondary a {
     color: #cdd2d6 !important;
 }
 
 
 /* Badge-uri specifice pentru vizibilitate în dark mode */
-body.dark-mode .badge.bg-dark {
+[data-theme="dark"] .badge.bg-dark {
     background-color: #495057 !important; /* Un gri mai deschis decât fundalul general */
     color: var(--text-primary) !important;
 }
 
-body.dark-mode .badge.bg-info {
+[data-theme="dark"] .badge.bg-info {
     /* bg-info este un cyan. Textul default Bootstrap pentru .badge.bg-info este #000. */
     /* Dacă se dorește text alb: color: var(--text-on-accent) !important; */
     /* Dar pentru lizibilitate pe cyan, textul închis este de obicei mai bun. */
     /* Bootstrap 5 .badge.bg-info are deja text închis. */
 }
-body.dark-mode .badge.bg-info.text-dark { /* Asigurare că text-dark e aplicat */
+[data-theme="dark"] .badge.bg-info.text-dark { /* Asigurare că text-dark e aplicat */
     color: #000 !important;
 }
 
 
 /* Minimal alert adjustments for readability */
-body.dark-mode .alert-warning {
+[data-theme="dark"] .alert-warning {
     /* Bootstrap's default .alert-warning has dark text on light yellow. */
     /* This should remain readable if the var(--accent-warning) isn't changed for dark mode. */
     /* If --accent-warning was made dark, this would need inversion. */
@@ -425,34 +425,34 @@ body.dark-mode .alert-warning {
      background-color: #4d38023b; /* Fundal mai închis pentru .alert-warning */
      border-color: #4d38028a; /* Border mai închis pentru .alert-warning */
 }
-body.dark-mode .alert-warning a.alert-link, body.dark-mode .alert-warning .alert-link {
+[data-theme="dark"] .alert-warning a.alert-link, [data-theme="dark"] .alert-warning .alert-link {
     color: #2c1f01; /* Ensure link color is dark enough on yellow background */
 }
-body.dark-mode .alert-light { /* Bootstrap's .alert-light */
+[data-theme="dark"] .alert-light { /* Bootstrap's .alert-light */
     color: var(--text-primary);
     background-color: var(--bg-surface-hover);
     border-color: var(--border-color);
 }
-body.dark-mode .alert-secondary {
+[data-theme="dark"] .alert-secondary {
      color: var(--text-primary);
     background-color: var(--bg-surface-hover);
     border-color: var(--border-color);
 }
 
 /* Ensure .alert-info has good contrast in dark mode */
-body.dark-mode .alert-info {
+[data-theme="dark"] .alert-info {
     color: var(--text-primary); /* Light text */
     background-color: var(--bg-surface-hover); /* Darker background, consistent with alert-secondary */
     border-color: var(--border-color); /* Consistent border */
 }
-body.dark-mode .alert-info a,
-body.dark-mode .alert-info .alert-link {
+[data-theme="dark"] .alert-info a,
+[data-theme="dark"] .alert-info .alert-link {
     color: var(--link-color); /* Use the general dark mode link color for good contrast */
 }
 
 
 /* Stil pentru listele de studenți din presence_report.html */
-body.dark-mode .list-group-item {
+[data-theme="dark"] .list-group-item {
     background-color: var(--bg-surface); /* Fundalul cardului */
     color: var(--text-primary); /* Text deschis */
     border-color: var(--border-color); /* Separator între itemi */
@@ -673,12 +673,12 @@ thead th[aria-sort="descending"].th-sortable::after {
 .selection-bar.show {
     bottom: 0;
 }
-body.dark-mode .selection-bar {
+[data-theme="dark"] .selection-bar {
     background: var(--bg-surface);
 }
 
 /* Add padding to the body when the bar is shown to avoid content overlap */
-body.selection-bar-shown {
+[data-theme="dark"] .selection-bar-shown {
     padding-bottom: var(--selection-bar-height);
     transition: padding-bottom 0.2s ease-in-out;
 }
@@ -698,31 +698,31 @@ body.selection-bar-shown {
 }
 .table-compact th, .table-compact td { padding: 0.35rem !important; }
 .table tbody tr.row-selected > * { background-color: rgba(59,130,246,0.12) !important; }
-body.dark-mode .table tbody tr.row-selected > * { background-color: rgba(59,130,246,0.22) !important; }
+[data-theme="dark"] .table tbody tr.row-selected > * { background-color: rgba(59,130,246,0.22) !important; }
 
 /* Debug admin bar spacing under sticky navbar */
 @media (max-width: 991.98px) {
-  body .container.mt-4 { margin-top: 1rem !important; }
+  [data-theme="dark"] .container.mt-4 { margin-top: 1rem !important; }
 }
 
 /* Specific dark mode table cell text color, just in case of overrides */
-body.dark-mode .table { background-color: var(--bg-surface); }
-body.dark-mode .table th,
-body.dark-mode .table td {
+[data-theme="dark"] .table { background-color: var(--bg-surface); }
+[data-theme="dark"] .table th,
+[data-theme="dark"] .table td {
     color: var(--text-primary) !important;
     background-color: var(--bg-surface) !important;
 }
-body.dark-mode .table thead th {
+[data-theme="dark"] .table thead th {
     background-color: var(--bg-surface-hover) !important; /* Consistent with other dark mode headers */
 }
-body.dark-mode .table-striped > tbody > tr:nth-of-type(odd) > * {
+[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
     background-color: rgba(255, 255, 255, 0.035) !important; /* Lighter stripe over dark surface */
 }
-body.dark-mode .table-hover > tbody > tr:hover > * {
+[data-theme="dark"] .table-hover > tbody > tr:hover > * {
     background-color: rgba(255, 255, 255, 0.08) !important;
 }
-body.dark-mode .table a { color: var(--link-color) !important; }
-body.dark-mode .table a:hover { color: var(--link-hover-color) !important; }
+[data-theme="dark"] .table a { color: var(--link-color) !important; }
+[data-theme="dark"] .table a:hover { color: var(--link-hover-color) !important; }
 
 
 /* Formulare */
@@ -849,9 +849,9 @@ body.dark-mode .table a:hover { color: var(--link-hover-color) !important; }
 }
 .dropdown-item { color: var(--text-primary); }
 .dropdown-item:hover, .dropdown-item:focus { background-color: var(--bg-surface-hover); }
-body.dark-mode .dropdown-menu { background-color: var(--bg-surface); border-color: var(--border-color); }
-body.dark-mode .dropdown-item { color: var(--text-primary); }
-body.dark-mode .dropdown-item:hover, body.dark-mode .dropdown-item:focus { background-color: var(--bg-surface-hover); color: var(--text-primary); }
+[data-theme="dark"] .dropdown-menu { background-color: var(--bg-surface); border-color: var(--border-color); }
+[data-theme="dark"] .dropdown-item { color: var(--text-primary); }
+[data-theme="dark"] .dropdown-item:hover, [data-theme="dark"] .dropdown-item:focus { background-color: var(--bg-surface-hover); color: var(--text-primary); }
 
 
 /* Alerte */
@@ -1177,7 +1177,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
     opacity: 1;
 }
 
-body.dark-mode #loading-overlay {
+[data-theme="dark"] #loading-overlay {
     background-color: rgba(0, 0, 0, 0.7); /* Fundal întunecat semi-transparent */
 }
 
@@ -1186,7 +1186,7 @@ body.dark-mode #loading-overlay {
     color: #333;
 }
 
-body.dark-mode #loading-overlay .spinner-container {
+[data-theme="dark"] #loading-overlay .spinner-container {
     color: #f1f1f1;
 }
 
@@ -1202,7 +1202,7 @@ body.dark-mode #loading-overlay .spinner-container {
     box-shadow: inset 0 0 0 1px rgba(52,152,219,0.25);
 }
 
-body.dark-mode #loading-overlay .spinner {
+[data-theme="dark"] #loading-overlay .spinner {
     border-color: #555;
     border-top-color: #3498db;
 }
@@ -1220,7 +1220,7 @@ body.dark-mode #loading-overlay .spinner {
     margin-top: 1rem;
 }
 
-body.dark-mode .report-text-block {
+[data-theme="dark"] .report-text-block {
     background-color: #1a1a1a;
     border-color: #555;
     color: #f1f1f1;
