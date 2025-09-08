@@ -5239,8 +5239,8 @@ def _generate_eligible_volunteers(
         )
 
     # Exclude students with leaves on the specified activity date
+    ids_on_leave = set()
     if activity_date:
-        ids_on_leave = set()
         activity_day_start_aware = EUROPE_BUCHAREST.localize(
             datetime.combine(activity_date, time.min)
         )
@@ -5248,57 +5248,57 @@ def _generate_eligible_volunteers(
             datetime.combine(activity_date, time.max)
         )
 
-    all_managed_student_ids = [
-        sid
-        for (sid,) in Student.query.filter_by(created_by_user_id=gradat_id)
-        .with_entities(Student.id)
-        .all()
-    ]
+        all_managed_student_ids = [
+            sid
+            for (sid,) in Student.query.filter_by(created_by_user_id=gradat_id)
+            .with_entities(Student.id)
+            .all()
+        ]
 
-    # Permissions
-    act_day_start_naive = activity_day_start_aware.replace(tzinfo=None)
-    act_day_end_naive = activity_day_end_aware.replace(tzinfo=None)
-    permissions = (
-        Permission.query.filter(
-            Permission.student_id.in_(all_managed_student_ids),
-            Permission.status == "Aprobată",
-            Permission.start_datetime < act_day_end_naive,
-            Permission.end_datetime > act_day_start_naive,
+        # Permissions
+        act_day_start_naive = activity_day_start_aware.replace(tzinfo=None)
+        act_day_end_naive = activity_day_end_aware.replace(tzinfo=None)
+        permissions = (
+            Permission.query.filter(
+                Permission.student_id.in_(all_managed_student_ids),
+                Permission.status == "Aprobată",
+                Permission.start_datetime < act_day_end_naive,
+                Permission.end_datetime > act_day_start_naive,
+            )
+            .with_entities(Permission.student_id)
+            .all()
         )
-        .with_entities(Permission.student_id)
-        .all()
-    )
-    for p_id in permissions:
-        ids_on_leave.add(p_id[0])
+        for p_id in permissions:
+            ids_on_leave.add(p_id[0])
 
-    # Daily Leaves
-    daily_leaves = DailyLeave.query.filter(
-        DailyLeave.student_id.in_(all_managed_student_ids),
-        DailyLeave.status == "Aprobată",
-        DailyLeave.leave_date == activity_date,
-    ).all()
-    for dl in daily_leaves:
-        if (
-            dl.start_datetime < act_day_end_naive
-            and dl.end_datetime > act_day_start_naive
-        ):
-            ids_on_leave.add(dl.student_id)
-
-    # Weekend Leaves
-    weekend_leaves = WeekendLeave.query.filter(
-        WeekendLeave.student_id.in_(all_managed_student_ids),
-        WeekendLeave.status == "Aprobată",
-        WeekendLeave.weekend_start_date <= activity_date,
-        WeekendLeave.weekend_start_date >= activity_date - timedelta(days=3),
-    ).all()
-    for wl in weekend_leaves:
-        for interval in wl.get_intervals():
+        # Daily Leaves
+        daily_leaves = DailyLeave.query.filter(
+            DailyLeave.student_id.in_(all_managed_student_ids),
+            DailyLeave.status == "Aprobată",
+            DailyLeave.leave_date == activity_date,
+        ).all()
+        for dl in daily_leaves:
             if (
-                interval["start"] < activity_day_end_aware
-                and interval["end"] > activity_day_start_aware
+                dl.start_datetime < act_day_end_naive
+                and dl.end_datetime > act_day_start_naive
             ):
-                ids_on_leave.add(wl.student_id)
-                break
+                ids_on_leave.add(dl.student_id)
+
+        # Weekend Leaves
+        weekend_leaves = WeekendLeave.query.filter(
+            WeekendLeave.student_id.in_(all_managed_student_ids),
+            WeekendLeave.status == "Aprobată",
+            WeekendLeave.weekend_start_date <= activity_date,
+            WeekendLeave.weekend_start_date >= activity_date - timedelta(days=3),
+        ).all()
+        for wl in weekend_leaves:
+            for interval in wl.get_intervals():
+                if (
+                    interval["start"] < activity_day_end_aware
+                    and interval["end"] > activity_day_start_aware
+                ):
+                    ids_on_leave.add(wl.student_id)
+                    break
 
     if ids_on_leave:
         students_query = students_query.filter(
