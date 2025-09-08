@@ -11830,77 +11830,7 @@ def admin_export_permissions_word():
 
     document.add_paragraph()  # Spacer
 
-    # --- Separate table for church attendees (Admin view) ---
-    church_attendees_admin = []
-    for (
-        leave
-    ) in (
-        leaves_to_export
-    ):  # leaves_to_export is already filtered for active/upcoming
-        if leave.duminica_biserica:
-            is_sunday_selected_for_leave = False
-            for interval in leave.get_intervals():
-                if interval["day_name"] == "Duminica":
-                    is_sunday_selected_for_leave = True
-                    break
-            if is_sunday_selected_for_leave:
-                church_attendees_admin.append(leave.student)
-
-    if church_attendees_admin:
-        document.add_heading(
-            "Studenți care participă la Biserică (Duminică 09:00-11:00)",
-            level=2,
-        ).alignment = WD_ALIGN_PARAGRAPH.CENTER
-        church_table_admin = document.add_table(
-            rows=1, cols=4
-        )  # Nr.crt, Grad, Nume și Prenume, Pluton
-        church_table_admin.style = "Table Grid"
-        church_table_admin.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-        church_hdr_cells_admin = church_table_admin.rows[0].cells
-        church_col_titles_admin = [
-            "Nr. crt.",
-            "Grad",
-            "Nume și Prenume",
-            "Plutonul (Grupa)",
-        ]
-        for i, title in enumerate(church_col_titles_admin):
-            church_hdr_cells_admin[i].text = title
-            church_hdr_cells_admin[i].paragraphs[0].runs[0].font.bold = True
-            church_hdr_cells_admin[i].paragraphs[
-                0
-            ].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        church_attendees_admin.sort(
-            key=lambda s: (s.batalion, s.companie, s.pluton, s.nume, s.prenume)
-        )  # Sort for admin view
-
-        for idx, student in enumerate(church_attendees_admin):
-            row_cells_admin = church_table_admin.add_row().cells
-            row_cells_admin[0].text = str(idx + 1)
-            row_cells_admin[0].paragraphs[
-                0
-            ].alignment = WD_ALIGN_PARAGRAPH.CENTER
-            row_cells_admin[1].text = student.grad_militar
-            row_cells_admin[2].text = f"{student.nume} {student.prenume}"
-            row_cells_admin[3].text = (
-                student.pluton
-            )  # Admin might want to see Company/Battalion too, but Pluton is consistent
-            row_cells_admin[3].paragraphs[
-                0
-            ].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        church_table_widths_admin = {
-            0: Inches(0.5),
-            1: Inches(0.8),
-            2: Inches(2.5),
-            3: Inches(1.0),
-        }
-        for col_idx, width_val in church_table_widths_admin.items():
-            for row in church_table_admin.rows:
-                if col_idx < len(row.cells):
-                    row.cells[col_idx].width = width_val
-        document.add_paragraph()
+    # (Church attendees table not applicable for permissions export)
 
     style = document.styles["Normal"]
     font = style.font
