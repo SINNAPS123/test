@@ -1834,106 +1834,31 @@ def admin_conflicts():
 
 def get_upcoming_fridays(num_fridays=5):
     """
-    Generates a list of upcoming (and potentially the current or immediate past) Fridays.
-    Returns a list of dicts, each with 'value' (YYYY-MM-DD string) and 'display' (Month Day, Year string).
+    Returnează o listă de până la `num_fridays` vinări (YYYY-MM-DD + etichetă),
+    începând cu vinerea săptămânii curente. Dacă azi este Luni/Marti/Miercuri,
+    include și vinerea anterioară ca prim element pentru a acoperi weekendul curent.
     """
-    fridays_list = []
-    today = get_localized_now().date()  # Use localized date
-    # Start from the Friday of the current week or previous week if today is past Friday
-    current_friday_offset = today.weekday() - 4  # Friday is weekday 4
-    if current_friday_offset > 0:  # If today is Sat (5) or Sun (6)
-        today - timedelta(days=current_friday_offset)
-    else:  # If today is Mon, Tue, Wed, Thu, or Fri itself
-        today - timedelta(
-            days=current_friday_offset
-        )  # Will be today if it's Friday, or upcoming Friday of current week
+    today = get_localized_now().date()
+    weekday = today.weekday()  # Monday=0 ... Sunday=6
 
-    # Ensure we don't start too far in the past if today is, e.g., Monday and last Friday was for a weekend already started
-    # Let's adjust to start from the Friday of the week containing `today - 2 days`
-    # This ensures if it's Sunday, we can still select the Friday of that weekend.
-    # If it's Monday, we can select last Friday.
-    # If it's Friday, we select today.
+    # Găsește vinerea săptămânii curente (poate fi în trecut dacă e sâmbătă/duminică)
+    if weekday <= 4:
+        current_friday = today + timedelta(days=(4 - weekday))
+    else:
+        current_friday = today - timedelta(days=(weekday - 4))
 
-    # Simpler approach: find the Friday of the week of (today - 2 days)
-    # This means if today is Sunday, (today-2) is Friday.
-    # If today is Monday, (today-2) is Saturday of last week, so we find that Friday.
-    # If today is Friday, (today-2) is Wednesday, we find this Friday.
+    fridays = [current_friday + timedelta(weeks=i) for i in range(num_fridays)]
 
-    # Let's find the Friday of the current week. If today is past it, it's fine.
-    # Or, more simply, find the *next* Friday from (today - 7 days) to ensure we always get the closest ones.
-    # No, let's find the Friday of the week of `today`.
-    # If today is Monday (0), Friday is today + 4 days.
-    # If today is Friday (4), Friday is today + 0 days.
-    # If today is Sunday (6), Friday was today - 2 days.
+    # Dacă e Luni(0)/Marți(1)/Miercuri(2), inserează vinerea precedentă
+    if weekday < 3:
+        prev_friday = current_friday - timedelta(weeks=1)
+        fridays.insert(0, prev_friday)
+        fridays = fridays[:num_fridays]
 
-    # Let's find the Friday of the current calendar week (Mon-Sun)
-    # If today is Sunday (weekday 6), current week's Friday was 2 days ago.
-    # If today is Monday (weekday 0), current week's Friday is 4 days ahead.
-    start_point = today - timedelta(
-        days=today.weekday()
-    )  # This is Monday of the current week
-    start_point + timedelta(days=4)
-
-    # We want to offer the current weekend's Friday even if it just passed.
-    # So, if today is Sat/Sun, current_week_friday is the one that just passed.
-    # If today is Mon-Thu, current_week_friday is upcoming.
-    # If today is Fri, current_week_friday is today.
-
-    # Let's make sure we offer at least one past Friday if it's early in the week,
-    # but not too many.
-    # Consider the Friday of the week prior to the current week's Monday, if today is early in the week.
-
-    # Revised logic for start_friday:
-    # Find the Friday of the week that contains 'today'.
-    # If today is Sat/Sun, that Friday has passed.
-    # If today is Mon-Thu, that Friday is upcoming.
-    # If today is Fri, that Friday is today.
-
-    # We want to list the closest Friday (could be past if today is Sat/Sun)
-    # and then a few upcoming ones.
-
-    # Let initial_friday be the Friday of the week containing 'today'.
-    # If today is Monday (0), initial_friday is today + 4 days.
-    # If today is Friday (4), initial_friday is today.
-    # If today is Sunday (6), initial_friday is today - 2 days.
-    days_from_friday = (
-        today.weekday() - 4
-    )  # Monday: -4, Tuesday: -3, ..., Friday: 0, Saturday: 1, Sunday: 2
-    initial_friday = today - timedelta(days=days_from_friday)
-
-    for i in range(num_fridays):
-        loop_friday = initial_friday + timedelta(weeks=i)
-        fridays_list.append(
-            {
-                "value": loop_friday.strftime("%Y-%m-%d"),
-                "display": loop_friday.strftime("%d %B %Y") + f" (Vineri)",
-            }
-        )
-
-    # If today is Monday or Tuesday, the 'initial_friday' might be too far in the future.
-    # We might want to include the *previous* Friday as well.
-    # Let's ensure the list starts from the previous Friday if today is Mon/Tue/Wed.
-    if today.weekday() < 3:  # Mon, Tue, Wed
-        previous_friday = initial_friday - timedelta(weeks=1)
-        # Check if it's already in the list (should not happen with current logic, but good for safety)
-        if not any(
-            f["value"] == previous_friday.strftime("%Y-%m-%d")
-            for f in fridays_list
-        ):
-            fridays_list.insert(
-                0,
-                {
-                    "value": previous_friday.strftime("%Y-%m-%d"),
-                    "display": previous_friday.strftime("%d %B %Y")
-                    + f" (Vineri)",
-                },
-            )
-            if (
-                len(fridays_list) > num_fridays
-            ):  # Keep the list size consistent
-                fridays_list.pop()
-
-    return fridays_list
+    return [
+        {"value": d.strftime("%Y-%m-%d"), "display": f"{d.strftime('%d %B %Y')} (Vineri)"}
+        for d in fridays
+    ]
 
 
 def validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj):
@@ -7759,7 +7684,7 @@ def export_permissions_word():
         # Format period string for the title
         # Example: Joi, 25.07.2024 (14:00) - Duminică, 28.07.2024 (22:00)
         period_title_str = (
-            f"{get_day_name_ro(start_dt_period)}, {start_dt_period.strftime('%d.%m.%Y (%H:%M')}) - "
+            f"{get_day_name_ro(start_dt_period)}, {start_dt_period.strftime('%d.%m.%Y (%H:%M)')} - "
             f"{get_day_name_ro(end_dt_period)}, {end_dt_period.strftime('%d.%m.%Y (%H:%M)')}"
         )
 
