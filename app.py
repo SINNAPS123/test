@@ -1052,29 +1052,9 @@ class SituationEntry(db.Model):
             return json.loads(self.data)
         except (json.JSONDecodeError, TypeError):
             return {}
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(150), nullable=False)
-    template_type = db.Column(
-        db.String(50), nullable=False
-    )  # 'permission', 'daily_leave', 'service'
-    created_by_user_id = db.Column(
-        db.Integer, db.ForeignKey("user.id"), nullable=False
-    )
-    # JSON column to store the template data
-    data = db.Column(db.Text, nullable=False)
-
-    creator = db.relationship(
-        "User", backref=db.backref("leave_templates", lazy=True)
-    )
-
-    def get_data(self):
-        try:
-            return json.loads(self.data)
-        except (json.JSONDecodeError, TypeError):
-            return {}
 
     def __repr__(self):
-        return f"<LeaveTemplate {self.id}: {self.name} ({self.template_type})>"
+        return f"<SituationEntry {self.id} for Situation {self.situation_id}>"
 
 
 @login_manager.user_loader
