@@ -27,17 +27,56 @@
 
   <div class="mb-2">
     <label class="form-label">Schema câmpuri (JSON - listă de obiecte)</label>
-    <textarea class="form-control" name="fields_schema" rows="12">{{ form_data.fields_schema or '' }}</textarea>
+    <textarea class="form-control" name="fields_schema" id="fields_schema" rows="10">{{ form_data.fields_schema or '' }}</textarea>
     <div class="form-text">
-      Exemplu:
-      <pre class="mb-0" style="white-space: pre-wrap;">[
-  {"name":"student_name","label":"Nume student","type":"text","required":true},
-  {"name":"date","label":"Data","type":"date","required":true},
-  {"name":"start_time","label":"Ora început","type":"time","required":false},
-  {"name":"end_time","label":"Ora sfârșit","type":"time","required":false},
-  {"name":"details","label":"Detalii","type":"textarea","required":false}
-]</pre>
-      Tipuri suportate: text, textarea, date, time, select (cu "options": ["opt1","opt2"]).
+      Aveți mai jos un constructor vizual de câmpuri. Puteți folosi doar constructorul, JSON-ul se va completa automat.
+    </div>
+  </div>
+
+  <!-- Builder vizual pentru câmpuri -->
+  <div class="card mb-3">
+    <div class="card-header"><i class="fas fa-wrench me-2"></i>Constructor câmpuri</div>
+    <div class="card-body">
+      <div class="row g-2">
+        <div class="col-md-3">
+          <label class="form-label">Label</label>
+          <input type="text" id="b_label" class="form-control" placeholder="Ex. Nume student">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Name</label>
+          <input type="text" id="b_name" class="form-control" placeholder="ex: student_name">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Tip</label>
+          <select id="b_type" class="form-select">
+            <option value="text">text</option>
+            <option value="textarea">textarea</option>
+            <option value="date">date</option>
+            <option value="time">time</option>
+            <option value="select">select</option>
+            <option value="student_select">student_select</option>
+          </select>
+          <div class="form-text">student_select afișează un dropdown cu numele studenților</div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Obligatoriu</label>
+          <select id="b_required" class="form-select">
+            <option value="false">Nu</option>
+            <option value="true">Da</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Opțiuni (pentru select) - separate prin virgulă</label>
+          <input type="text" id="b_options" class="form-control" placeholder="ex: Optiunea 1, Optiunea 2">
+        </div>
+      </div>
+      <div class="mt-3 d-flex gap-2">
+        <button type="button" id="add_field_btn" class="btn btn-outline-primary"><i class="fas fa-plus me-1"></i>Adaugă câmp</button>
+        <button type="button" id="clear_fields_btn" class="btn btn-outline-danger"><i class="fas fa-trash me-1"></i>Golește lista</button>
+      </div>
+      <hr>
+      <h6>Câmpuri definite</h6>
+      <ul id="fields_list" class="list-group small"></ul>
     </div>
   </div>
 
@@ -46,4 +85,63 @@
     <a href="{{ url_for('list_situations') }}" class="btn btn-secondary">Înapoi</a>
   </div>
 </form>
+
+<script>
+(function(){
+  function readSchema() {
+    const ta = document.getElementById('fields_schema');
+    try {
+      const data = ta.value.trim() ? JSON.parse(ta.value) : [];
+      return Array.isArray(data) ? data : [];
+    } catch(e) { return []; }
+  }
+  function writeSchema(arr) {
+    document.getElementById('fields_schema').value = JSON.stringify(arr, null, 2);
+  }
+  function refreshList() {
+    const ul = document.getElementById('fields_list');
+    const arr = readSchema();
+    ul.innerHTML = '';
+    arr.forEach((f, idx) => {
+      const li = document.createElement('li');
+      li.className = 'list-group-item d-flex justify-content-between align-items-center';
+      li.innerHTML = `<span><strong>${f.label||f.name}</strong> <code>(${f.name})</code> - ${f.type}${f.required ? ' • obligatoriu' : ''}${(f.options && f.options.length)? ' • optiuni: ' + f.options.join('/') : ''}</span>
+      <button type="button" class="btn btn-sm btn-outline-danger" data-idx="${idx}"><i class="fas fa-times"></i></button>`;
+      li.querySelector('button').addEventListener('click', function(){
+        const i = parseInt(this.getAttribute('data-idx'),10);
+        const a = readSchema();
+        a.splice(i,1);
+        writeSchema(a);
+        refreshList();
+      });
+      ul.appendChild(li);
+    });
+  }
+  document.getElementById('add_field_btn')?.addEventListener('click', function(){
+    const label = document.getElementById('b_label').value.trim();
+    const name = document.getElementById('b_name').value.trim();
+    const type = document.getElementById('b_type').value;
+    const required = document.getElementById('b_required').value === 'true';
+    const optionsRaw = document.getElementById('b_options').value.trim();
+
+    if (!name) { alert('Câmpul name este obligatoriu.'); return; }
+    const field = { name, label: label || name, type, required };
+    if (type === 'select') {
+      field.options = optionsRaw ? optionsRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
+    }
+    const arr = readSchema();
+    arr.push(field);
+    writeSchema(arr);
+    refreshList();
+  });
+  document.getElementById('clear_fields_btn')?.addEventListener('click', function(){
+    if (confirm('Sigur ștergi toate câmpurile din schemă?')) {
+      writeSchema([]);
+      refreshList();
+    }
+  });
+  // Init list
+  refreshList();
+})();
+</script>
 {% endblock %}

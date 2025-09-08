@@ -11598,82 +11598,119 @@ def gradat_bulk_add_daily_leave():
         return redirect(url_for("dashboard"))
 
     if request.method == "POST":
-        # Step 2: process submitted per-student daily leave details
-        student_ids_to_process = [
-            key.split("_")[2]
-            for key in request.form
-            if key.startswith("student_id_")
-        ]
+        # Support two modes:
+        # - same_for_all: one date/time applied to all selected students
+        # - per_student (default): individual rows as before
+        mode = request.form.get("mode", "per_student")
         added_count = 0
         error_count = 0
         conflict_details = []
 
-        for sid_str in student_ids_to_process:
-            sid = int(sid_str)
-            leave_date_str = request.form.get(f"leave_date_{sid}")
-            start_time_str = request.form.get(f"start_time_{sid}")
-            end_time_str = request.form.get(f"end_time_{sid}")
-            reason = (request.form.get(f"reason_{sid}") or "").strip()
-
-            stud = db.session.get(Student, sid)
+        def _process_one(student_id: int, leave_date_obj: date, start_time_obj: time, end_time_obj: time, reason_val: str):
+            nonlocal added_count, error_count, conflict_details
+            stud = db.session.get(Student, student_id)
             if not stud or stud.created_by_user_id != current_user.id:
                 error_count += 1
-                conflict_details.append(f"Student ID {sid} invalid sau nu vă aparține.")
-                continue
+                conflict_details.append(f"Student ID {student_id} invalid sau nu vă aparține.")
+                return
 
-            if not leave_date_str or not start_time_str or not end_time_str:
-                error_count += 1
-                conflict_details.append(f"Date incomplete pentru {stud.nume} {stud.prenume}.")
-                continue
-
-            try:
-                leave_date_obj = datetime.strptime(leave_date_str, "%Y-%m-%d").date()
-                start_time_obj = datetime.strptime(start_time_str, "%H:%M").time()
-                end_time_obj = datetime.strptime(end_time_str, "%H:%M").time()
-            except ValueError:
-                error_count += 1
-                conflict_details.append(f"Format dată/oră invalid pentru {stud.nume} {stud.prenume}.")
-                continue
-
-            valid_day, msg = validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj)
-            if not valid_day:
+            is_valid_day, msg = validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj)
+            if not is_valid_day:
                 error_count += 1
                 conflict_details.append(f"{stud.nume} {stud.prenume}: {msg}")
-                continue
+                return
 
             start_dt = datetime.combine(leave_date_obj, start_time_obj)
             effective_end_date = leave_date_obj
             if end_time_obj < start_time_obj:
                 effective_end_date += timedelta(days=1)
             end_dt = datetime.combine(effective_end_date, end_time_obj)
-
             if end_dt <= start_dt:
                 error_count += 1
                 conflict_details.append(f"Interval invalid pentru {stud.nume} {stud.prenume}.")
-                continue
+                return
 
-            conflict = check_leave_conflict(sid, start_dt, end_dt, leave_type="daily_leave")
+            conflict = check_leave_conflict(student_id, start_dt, end_dt, leave_type="daily_leave")
             if conflict:
                 error_count += 1
                 conflict_details.append(f"{stud.nume} {stud.prenume}: Conflict ({conflict}).")
-                continue
+                return
 
             new_leave = DailyLeave(
-                student_id=sid,
+                student_id=student_id,
                 leave_date=leave_date_obj,
                 start_time=start_time_obj,
                 end_time=end_time_obj,
-                reason=reason or None,
+                reason=(reason_val or None),
                 status="Aprobată",
                 created_by_user_id=current_user.id,
             )
             db.session.add(new_leave)
             log_student_action(
-                sid,
+                student_id,
                 "DAILY_LEAVE_CREATED_BULK_FORM",
-                f"Invoire zilnică adăugată prin formular multiplu: {leave_date_obj.strftime('%d.%m.%Y')} {start_time_str}-{end_time_str}.",
+                f"Invoire zilnică adăugată prin formular multiplu: {leave_date_obj.strftime('%d.%m.%Y')} {start_time_obj.strftime('%H:%M')}-{end_time_obj.strftime('%H:%M')}.",
             )
             added_count += 1
+
+        if mode == "same_for_all":
+            # student_ids[] from hidden inputs
+            student_ids_to_process = request.form.getlist("student_ids[]", type=int)
+            leave_date_str = request.form.get("leave_date_all", "").strip()
+            start_time_str = request.form.get("start_time_all", "").strip()
+            end_time_str = request.form.get("end_time_all", "").strip()
+            reason_common = (request.form.get("reason_all") or "").strip()
+
+            if not student_ids_to_process:
+                flash("Nu ați selectat niciun student.", "warning")
+                return redirect(url_for("gradat_bulk_add_daily_leave"))
+
+            try:
+                leave_date_obj = datetime.strptime(leave_date_str, "%Y-%m-%d").date()
+                start_time_obj = datetime.strptime(start_time_str, "%H:%M").time()
+                end_time_obj = datetime.strptime(end_time_str, "%H:%M").time()
+            except ValueError:
+                flash("Dată sau ore invalide pentru modul 'același pentru toți'.", "danger")
+                return redirect(url_for("gradat_bulk_add_daily_leave", student_ids=student_ids_to_process))
+
+            for sid in student_ids_to_process:
+                _process_one(sid, leave_date_obj, start_time_obj, end_time_obj, reason_common)
+
+        else:
+            # Step 2: process submitted per-student daily leave details (legacy mode)
+            student_ids_to_process = [
+                key.split("_")[2]
+                for key in request.form
+                if key.startswith("student_id_")
+            ]
+            for sid_str in student_ids_to_process:
+                sid = int(sid_str)
+                leave_date_str = request.form.get(f"leave_date_{sid}")
+                start_time_str = request.form.get(f"start_time_{sid}")
+                end_time_str = request.form.get(f"end_time_{sid}")
+                reason = (request.form.get(f"reason_{sid}") or "").strip()
+
+                stud = db.session.get(Student, sid)
+                if not stud or stud.created_by_user_id != current_user.id:
+                    error_count += 1
+                    conflict_details.append(f"Student ID {sid} invalid sau nu vă aparține.")
+                    continue
+
+                if not leave_date_str or not start_time_str or not end_time_str:
+                    error_count += 1
+                    conflict_details.append(f"Date incomplete pentru {stud.nume} {stud.prenume}.")
+                    continue
+
+                try:
+                    leave_date_obj = datetime.strptime(leave_date_str, "%Y-%m-%d").date()
+                    start_time_obj = datetime.strptime(start_time_str, "%H:%M").time()
+                    end_time_obj = datetime.strptime(end_time_str, "%H:%M").time()
+                except ValueError:
+                    error_count += 1
+                    conflict_details.append(f"Format dată/oră invalid pentru {stud.nume} {stud.prenume}.")
+                    continue
+
+                _process_one(sid, leave_date_obj, start_time_obj, end_time_obj, reason)
 
         if added_count > 0:
             try:
@@ -15692,6 +15729,12 @@ def public_situation_submit(code):
         flash("Link invalid sau expirat.", "danger")
         return redirect(url_for("public_view_login"))
     fields = sit.get_fields()
+    # Preload students list for potential 'student_select' fields
+    students_all = Student.query.order_by(Student.nume, Student.prenume).all()
+    students_options = [
+        {"value": f"{s.grad_militar} {s.nume} {s.prenume}", "label": f"{s.grad_militar} {s.nume} {s.prenume}"}
+        for s in students_all
+    ]
     if request.method == "POST":
         # Validate and store
         answers = {}
@@ -15708,9 +15751,8 @@ def public_situation_submit(code):
                 continue
             # minimal normalization
             if ftype in ("date", "time"):
-                # accept as text; client provides proper input types
                 answers[name] = val
-            elif ftype == "select":
+            elif ftype in ("select", "student_select"):
                 answers[name] = val
             elif ftype == "textarea":
                 answers[name] = val
@@ -15719,7 +15761,7 @@ def public_situation_submit(code):
         if errors:
             for e in errors:
                 flash(e, "warning")
-            return render_template("public_situation_submit.html", situation=sit, fields=fields, form_data=request.form)
+            return render_template("public_situation_submit.html", situation=sit, fields=fields, form_data=request.form, students_options=students_options)
         new_entry = SituationEntry(
             situation_id=sit.id,
             data=json.dumps(answers, ensure_ascii=False),
@@ -15729,13 +15771,13 @@ def public_situation_submit(code):
         try:
             db.session.commit()
             flash("Răspuns trimis. Mulțumim!", "success")
-            return render_template("public_situation_submit.html", situation=sit, fields=fields, form_data={})
+            return render_template("public_situation_submit.html", situation=sit, fields=fields, form_data={}, students_options=students_options)
         except Exception as e:
             db.session.rollback()
             flash(f"Eroare la salvare: {e}", "danger")
-            return render_template("public_situation_submit.html", situation=sit, fields=fields, form_data=request.form)
+            return render_template("public_situation_submit.html", situation=sit, fields=fields, form_data=request.form, students_options=students_options)
     # GET
-    return render_template("public_situation_submit.html", situation=sit, fields=fields, form_data={})
+    return render_template("public_situation_submit.html", situation=sit, fields=fields, form_data={}, students_options=students_options)
 
 
 if __name__ == "__main__":

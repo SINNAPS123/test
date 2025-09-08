@@ -30,6 +30,13 @@
             <option value="{{ opt }}" {% if val == opt %}selected{% endif %}>{{ opt }}</option>
           {% endfor %}
         </select>
+      {% elif ftype == 'student_select' and students_options %}
+        <select class="form-select" name="{{ fname }}" {% if frequired %}required{% endif %}>
+          <option value="">-- selectează student --</option>
+          {% for opt in students_options %}
+            <option value="{{ opt.value }}" {% if val == opt.value %}selected{% endif %}>{{ opt.label }}</option>
+          {% endfor %}
+        </select>
       {% else %}
         <input type="text" class="form-control" name="{{ fname }}" value="{{ val }}" {% if frequired %}required{% endif %}>
       {% endif %}
