@@ -1,0 +1,16 @@
+[flake8]
+max-line-length = 120
+extend-ignore =
+    E203,  # whitespace before : (compatible with Black-style slicing)
+    W503,  # line break before binary operator
+    E402,  # module level import not at top of file (Flask app patterns)
+per-file-ignores =
+    app.py:E501,E731,F403,F401
+exclude =
+    venv,
+    venv~,
+    instance,
+    migrations,
+    node_modules,
+    .git,
+    __pycache__
