@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}{{ situation.title }}{% endblock %}
+
+{% block content %}
+<h2 class="mb-1"><i class="fas fa-edit me-2"></i> {{ situation.title }}</h2>
+{% if situation.description %}
+  <p class="text-muted">{{ situation.description }}</p>
+{% endif %}
+
+<form method="POST" class="card p-3 shadow-sm">
+  {% for f in fields %}
+    {% set fname = f.name %}
+    {% set flabel = f.label or f.name %}
+    {% set ftype = f.type or 'text' %}
+    {% set frequired = f.required %}
+    {% set val = form_data.get(fname, '') %}
+    <div class="mb-3">
+      <label class="form-label">{{ flabel }}{% if frequired %} *{% endif %}</label>
+      {% if ftype == 'textarea' %}
+        <textarea class="form-control" name="{{ fname }}" rows="3" {% if frequired %}required{% endif %}>{{ val }}</textarea>
+      {% elif ftype == 'date' %}
+        <input type="date" class="form-control" name="{{ fname }}" value="{{ val }}" {% if frequired %}required{% endif %}>
+      {% elif ftype == 'time' %}
+        <input type="time" class="form-control" name="{{ fname }}" value="{{ val }}" {% if frequired %}required{% endif %}>
+      {% elif ftype == 'select' and f.options %}
+        <select class="form-select" name="{{ fname }}" {% if frequired %}required{% endif %}>
+          <option value="">-- selectează --</option>
+          {% for opt in f.options %}
+            <option value="{{ opt }}" {% if val == opt %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      {% else %}
+        <input type="text" class="form-control" name="{{ fname }}" value="{{ val }}" {% if frequired %}required{% endif %}>
+      {% endif %}
+    </div>
+  {% endfor %}
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane me-2"></i> Trimite</button>
+  </div>
+</form>
+{% endblock %}
