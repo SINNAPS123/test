@@ -139,15 +139,7 @@ a:hover {
   margin-bottom: var(--spacing-4);
   transition: background 0.2s, box-shadow 0.2s;
 }
-.section-title {
-  font-size: 1.6rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  margin-bottom: var(--spacing-2);
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-}
+
 .card-header {
   background: none;
   border-bottom: 1px solid var(--border);
@@ -380,24 +372,7 @@ html.dark-mode-preload #loading-overlay {
   to { opacity: 1; transform: none;}
 }
 
-/*-----------------------------------------------------------------------------
-  10. Debug/Dev Bar (admin/debug bar top offset)
------------------------------------------------------------------------------*/
-#admin-debug-bar {
-  position: sticky;
-  top: var(--navbar-height);
-  z-index: 1050;
-  background: var(--bg);
-  color: var(--muted);
-  font-size: 0.97rem;
-  padding: 0.35em 1.25em;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-  margin-bottom: 0.5em;
-  box-shadow: var(--shadow-sm);
-  display: flex;
-  gap: 1.5em;
-}
+
 
 /* Responsive adjustments */
 @media (max-width: 992px) {
