@@ -75,6 +75,37 @@
                                 <i class="fas fa-bullhorn"></i> Anunțuri
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('calendar_view') }}">
+                                <i class="fas fa-calendar-alt"></i> Calendar
+                            </a>
+                        </li>
+                        {% if current_user.role == 'gradat' %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('gradat_insights') }}">
+                                <i class="fas fa-chart-pie"></i> Insights
+                            </a>
+                        </li>
+                        {% elif current_user.role == 'admin' %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('admin_insights') }}">
+                                <i class="fas fa-chart-pie"></i> Insights
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if current_user.role == 'gradat' %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('gradat_conflicts') }}">
+                                <i class="fas fa-exclamation-triangle"></i> Conflicte
+                            </a>
+                        </li>
+                        {% elif current_user.role == 'admin' %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('admin_conflicts') }}">
+                                <i class="fas fa-exclamation-triangle"></i> Conflicte
+                            </a>
+                        </li>
+                        {% endif %}
 
                         <!-- Dropdown pentru secțiuni specifice rolului -->
                         <li class="nav-item dropdown">
@@ -101,10 +132,14 @@
                                     <li><a class="dropdown-item" href="{{ url_for('admin_insights') }}">Insights Sistem</a></li>
                                     {# Adaugă alte linkuri specifice adminului aici dacă e cazul #}
                                 {% elif current_user.role == 'comandant_companie' %}
+                                    <li><a class="dropdown-item" href="{{ url_for('calendar_view') }}"><i class="fas fa-calendar-alt fa-fw me-2"></i>Calendar Evenimente</a></li>
+                                    <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="{{ url_for('company_commander_dashboard') }}">Panou Comandant Companie</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('text_report_display_company') }}">Raport Text Companie</a></li>
                                      {# Alte linkuri pentru comandant companie #}
                                 {% elif current_user.role == 'comandant_batalion' %}
+                                    <li><a class="dropdown-item" href="{{ url_for('calendar_view') }}"><i class="fas fa-calendar-alt fa-fw me-2"></i>Calendar Evenimente</a></li>
+                                    <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="{{ url_for('battalion_commander_dashboard') }}">Panou Comandant Batalion</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('text_report_display_battalion') }}">Raport Text Batalion</a></li>
                                      {# Alte linkuri pentru comandant batalion #}
@@ -117,6 +152,14 @@
                                     <li><a class="dropdown-item" href="{{ url_for('admin_insights') }}">Insights Sistem</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('admin_brief') }}">Daily Brief Sistem</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('admin_conflicts') }}">Conflict Center Sistem</a></li>
+                                {% elif current_user.role == 'comandant_companie' %}
+                                    <li><a class="dropdown-item" href="{{ url_for('admin_insights') }}">Insights Companie</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('admin_brief') }}">Daily Brief Companie</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('admin_conflicts') }}">Conflict Center Companie</a></li>
+                                {% elif current_user.role == 'comandant_batalion' %}
+                                    <li><a class="dropdown-item" href="{{ url_for('admin_insights') }}">Insights Batalion</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('admin_brief') }}">Daily Brief Batalion</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('admin_conflicts') }}">Conflict Center Batalion</a></li>
                                 {% endif %}
                                  <li><hr class="dropdown-divider"></li>
                                  <li><a class="dropdown-item" href="{{ url_for('dashboard') }}">Panou Principal Rol</a></li>
