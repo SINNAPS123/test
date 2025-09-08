@@ -14804,7 +14804,7 @@ def public_view_login():
             datetime.fromisoformat(
                 session["public_view_access"].get("expires_at")
             )
-            < datetime.utcnow()
+            &lt; datetime.utcnow()
         ):
             session.pop("public_view_access", None)
             flash("Sesiunea de vizualizare a expirat.", "info")
@@ -14827,23 +14827,13 @@ def public_view_login():
         ).first()
 
         if access_code and access_code.expires_at > now_utc:
-            # Consume the code on first use
-            access_code.is_active = False
-            try:
-                db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                app.logger.error(
-                    f"PublicViewCode consume failed for code {access_code.code}: {e}"
-                )
+            # Do NOT consume the code; allow reuse until expiry
             session["public_view_access"] = {
                 "scope_type": access_code.scope_type,
                 "scope_id": access_code.scope_id,
                 "expires_at": access_code.expires_at.isoformat(),
             }
-            session.permanent = (
-                True  # Make the session last for PERMANENT_SESSION_LIFETIME
-            )
+            session.permanent = True  # Honor PERMANENT_SESSION_LIFETIME
             return redirect(url_for("public_dashboard"))
         else:
             if request.method == "GET" and code_to_check:
@@ -15212,257 +15202,7 @@ def api_events():
     return jsonify(events)
 
 
-# --- Leave/Service Templates ---
-@app.route("/gradat/templates", methods=["GET"])
-@login_required
-def list_leave_templates():
-    if current_user.role != "gradat":
-        flash("Acces neautorizat.", "danger")
-        return redirect(url_for("dashboard"))
 
-    templates = (
-        LeaveTemplate.query.filter_by(created_by_user_id=current_user.id)
-        .order_by(LeaveTemplate.template_type, LeaveTemplate.name)
-        .all()
-    )
-    return render_template("list_leave_templates.html", templates=templates)
-
-
-@app.route("/gradat/templates/create", methods=["GET", "POST"])
-@login_required
-def create_leave_template():
-    if current_user.role != "gradat":
-        flash("Acces neautorizat.", "danger")
-        return redirect(url_for("dashboard"))
-
-    if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        template_type = request.form.get("template_type")
-
-        if not name or not template_type:
-            flash("Numele și tipul șablonului sunt obligatorii.", "warning")
-            return render_template(
-                "create_edit_leave_template.html",
-                template=None,
-                service_types=SERVICE_TYPES,
-                form_data=request.form,
-            )
-
-        template_data = {}
-        if template_type == "daily_leave":
-            template_data["start_time"] = request.form.get("start_time")
-            template_data["end_time"] = request.form.get("end_time")
-            if (
-                not template_data["start_time"]
-                or not template_data["end_time"]
-            ):
-                flash(
-                    "Orele de început și sfârșit sunt obligatorii pentru învoirile zilnice.",
-                    "warning",
-                )
-                return render_template(
-                    "create_edit_leave_template.html",
-                    template=None,
-                    service_types=SERVICE_TYPES,
-                    form_data=request.form,
-                )
-
-        elif template_type == "permission":
-            template_data["duration_hours"] = request.form.get(
-                "duration_hours", type=int
-            )
-            template_data["destination"] = request.form.get(
-                "destination", ""
-            ).strip()
-            template_data["transport_mode"] = request.form.get(
-                "transport_mode", ""
-            ).strip()
-            if (
-                not template_data["duration_hours"]
-                or template_data["duration_hours"] <= 0
-            ):
-                flash(
-                    "Durata în ore este obligatorie și trebuie să fie pozitivă pentru permisii.",
-                    "warning",
-                )
-                return render_template(
-                    "create_edit_leave_template.html",
-                    template=None,
-                    service_types=SERVICE_TYPES,
-                    form_data=request.form,
-                )
-
-        elif template_type == "service":
-            template_data["service_type"] = request.form.get("service_type")
-            template_data["duration_hours"] = request.form.get(
-                "duration_hours", type=int
-            )
-            if (
-                not template_data["service_type"]
-                or not template_data["duration_hours"]
-                or template_data["duration_hours"] <= 0
-            ):
-                flash(
-                    "Tipul serviciului și durata sunt obligatorii pentru servicii.",
-                    "warning",
-                )
-                return render_template(
-                    "create_edit_leave_template.html",
-                    template=None,
-                    service_types=SERVICE_TYPES,
-                    form_data=request.form,
-                )
-
-        else:
-            flash("Tip de șablon invalid.", "danger")
-            return render_template(
-                "create_edit_leave_template.html",
-                template=None,
-                service_types=SERVICE_TYPES,
-            )
-
-        new_template = LeaveTemplate(
-            name=name,
-            template_type=template_type,
-            created_by_user_id=current_user.id,
-            data=json.dumps(template_data),
-        )
-        db.session.add(new_template)
-        try:
-            db.session.commit()
-            flash(f'Șablonul "{name}" a fost creat cu succes.', "success")
-            return redirect(url_for("list_leave_templates"))
-        except Exception as e:
-            db.session.rollback()
-            flash(f"Eroare la crearea șablonului: {e}", "danger")
-
-    return render_template(
-        "create_edit_leave_template.html",
-        template=None,
-        service_types=SERVICE_TYPES,
-        form_data={},
-    )
-
-
-@app.route("/gradat/templates/edit/<int:template_id>", methods=["GET", "POST"])
-@login_required
-def edit_leave_template(template_id):
-    template = LeaveTemplate.query.get_or_404(template_id)
-    if template.created_by_user_id != current_user.id:
-        flash("Acces neautorizat.", "danger")
-        return redirect(url_for("list_leave_templates"))
-
-    if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        if not name:
-            flash("Numele șablonului este obligatoriu.", "warning")
-            return render_template(
-                "create_edit_leave_template.html",
-                template=template,
-                service_types=SERVICE_TYPES,
-                form_data=request.form,
-            )
-
-        template_data = {}
-        if template.template_type == "daily_leave":
-            template_data["start_time"] = request.form.get("start_time")
-            template_data["end_time"] = request.form.get("end_time")
-            if (
-                not template_data["start_time"]
-                or not template_data["end_time"]
-            ):
-                flash(
-                    "Orele de început și sfârșit sunt obligatorii.", "warning"
-                )
-                return render_template(
-                    "create_edit_leave_template.html",
-                    template=template,
-                    service_types=SERVICE_TYPES,
-                    form_data=request.form,
-                )
-        elif template.template_type == "permission":
-            template_data["duration_hours"] = request.form.get(
-                "duration_hours", type=int
-            )
-            template_data["destination"] = request.form.get(
-                "destination", ""
-            ).strip()
-            template_data["transport_mode"] = request.form.get(
-                "transport_mode", ""
-            ).strip()
-            if (
-                not template_data["duration_hours"]
-                or template_data["duration_hours"] <= 0
-            ):
-                flash(
-                    "Durata în ore este obligatorie și trebuie să fie pozitivă.",
-                    "warning",
-                )
-                return render_template(
-                    "create_edit_leave_template.html",
-                    template=template,
-                    service_types=SERVICE_TYPES,
-                    form_data=request.form,
-                )
-        elif template.template_type == "service":
-            template_data["service_type"] = request.form.get("service_type")
-            template_data["duration_hours"] = request.form.get(
-                "duration_hours", type=int
-            )
-            if (
-                not template_data["service_type"]
-                or not template_data["duration_hours"]
-                or template_data["duration_hours"] <= 0
-            ):
-                flash(
-                    "Tipul serviciului și durata sunt obligatorii.", "warning"
-                )
-                return render_template(
-                    "create_edit_leave_template.html",
-                    template=template,
-                    service_types=SERVICE_TYPES,
-                    form_data=request.form,
-                )
-
-        template.name = name
-        template.data = json.dumps(template_data)
-        try:
-            db.session.commit()
-            flash(f'Șablonul "{name}" a fost actualizat.', "success")
-            return redirect(url_for("list_leave_templates"))
-        except Exception as e:
-            db.session.rollback()
-            flash(f"Eroare la actualizarea șablonului: {e}", "danger")
-
-    form_data = template.get_data()
-    form_data["name"] = template.name
-    form_data["template_type"] = template.template_type
-
-    return render_template(
-        "create_edit_leave_template.html",
-        template=template,
-        service_types=SERVICE_TYPES,
-        form_data=form_data,
-    )
-
-
-@app.route("/gradat/templates/delete/<int:template_id>", methods=["POST"])
-@login_required
-def delete_leave_template(template_id):
-    template = LeaveTemplate.query.get_or_404(template_id)
-    if template.created_by_user_id != current_user.id:
-        flash("Acces neautorizat.", "danger")
-        return redirect(url_for("list_leave_templates"))
-
-    try:
-        db.session.delete(template)
-        db.session.commit()
-        flash(f'Șablonul "{template.name}" a fost șters.', "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"Eroare la ștergerea șablonului: {e}", "danger")
-
-    return redirect(url_for("list_leave_templates"))
 
 
 # --- Situations: CRUD (Gradat) ---

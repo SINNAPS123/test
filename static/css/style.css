@@ -1278,3 +1278,12 @@ input[type="datetime-local"] {
 [data-theme="dark"] .table tbody tr:hover a {
   color: var(--link-hover-color) !important;
 }
+
+/* Hardening: eliminate any residual light/white backgrounds inside tables/lists in dark mode */
+[data-theme="dark"] .table > :not(caption) > * > * {
+  background-color: var(--bg-surface) !important;
+}
+[data-theme="dark"] .list-group-item {
+  background-color: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+}
