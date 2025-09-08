@@ -13,6 +13,7 @@
   --brand-primary: #2563eb;
   --accent: #fbbf24;
   --bg: #f8fafc;
+  --bg-main: #f8fafc; /* used by JS for theme-color sync */
   --text: #222b45;
   --muted: #64748b;
   --border: #e5e7eb;
@@ -32,6 +33,9 @@
   --focus-ring: 0 0 0 3px rgba(37,99,235,0.2);
 
   --navbar-height: 58px;
+
+  /* mobile ergonomics */
+  --tap-size: 44px;
 }
 
 [data-theme="dark"],
@@ -39,6 +43,7 @@ html.dark-mode-preload {
   --brand-primary: #60a5fa;
   --accent: #facc15;
   --bg: #181f2a;
+  --bg-main: #181f2a; /* used by JS for theme-color sync */
   --text: #f1f5f9;
   --muted: #94a3b8;
   --border: #334155;
@@ -78,6 +83,22 @@ a:hover {
 }
 .navbar .navbar-brand img.logo-img {
   max-height: 50px; /* Increased from 40px */
+}
+
+/* Improve navbar usability on mobile */
+@media (max-width: 576px) {
+  .navbar .navbar-text {
+    font-size: .85rem;
+  }
+  .navbar .nav-link {
+    padding-top: .5rem;
+    padding-bottom: .5rem;
+    min-height: var(--tap-size);
+  }
+  .navbar .navbar-toggler {
+    min-height: var(--tap-size);
+    min-width: var(--tap-size);
+  }
 }
 
 .main-page-logo {
@@ -204,6 +225,15 @@ html.dark-mode-preload .table-hover > tbody > tr:hover {
   background: none;
   padding: 0;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch; /* smooth momentum scroll on iOS */
+  scroll-snap-type: x proximity; /* hint for horizontal scroll */
+}
+.table-responsive::-webkit-scrollbar {
+  height: 8px;
+}
+.table-responsive::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,.15);
+  border-radius: 8px;
 }
 
 /*------------------------------------------------------------------------------
@@ -305,6 +335,7 @@ html.dark-mode-preload .table-hover > tbody > tr:hover {
   justify-content: center;
   align-items: center;
 }
+#loading-overlay.show { display: flex; }
 [data-theme="dark"] #loading-overlay,
 html.dark-mode-preload #loading-overlay {
   background: rgba(24, 31, 42, 0.88);
@@ -731,6 +762,42 @@ body.dark-mode .text-dark,
 [data-theme="dark"] .text-dark,
 html.dark-mode-preload .text-dark {
     color: #0f172a !important;
+}
+
+/*------------------------------------------------------------------------------
+  10. Mobile Sticky Action Bar & FAB tweaks
+------------------------------------------------------------------------------*/
+.mobile-sticky-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: .5rem .75rem calc(.5rem + env(safe-area-inset-bottom));
+  background: var(--card-bg);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -6px 22px rgba(0,0,0,.08);
+  display: none;
+  gap: .5rem;
+  z-index: 1055;
+}
+.mobile-sticky-actions.show { display: flex; }
+.mobile-sticky-actions .btn {
+  flex: 1 1 auto;
+  min-height: var(--tap-size);
+}
+@media (min-width: 577px) {
+  .mobile-sticky-actions { display: none !important; }
+}
+.has-sticky-actions {
+  padding-bottom: calc(70px + env(safe-area-inset-bottom));
+}
+
+/* Ensure FABs do not collide with sticky actions */
+.fab-container {
+  bottom: calc(78px + env(safe-area-inset-bottom));
+}
+@media (min-width: 577px) {
+  .fab-container { bottom: 24px; }
 }
 
 /* Raise z-index for Bootstrap modal to ensure it is clickable above any custom overlays */
