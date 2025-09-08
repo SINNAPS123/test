@@ -3,26 +3,47 @@
 {% block title %}{{ situation.title }}{% endblock %}
 
 {% block content %}
-<h2 class="mb-1"><i class="fas fa-edit me-2"></i> {{ situation.title }}</h2>
-{% if situation.description %}
-  <p class="text-muted">{{ situation.description }}</p>
-{% endif %}
+<div class="mb-3">
+  <h2 class="mb-1"><i class="fas fa-edit me-2"></i> {{ situation.title }}</h2>
+  {% if situation.description %}
+    <p class="text-muted">{{ situation.description }}</p>
+  {% endif %}
+</div>
 
 <form method="POST" class="card p-3 shadow-sm">
+  <div class="alert alert-info py-2 small" role="alert">
+    Câmpurile marcate cu <strong>*</strong> sunt obligatorii.
+  </div>
+
   {% for f in fields %}
     {% set fname = f.name %}
     {% set flabel = f.label or f.name %}
     {% set ftype = f.type or 'text' %}
     {% set frequired = f.required %}
     {% set val = form_data.get(fname, '') %}
+
     <div class="mb-3">
       <label class="form-label">{{ flabel }}{% if frequired %} *{% endif %}</label>
+
+      {# Long text #}
       {% if ftype == 'textarea' %}
-        <textarea class="form-control" name="{{ fname }}" rows="3" {% if frequired %}required{% endif %}>{{ val }}</textarea>
+        <textarea class="form-control" name="{{ fname }}" rows="4" placeholder="Introduceți {{ flabel|lower }}..." {% if frequired %}required{% endif %}>{{ val }}</textarea>
+
+      {# Date and Time #}
       {% elif ftype == 'date' %}
         <input type="date" class="form-control" name="{{ fname }}" value="{{ val }}" {% if frequired %}required{% endif %}>
       {% elif ftype == 'time' %}
         <input type="time" class="form-control" name="{{ fname }}" value="{{ val }}" {% if frequired %}required{% endif %}>
+
+      {# Numeric, Email, Phone #}
+      {% elif ftype == 'number' %}
+        <input type="number" class="form-control" name="{{ fname }}" value="{{ val }}" {% if frequired %}required{% endif %}>
+      {% elif ftype == 'email' %}
+        <input type="email" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="ex: nume@exemplu.ro" {% if frequired %}required{% endif %}>
+      {% elif ftype == 'tel' %}
+        <input type="tel" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="ex: 07xx xxx xxx" {% if frequired %}required{% endif %}>
+
+      {# Select with options #}
       {% elif ftype == 'select' and f.options %}
         <select class="form-select" name="{{ fname }}" {% if frequired %}required{% endif %}>
           <option value="">-- selectează --</option>
@@ -30,6 +51,26 @@
             <option value="{{ opt }}" {% if val == opt %}selected{% endif %}>{{ opt }}</option>
           {% endfor %}
         </select>
+
+      {# Radio group (single choice) #}
+      {% elif ftype == 'radio' and f.options %}
+        <div class="d-flex flex-wrap gap-3">
+          {% for opt in f.options %}
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="{{ fname }}" id="{{ fname }}_{{ loop.index }}" value="{{ opt }}" {% if val == opt %}checked{% endif %} {% if frequired %}required{% endif %}>
+              <label class="form-check-label" for="{{ fname }}_{{ loop.index }}">{{ opt }}</label>
+            </div>
+          {% endfor %}
+        </div>
+
+      {# Checkbox (boolean) #}
+      {% elif ftype == 'checkbox' %}
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="{{ fname }}" id="{{ fname }}" value="1" {% if val in ['1','true','True','on','yes'] %}checked{% endif %}>
+          <label class="form-check-label" for="{{ fname }}">Bifează dacă este cazul</label>
+        </div>
+
+      {# Student selector (scoped to creator's students) #}
       {% elif ftype == 'student_select' and students_options %}
         <select class="form-select" name="{{ fname }}" {% if frequired %}required{% endif %}>
           <option value="">-- selectează student --</option>
@@ -37,13 +78,23 @@
             <option value="{{ opt.value }}" {% if val == opt.value %}selected{% endif %}>{{ opt.label }}</option>
           {% endfor %}
         </select>
+
+      {# Default text input #}
       {% else %}
-        <input type="text" class="form-control" name="{{ fname }}" value="{{ val }}" {% if frequired %}required{% endif %}>
+        <input type="text" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="Introduceți {{ flabel|lower }}..." {% if frequired %}required{% endif %}>
       {% endif %}
     </div>
   {% endfor %}
+
   <div class="d-flex gap-2">
-    <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane me-2"></i> Trimite</button>
+    <button type="submit" class="btn btn-primary">
+      <i class="fas fa-paper-plane me-2"></i> Trimite
+    </button>
+    <a href="{{ url_for('public_view_login') }}" class="btn btn-outline-secondary">Înapoi</a>
   </div>
+
+  <p class="text-muted small mt-3 mb-0">
+    Datele sunt folosite doar pentru această raportare și sunt stocate securizat.
+  </p>
 </form>
 {% endblock %}

@@ -6105,15 +6105,7 @@ def list_students():
     elif user.role == "comandant_batalion":
         view_title = f"Listă Studenți Batalionul {_get_commander_unit_id(user.username, 'CmdB') or 'N/A'}"
 
-    # Fetch leave templates for the batch action modal
-    leave_templates = []
-    if user.role == "gradat":
-        leave_templates = (
-            LeaveTemplate.query.filter_by(created_by_user_id=user.id)
-            .order_by(LeaveTemplate.name)
-            .all()
-        )
-
+    # Render list
     return render_template(
         "list_students.html",
         students=students_list,
@@ -6128,7 +6120,6 @@ def list_students():
         companii=companii,
         plutoane=plutoane,
         title=view_title,
-        leave_templates=leave_templates,
         service_types=SERVICE_TYPES,
     )
 
@@ -15730,7 +15721,12 @@ def public_situation_submit(code):
         return redirect(url_for("public_view_login"))
     fields = sit.get_fields()
     # Preload students list for potential 'student_select' fields
-    students_all = Student.query.order_by(Student.nume, Student.prenume).all()
+    # Limit strictly to the students managed by the creator of this situation
+    students_all = (
+        Student.query.filter_by(created_by_user_id=sit.created_by_user_id)
+        .order_by(Student.nume, Student.prenume)
+        .all()
+    )
     students_options = [
         {"value": f"{s.grad_militar} {s.nume} {s.prenume}", "label": f"{s.grad_militar} {s.nume} {s.prenume}"}
         for s in students_all
