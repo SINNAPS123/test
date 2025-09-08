@@ -328,7 +328,30 @@ SITUAȚIE {{ company_name }}:
                             <input type="number" class="form-control" id="expiry_hours" name="expiry_hours" value="24" min="1" required>
                         </div>
                         <button type="submit" class="btn btn-primary w-100">
-                            <i class="fas fa-cogs me-1"></i> Generează Cod
+                            <i class="fas fa-cogs me-1"></i> Generează Cod (Batalion)
+                        </button>
+                    </form>
+                    <hr>
+                    <h6 class="mt-2">Generează Cod pentru Pluton</h6>
+                    <form method="POST" action="{{ url_for('generate_public_view_code') }}">
+                        <input type="hidden" name="scope_type" value="platoon">
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label">Companie</label>
+                                <input type="text" class="form-control" name="company_pl" placeholder="Ex: 1" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Pluton</label>
+                                <input type="text" class="form-control" name="platoon_pl" placeholder="Ex: 3" required>
+                            </div>
+                        </div>
+                        <div class="mb-3 mt-2">
+                            <label class="form-label">Valabilitate Cod (în ore):</label>
+                            <input type="number" class="form-control" name="expiry_hours" value="24" min="1" required>
+                        </div>
+                        <input type="hidden" name="scope_id" id="scope_id_pl_battalion" value="">
+                        <button type="submit" class="btn btn-outline-primary w-100" onclick="(function(btn){var form=btn.closest('form');var comp=form.querySelector('[name=company_pl]')?.value.trim();var pl=form.querySelector('[name=platoon_pl]')?.value.trim();if(!comp||!pl){alert('Introduceți Companie și Pluton.');event.preventDefault();return false;}form.querySelector('#scope_id_pl_battalion').value=comp+':'+pl;return true;})(this)">
+                            <i class="fas fa-cogs me-1"></i> Generează Cod (Pluton)
                         </button>
                     </form>
                 </div>

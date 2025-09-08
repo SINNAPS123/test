@@ -1245,6 +1245,24 @@ input[type="datetime-local"] {
   color: var(--text-primary) !important;
 }
 
+/* Force override inline white backgrounds to avoid unreadable rows/elements on dark theme */
+[data-theme="dark"] [style*="background:#fff"],
+[data-theme="dark"] [style*="background: #fff"],
+[data-theme="dark"] [style*="background:#ffffff"],
+[data-theme="dark"] [style*="background: #ffffff"],
+[data-theme="dark"] [style*="background-color:#fff"],
+[data-theme="dark"] [style*="background-color: #fff"],
+[data-theme="dark"] [style*="background-color:#ffffff"],
+[data-theme="dark"] [style*="background-color: #ffffff"],
+[data-theme="dark"] [style*="background-color:rgb(255, 255, 255)"],
+[data-theme="dark"] [style*="background:rgb(255, 255, 255)"],
+[data-theme="dark"] .row.bg-white,
+[data-theme="dark"] tr[style*="background-color: #fff"],
+[data-theme="dark"] tr[style*="background-color:#fff"] {
+  background-color: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+}
+
 /* Bordered tables should use dark borders in dark mode */
 [data-theme="dark"] .table-bordered,
 [data-theme="dark"] .table-bordered > :not(caption) > * {

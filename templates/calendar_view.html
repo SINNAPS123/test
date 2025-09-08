@@ -70,6 +70,11 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         events: '{{ events_url }}', // URL-ul de unde se încarcă evenimentele
         eventClick: function(info) {
+            // Previne comportamentul implicit al link-ului din eveniment pentru a evita blocarea interfeței
+            if (info.jsEvent) {
+                info.jsEvent.preventDefault();
+                info.jsEvent.stopPropagation();
+            }
             // Afișează detalii într-un modal
             document.getElementById('modalEventType').textContent = info.event.extendedProps.type || 'N/A';
             document.getElementById('modalStudentName').textContent = info.event.extendedProps.student || 'N/A';
@@ -78,11 +83,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const endDate = info.event.end;
             const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
 
-            let periodStr = startDate.toLocaleString('ro-RO', options);
+            let periodStr = startDate ? startDate.toLocaleString('ro-RO', options) : '';
             if (endDate) {
                 periodStr += ' - ' + endDate.toLocaleString('ro-RO', options);
             }
-            document.getElementById('modalEventPeriod').textContent = periodStr;
+            document.getElementById('modalEventPeriod').textContent = periodStr || '—';
 
             document.getElementById('modalEventDetails').textContent = info.event.extendedProps.details || 'Niciun detaliu.';
 

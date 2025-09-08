@@ -147,18 +147,32 @@
                                 <select class="form-select" id="scope_type" name="scope_type" required>
                                     <option value="company" selected>Companie</option>
                                     <option value="battalion">Batalion</option>
+                                    <option value="platoon">Pluton</option>
                                 </select>
                             </div>
-                            <div class="col-sm-6 mb-3">
+                            <div class="col-sm-6 mb-3" id="scope_id_wrap">
                                 <label for="scope_id" class="form-label">ID Unitate:</label>
                                 <input type="text" class="form-control" id="scope_id" name="scope_id" placeholder="Ex: 1, 12" required>
                             </div>
                         </div>
-                        <div class="mb-3">
+                        <div class="row g-2" id="platoon_fields" style="display:none;">
+                            <div class="col-sm-6">
+                                <label for="company_id_pl" class="form-label">Companie</label>
+                                <input type="text" class="form-control" id="company_id_pl" placeholder="Ex: 1">
+                            </div>
+                            <div class="col-sm-6">
+                                <label for="platoon_id_pl" class="form-label">Pluton</label>
+                                <input type="text" class="form-control" id="platoon_id_pl" placeholder="Ex: 3">
+                            </div>
+                            <div class="col-12">
+                                <small class="text-muted">Pentru Pluton, introduceți Companie și Pluton. La trimitere, se va genera intern scope_id de forma Companie:Pluton.</small>
+                            </div>
+                        </div>
+                        <div class="mb-3 mt-2">
                             <label for="expiry_hours" class="form-label">Valabilitate Cod (în ore):</label>
                             <input type="number" class="form-control" id="expiry_hours" name="expiry_hours" value="24" min="1" required>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100">
+                        <button type="submit" class="btn btn-primary w-100" onclick="syncPlatoonFieldsIntoScopeId(event)">
                             <i class="fas fa-cogs me-1"></i> Generează Cod
                         </button>
                     </form>
@@ -205,6 +219,44 @@
             </div>
         </div>
     </div>
+    <script>
+    (function(){
+        const scopeSel = document.getElementById('scope_type');
+        const platoonWrap = document.getElementById('platoon_fields');
+        const scopeIdWrap = document.getElementById('scope_id_wrap');
+        function refresh(){
+            if (!scopeSel) return;
+            if (scopeSel.value === 'platoon'){
+                platoonWrap.style.display = '';
+                scopeIdWrap.querySelector('label').innerText = 'ID Unitate (opțional)';
+                scopeIdWrap.querySelector('input').required = false;
+            } else {
+                platoonWrap.style.display = 'none';
+                scopeIdWrap.querySelector('label').innerText = 'ID Unitate:';
+                scopeIdWrap.querySelector('input').required = true;
+            }
+        }
+        if (scopeSel){
+            scopeSel.addEventListener('change', refresh);
+            refresh();
+        }
+    })();
+    function syncPlatoonFieldsIntoScopeId(e){
+        const scopeSel = document.getElementById('scope_type');
+        if (scopeSel && scopeSel.value === 'platoon'){
+            const comp = document.getElementById('company_id_pl')?.value.trim();
+            const pl = document.getElementById('platoon_id_pl')?.value.trim();
+            if (!comp || !pl){
+                alert('Introduceți Companie și Pluton pentru generarea codului de vizualizare pe pluton.');
+                e.preventDefault();
+                return false;
+            }
+            const scopeIdInput = document.getElementById('scope_id');
+            if (scopeIdInput) scopeIdInput.value = comp + ':' + pl;
+        }
+        return true;
+    }
+    </script>
 
     <h3 class="mb-3">Listă Utilizatori (Non-Admin)</h3>
     {% if users %}
