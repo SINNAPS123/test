@@ -36,6 +36,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const toggleIcon = toggleButton ? toggleButton.querySelector('i') : null;
     function applyTheme(theme) {
         htmlElement.setAttribute('data-theme', theme);
+        // Remove the preload class once a theme is applied to avoid conflicting variables
+        try { document.documentElement.classList.remove('dark-mode-preload'); } catch (e) {}
         if (toggleIcon) {
             if (theme === 'dark') {
                 toggleIcon.classList.remove('fa-moon');
@@ -50,8 +52,9 @@ document.addEventListener('DOMContentLoaded', function () {
             const metaLight = document.querySelector('meta[media="(prefers-color-scheme: light)"][name="theme-color"]');
             const metaDark = document.querySelector('meta[media="(prefers-color-scheme: dark)"][name="theme-color"]');
             if (metaLight && metaDark) {
-                if (theme === 'dark') metaDark.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--bg-main').trim() || '#1a1a1a');
-                else metaLight.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--bg-main').trim() || '#f8f9fa');
+                const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg-main').trim();
+                if (theme === 'dark') metaDark.setAttribute('content', bg || '#1a1a1a');
+                else metaLight.setAttribute('content', bg || '#f8f9fa');
             }
         } catch (e) {}
     }
@@ -69,7 +72,7 @@ document.addEventListener('DOMContentLoaded', function () {
             try {
                 const isPressed = this.getAttribute('aria-pressed') === 'true';
                 this.setAttribute('aria-pressed', (!isPressed).toString());
-                this.setAttribute('title', currentTheme === 'dark' ? 'Comută la tema luminoasă' : 'Comută la tema întunecată');
+                this.setAttribute('title', newTheme === 'dark' ? 'Comută la tema luminoasă' : 'Comută la tema întunecată');
             } catch (e) {}
         });
         try {
@@ -79,6 +82,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!explicit) applyTheme(e.matches ? 'dark' : 'light');
             });
         } catch (e) {}
+    } else {
+        // If toggle is missing, still apply stored or system theme and drop preload class
+        const stored = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        applyTheme(stored || (prefersDark ? 'dark' : 'light'));
     }
     window.addEventListener('storage', (e) => {
         if (e.key === 'theme' && (e.newValue === 'dark' || e.newValue === 'light')) {
@@ -488,7 +496,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const ul = dd.querySelector('.dropdown-menu');
             const favs = get();
             dd.style.display = favs.length ? '' : 'none';
-            ul.innerHTML = '<li class="dropdown-header">Favorite</li><li><hr class="dropdown-divider"></li>' + (favs.map(x=>`<li><a class="dropdown-item" href="${x.href}"><i class=\"fas fa-star text-warning\"></i> ${x.title}</a></li>`).join('') || '<li class="px-3 text-muted small">Nicio pagină favorită încă</li>');
+            ul.innerHTML = '<li class="dropdown-header">Favorite</li><li><hr class="dropdown-divider"></li>' + (favs.map(x=>`<li><a class="dropdown-item" href="${x.href}"><i class=\\"fas fa-star text-warning\\"></i> ${x.title}</a></li>`).join('') || '<li class="px-3 text-muted small">Nicio pagină favorită încă</li>');
         }
         renderMenu();
     })();
@@ -516,7 +524,7 @@ document.addEventListener('DOMContentLoaded', function () {
         function set(v){ try { localStorage.setItem(key, JSON.stringify(v)); }catch(_){ }}
         function capture(){ const data={}; forms.forEach(f=> Array.from(f.elements).forEach(el=>{ if(!el.name) return; if(el.type==='checkbox') data[el.name]=el.checked; else if(el.type==='radio'){ if(el.checked) data[el.name]=el.value; } else if(el.tagName==='SELECT' && el.multiple){ data[el.name]=Array.from(el.selectedOptions).map(o=>o.value);} else { data[el.name]=el.value; } })); return data; }
         function apply(data){ forms.forEach(f=> Array.from(f.elements).forEach(el=>{ if(!el.name) return; if(el.type==='checkbox') el.checked=!!data[el.name]; else if(el.type==='radio'){ el.checked = data[el.name]===el.value; } else if(el.tagName==='SELECT' && el.multiple){ Array.from(el.options).forEach(o=>o.selected=(data[el.name]||[]).includes(o.value)); } else { if(data[el.name]!==undefined) el.value=data[el.name]; } })); }
-        function render(){ const list=container.querySelector('.sv-list'); const views=get(); list.innerHTML=''; if(!views.length){ list.textContent='Nu există vederi salvate.'; return;} views.forEach((v,i)=>{ const row=document.createElement('div'); row.className='d-flex justify-content-between align-items-center py-1'; row.innerHTML=`<span>${v.name}</span><span><button class=\"btn btn-sm btn-outline-secondary me-1\">Aplică</button><button class=\"btn btn-sm btn-outline-danger\">Șterge</button></span>`; const [btnApply, btnDel]=row.querySelectorAll('button'); btnApply.addEventListener('click',()=>{ apply(v.data); forms[0].submit(); }); btnDel.addEventListener('click',()=>{ const vs=get(); vs.splice(i,1); set(vs); render(); }); list.appendChild(row); }); }
+        function render(){ const list=container.querySelector('.sv-list'); const views=get(); list.innerHTML=''; if(!views.length){ list.textContent='Nu există vederi salvate.'; return;} views.forEach((v,i)=>{ const row=document.createElement('div'); row.className='d-flex justify-content-between align-items-center py-1'; row.innerHTML=`<span>${v.name}</span><span><button class=\\"btn btn-sm btn-outline-secondary me-1\\">Aplică</button><button class=\\"btn btn-sm btn-outline-danger\\">Șterge</button></span>`; const [btnApply, btnDel]=row.querySelectorAll('button'); btnApply.addEventListener('click',()=>{ apply(v.data); forms[0].submit(); }); btnDel.addEventListener('click',()=>{ const vs=get(); vs.splice(i,1); set(vs); render(); }); list.appendChild(row); }); }
         container.querySelector('.sv-save').addEventListener('click',()=>{ const name=container.querySelector('.sv-name').value.trim()||'Vedere'; const vs=get(); vs.unshift({ name, data: capture() }); set(vs.slice(0,20)); render(); });
         render();
     })();

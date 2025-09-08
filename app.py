@@ -1834,106 +1834,31 @@ def admin_conflicts():
 
 def get_upcoming_fridays(num_fridays=5):
     """
-    Generates a list of upcoming (and potentially the current or immediate past) Fridays.
-    Returns a list of dicts, each with 'value' (YYYY-MM-DD string) and 'display' (Month Day, Year string).
+    Returnează o listă de până la `num_fridays` vinări (YYYY-MM-DD + etichetă),
+    începând cu vinerea săptămânii curente. Dacă azi este Luni/Marti/Miercuri,
+    include și vinerea anterioară ca prim element pentru a acoperi weekendul curent.
     """
-    fridays_list = []
-    today = get_localized_now().date()  # Use localized date
-    # Start from the Friday of the current week or previous week if today is past Friday
-    current_friday_offset = today.weekday() - 4  # Friday is weekday 4
-    if current_friday_offset > 0:  # If today is Sat (5) or Sun (6)
-        today - timedelta(days=current_friday_offset)
-    else:  # If today is Mon, Tue, Wed, Thu, or Fri itself
-        today - timedelta(
-            days=current_friday_offset
-        )  # Will be today if it's Friday, or upcoming Friday of current week
+    today = get_localized_now().date()
+    weekday = today.weekday()  # Monday=0 ... Sunday=6
 
-    # Ensure we don't start too far in the past if today is, e.g., Monday and last Friday was for a weekend already started
-    # Let's adjust to start from the Friday of the week containing `today - 2 days`
-    # This ensures if it's Sunday, we can still select the Friday of that weekend.
-    # If it's Monday, we can select last Friday.
-    # If it's Friday, we select today.
+    # Găsește vinerea săptămânii curente (poate fi în trecut dacă e sâmbătă/duminică)
+    if weekday <= 4:
+        current_friday = today + timedelta(days=(4 - weekday))
+    else:
+        current_friday = today - timedelta(days=(weekday - 4))
 
-    # Simpler approach: find the Friday of the week of (today - 2 days)
-    # This means if today is Sunday, (today-2) is Friday.
-    # If today is Monday, (today-2) is Saturday of last week, so we find that Friday.
-    # If today is Friday, (today-2) is Wednesday, we find this Friday.
+    fridays = [current_friday + timedelta(weeks=i) for i in range(num_fridays)]
 
-    # Let's find the Friday of the current week. If today is past it, it's fine.
-    # Or, more simply, find the *next* Friday from (today - 7 days) to ensure we always get the closest ones.
-    # No, let's find the Friday of the week of `today`.
-    # If today is Monday (0), Friday is today + 4 days.
-    # If today is Friday (4), Friday is today + 0 days.
-    # If today is Sunday (6), Friday was today - 2 days.
+    # Dacă e Luni(0)/Marți(1)/Miercuri(2), inserează vinerea precedentă
+    if weekday < 3:
+        prev_friday = current_friday - timedelta(weeks=1)
+        fridays.insert(0, prev_friday)
+        fridays = fridays[:num_fridays]
 
-    # Let's find the Friday of the current calendar week (Mon-Sun)
-    # If today is Sunday (weekday 6), current week's Friday was 2 days ago.
-    # If today is Monday (weekday 0), current week's Friday is 4 days ahead.
-    start_point = today - timedelta(
-        days=today.weekday()
-    )  # This is Monday of the current week
-    start_point + timedelta(days=4)
-
-    # We want to offer the current weekend's Friday even if it just passed.
-    # So, if today is Sat/Sun, current_week_friday is the one that just passed.
-    # If today is Mon-Thu, current_week_friday is upcoming.
-    # If today is Fri, current_week_friday is today.
-
-    # Let's make sure we offer at least one past Friday if it's early in the week,
-    # but not too many.
-    # Consider the Friday of the week prior to the current week's Monday, if today is early in the week.
-
-    # Revised logic for start_friday:
-    # Find the Friday of the week that contains 'today'.
-    # If today is Sat/Sun, that Friday has passed.
-    # If today is Mon-Thu, that Friday is upcoming.
-    # If today is Fri, that Friday is today.
-
-    # We want to list the closest Friday (could be past if today is Sat/Sun)
-    # and then a few upcoming ones.
-
-    # Let initial_friday be the Friday of the week containing 'today'.
-    # If today is Monday (0), initial_friday is today + 4 days.
-    # If today is Friday (4), initial_friday is today.
-    # If today is Sunday (6), initial_friday is today - 2 days.
-    days_from_friday = (
-        today.weekday() - 4
-    )  # Monday: -4, Tuesday: -3, ..., Friday: 0, Saturday: 1, Sunday: 2
-    initial_friday = today - timedelta(days=days_from_friday)
-
-    for i in range(num_fridays):
-        loop_friday = initial_friday + timedelta(weeks=i)
-        fridays_list.append(
-            {
-                "value": loop_friday.strftime("%Y-%m-%d"),
-                "display": loop_friday.strftime("%d %B %Y") + f" (Vineri)",
-            }
-        )
-
-    # If today is Monday or Tuesday, the 'initial_friday' might be too far in the future.
-    # We might want to include the *previous* Friday as well.
-    # Let's ensure the list starts from the previous Friday if today is Mon/Tue/Wed.
-    if today.weekday() < 3:  # Mon, Tue, Wed
-        previous_friday = initial_friday - timedelta(weeks=1)
-        # Check if it's already in the list (should not happen with current logic, but good for safety)
-        if not any(
-            f["value"] == previous_friday.strftime("%Y-%m-%d")
-            for f in fridays_list
-        ):
-            fridays_list.insert(
-                0,
-                {
-                    "value": previous_friday.strftime("%Y-%m-%d"),
-                    "display": previous_friday.strftime("%d %B %Y")
-                    + f" (Vineri)",
-                },
-            )
-            if (
-                len(fridays_list) > num_fridays
-            ):  # Keep the list size consistent
-                fridays_list.pop()
-
-    return fridays_list
+    return [
+        {"value": d.strftime("%Y-%m-%d"), "display": f"{d.strftime('%d %B %Y')} (Vineri)"}
+        for d in fridays
+    ]
 
 
 def validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj):
@@ -5314,8 +5239,8 @@ def _generate_eligible_volunteers(
         )
 
     # Exclude students with leaves on the specified activity date
+    ids_on_leave = set()
     if activity_date:
-        ids_on_leave = set()
         activity_day_start_aware = EUROPE_BUCHAREST.localize(
             datetime.combine(activity_date, time.min)
         )
@@ -5323,57 +5248,57 @@ def _generate_eligible_volunteers(
             datetime.combine(activity_date, time.max)
         )
 
-    all_managed_student_ids = [
-        sid
-        for (sid,) in Student.query.filter_by(created_by_user_id=gradat_id)
-        .with_entities(Student.id)
-        .all()
-    ]
+        all_managed_student_ids = [
+            sid
+            for (sid,) in Student.query.filter_by(created_by_user_id=gradat_id)
+            .with_entities(Student.id)
+            .all()
+        ]
 
-    # Permissions
-    act_day_start_naive = activity_day_start_aware.replace(tzinfo=None)
-    act_day_end_naive = activity_day_end_aware.replace(tzinfo=None)
-    permissions = (
-        Permission.query.filter(
-            Permission.student_id.in_(all_managed_student_ids),
-            Permission.status == "Aprobată",
-            Permission.start_datetime < act_day_end_naive,
-            Permission.end_datetime > act_day_start_naive,
+        # Permissions
+        act_day_start_naive = activity_day_start_aware.replace(tzinfo=None)
+        act_day_end_naive = activity_day_end_aware.replace(tzinfo=None)
+        permissions = (
+            Permission.query.filter(
+                Permission.student_id.in_(all_managed_student_ids),
+                Permission.status == "Aprobată",
+                Permission.start_datetime < act_day_end_naive,
+                Permission.end_datetime > act_day_start_naive,
+            )
+            .with_entities(Permission.student_id)
+            .all()
         )
-        .with_entities(Permission.student_id)
-        .all()
-    )
-    for p_id in permissions:
-        ids_on_leave.add(p_id[0])
+        for p_id in permissions:
+            ids_on_leave.add(p_id[0])
 
-    # Daily Leaves
-    daily_leaves = DailyLeave.query.filter(
-        DailyLeave.student_id.in_(all_managed_student_ids),
-        DailyLeave.status == "Aprobată",
-        DailyLeave.leave_date == activity_date,
-    ).all()
-    for dl in daily_leaves:
-        if (
-            dl.start_datetime < act_day_end_naive
-            and dl.end_datetime > act_day_start_naive
-        ):
-            ids_on_leave.add(dl.student_id)
-
-    # Weekend Leaves
-    weekend_leaves = WeekendLeave.query.filter(
-        WeekendLeave.student_id.in_(all_managed_student_ids),
-        WeekendLeave.status == "Aprobată",
-        WeekendLeave.weekend_start_date <= activity_date,
-        WeekendLeave.weekend_start_date >= activity_date - timedelta(days=3),
-    ).all()
-    for wl in weekend_leaves:
-        for interval in wl.get_intervals():
+        # Daily Leaves
+        daily_leaves = DailyLeave.query.filter(
+            DailyLeave.student_id.in_(all_managed_student_ids),
+            DailyLeave.status == "Aprobată",
+            DailyLeave.leave_date == activity_date,
+        ).all()
+        for dl in daily_leaves:
             if (
-                interval["start"] < activity_day_end_aware
-                and interval["end"] > activity_day_start_aware
+                dl.start_datetime < act_day_end_naive
+                and dl.end_datetime > act_day_start_naive
             ):
-                ids_on_leave.add(wl.student_id)
-                break
+                ids_on_leave.add(dl.student_id)
+
+        # Weekend Leaves
+        weekend_leaves = WeekendLeave.query.filter(
+            WeekendLeave.student_id.in_(all_managed_student_ids),
+            WeekendLeave.status == "Aprobată",
+            WeekendLeave.weekend_start_date <= activity_date,
+            WeekendLeave.weekend_start_date >= activity_date - timedelta(days=3),
+        ).all()
+        for wl in weekend_leaves:
+            for interval in wl.get_intervals():
+                if (
+                    interval["start"] < activity_day_end_aware
+                    and interval["end"] > activity_day_start_aware
+                ):
+                    ids_on_leave.add(wl.student_id)
+                    break
 
     if ids_on_leave:
         students_query = students_query.filter(
@@ -7759,7 +7684,7 @@ def export_permissions_word():
         # Format period string for the title
         # Example: Joi, 25.07.2024 (14:00) - Duminică, 28.07.2024 (22:00)
         period_title_str = (
-            f"{get_day_name_ro(start_dt_period)}, {start_dt_period.strftime('%d.%m.%Y (%H:%M')}) - "
+            f"{get_day_name_ro(start_dt_period)}, {start_dt_period.strftime('%d.%m.%Y (%H:%M)')} - "
             f"{get_day_name_ro(end_dt_period)}, {end_dt_period.strftime('%d.%m.%Y (%H:%M)')}"
         )
 
@@ -11832,7 +11757,7 @@ def admin_export_permissions_word():
     document.add_heading(
         "Raport General Permisii (Admin)", level=1
     ).alignment = WD_ALIGN_PARAGRAPH.CENTER
-    user_info_text = f"Raport generat de: {current_user.username} (Admin)\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    user_info_text = f"Raport generat de: {current_user.username} (Admin)\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}"
     p_user = document.add_paragraph()
     p_user.add_run(user_info_text).italic = True
     p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -11905,77 +11830,7 @@ def admin_export_permissions_word():
 
     document.add_paragraph()  # Spacer
 
-    # --- Separate table for church attendees (Admin view) ---
-    church_attendees_admin = []
-    for (
-        leave
-    ) in (
-        leaves_to_export
-    ):  # leaves_to_export is already filtered for active/upcoming
-        if leave.duminica_biserica:
-            is_sunday_selected_for_leave = False
-            for interval in leave.get_intervals():
-                if interval["day_name"] == "Duminica":
-                    is_sunday_selected_for_leave = True
-                    break
-            if is_sunday_selected_for_leave:
-                church_attendees_admin.append(leave.student)
-
-    if church_attendees_admin:
-        document.add_heading(
-            "Studenți care participă la Biserică (Duminică 09:00-11:00)",
-            level=2,
-        ).alignment = WD_ALIGN_PARAGRAPH.CENTER
-        church_table_admin = document.add_table(
-            rows=1, cols=4
-        )  # Nr.crt, Grad, Nume și Prenume, Pluton
-        church_table_admin.style = "Table Grid"
-        church_table_admin.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-        church_hdr_cells_admin = church_table_admin.rows[0].cells
-        church_col_titles_admin = [
-            "Nr. crt.",
-            "Grad",
-            "Nume și Prenume",
-            "Plutonul (Grupa)",
-        ]
-        for i, title in enumerate(church_col_titles_admin):
-            church_hdr_cells_admin[i].text = title
-            church_hdr_cells_admin[i].paragraphs[0].runs[0].font.bold = True
-            church_hdr_cells_admin[i].paragraphs[
-                0
-            ].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        church_attendees_admin.sort(
-            key=lambda s: (s.batalion, s.companie, s.pluton, s.nume, s.prenume)
-        )  # Sort for admin view
-
-        for idx, student in enumerate(church_attendees_admin):
-            row_cells_admin = church_table_admin.add_row().cells
-            row_cells_admin[0].text = str(idx + 1)
-            row_cells_admin[0].paragraphs[
-                0
-            ].alignment = WD_ALIGN_PARAGRAPH.CENTER
-            row_cells_admin[1].text = student.grad_militar
-            row_cells_admin[2].text = f"{student.nume} {student.prenume}"
-            row_cells_admin[3].text = (
-                student.pluton
-            )  # Admin might want to see Company/Battalion too, but Pluton is consistent
-            row_cells_admin[3].paragraphs[
-                0
-            ].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        church_table_widths_admin = {
-            0: Inches(0.5),
-            1: Inches(0.8),
-            2: Inches(2.5),
-            3: Inches(1.0),
-        }
-        for col_idx, width_val in church_table_widths_admin.items():
-            for row in church_table_admin.rows:
-                if col_idx < len(row.cells):
-                    row.cells[col_idx].width = width_val
-        document.add_paragraph()
+    # (Church attendees table not applicable for permissions export)
 
     style = document.styles["Normal"]
     font = style.font
@@ -12170,7 +12025,7 @@ def company_commander_export_permissions_word():
     document.add_heading(
         f"Raport Permisii Compania {company_id_str}", level=1
     ).alignment = WD_ALIGN_PARAGRAPH.CENTER
-    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}"
     p_user = document.add_paragraph()
     p_user.add_run(user_info_text).italic = True
     p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -12497,7 +12352,7 @@ def battalion_commander_export_permissions_word():
     document.add_heading(
         f"Raport Permisii Batalionul {battalion_id_str}", level=1
     ).alignment = WD_ALIGN_PARAGRAPH.CENTER
-    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}"
     p_user = document.add_paragraph()
     p_user.add_run(user_info_text).italic = True
     p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER

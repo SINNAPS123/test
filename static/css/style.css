@@ -1248,3 +1248,46 @@ input[type="datetime-local"] {
 .form-control[type="datetime-local"] {
   padding-right: 0.75rem;
 }
+
+/* --- Additional hardening for dark mode lists/tables and utility backgrounds --- */
+
+/* Ensure white backgrounds are adapted in dark mode when used by utilities */
+[data-theme="dark"] .bg-white,
+[data-theme="dark"] .table .bg-white {
+  background-color: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Bordered tables should use dark borders in dark mode */
+[data-theme="dark"] .table-bordered,
+[data-theme="dark"] .table-bordered > :not(caption) > * {
+  border-color: var(--border-color) !important;
+}
+
+/* Ensure cell borders use dark border color for all table types */
+[data-theme="dark"] .table > :not(caption) > * > * {
+  border-color: var(--border-color) !important;
+}
+
+/* List group interactive items hover/focus in dark mode */
+[data-theme="dark"] .list-group-item-action:hover,
+[data-theme="dark"] .list-group-item-action:focus {
+  background-color: var(--bg-surface-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Muted text can be slightly brighter in dark mode for readability inside table/list contexts */
+[data-theme="dark"] .table .text-muted,
+[data-theme="dark"] .list-group .text-muted {
+  color: #bdbdbd !important; /* slightly brighter than default muted */
+}
+
+/* Ensure striped list groups (if any) get proper background */
+[data-theme="dark"] .list-group-striped .list-group-item:nth-of-type(odd) {
+  background-color: rgba(255,255,255,0.035) !important;
+}
+
+/* Fix hover state for table row links in dark mode (keep contrast) */
+[data-theme="dark"] .table tbody tr:hover a {
+  color: var(--link-hover-color) !important;
+}
