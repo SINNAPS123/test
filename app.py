@@ -255,6 +255,37 @@ KNOWN_RANK_PATTERNS = [
     re.compile(r"^(Plt\.?)\s+", re.IGNORECASE),
 ]
 
+# Available module prefixes a subuser can be granted
+SUBUSER_MODULE_CHOICES = [
+    ("/gradat/students", "Studenți"),
+    ("/gradat/permissions", "Permisii"),
+    ("/gradat/daily_leaves", "Învoiri Zilnice"),
+    ("/gradat/weekend_leaves", "Învoiri Weekend"),
+    ("/gradat/services", "Servicii"),
+    ("/volunteer", "Voluntariat"),
+    ("/gradat/brief", "Brief"),
+    ("/gradat/insights", "Insights"),
+    ("/gradat/conflicts", "Conflicte"),
+    ("/calendar", "Calendar"),
+    ("/reports/presence", "Raport Prezență"),
+    ("/gradat/invoiri/istoric", "Istoric Învoiri"),
+]
+
+# Always-allowed prefixes for subusers (login, logout, static, etc.)
+SUBUSER_SAFE_PREFIXES = [
+    "/dashboard",
+    "/logout",
+    "/healthz",
+    "/user_login",
+    "/set_personal_code",
+    "/static/",
+    "/scoped_logout",
+    "/public_view",
+    "/public_dashboard",
+    "/public_view/logout",
+    "/api/events",
+]
+
 # --- Simple in-memory rate limiting (per-process) ---
 _RATE_LIMIT_BUCKETS = {}
 
@@ -280,6 +311,15 @@ class User(db.Model, UserMixin):
     unique_code = db.Column(db.String(100), unique=True, nullable=True)
     personal_code_hash = db.Column(db.String(256), nullable=True)
     is_first_login = db.Column(db.Boolean, default=True)
+
+    # Subuser support
+    parent_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    assigned_platoon = db.Column(db.String(50), nullable=True)  # Only for subusers
+    # JSON-encoded list of allowed route prefixes (e.g. ["/gradat/students", "/gradat/permissions"])
+    allowed_modules = db.Column(db.Text, nullable=True)
+
+    # Relationship to owner user (for subusers)
+    parent = db.relationship("User", remote_side=[id], backref=db.backref("subusers", lazy="dynamic"))
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -308,6 +348,19 @@ class User(db.Model, UserMixin):
 
     def can_login_with_personal_code(self):
         return self.role != "admin" and self.personal_code_hash is not None
+
+    # --- Subuser helpers ---
+    def is_subuser(self) -> bool:
+        return self.parent_user_id is not None
+
+    def get_allowed_modules(self):
+        try:
+            if self.allowed_modules:
+                data = json.loads(self.allowed_modules)
+                return data if isinstance(data, list) else []
+            return []
+        except Exception:
+            return []
 
     def __repr__(self):
         return f"<User {self.username} ({self.role})>"
@@ -2425,6 +2478,37 @@ def logout():
     db.session.commit()
     flash("Ai fost deconectat.", "success")
     return redirect(url_for("home"))
+
+# --- Subuser scope and permission enforcement ---
+@app.before_request
+def _apply_subuser_scope_and_permissions():
+    try:
+        # Only act for authenticated users
+        if not current_user.is_authenticated:
+            return
+        # Only for gradat subusers (users with a parent)
+        if getattr(current_user, "role", None) == "gradat" and getattr(current_user, "parent_user_id", None):
+            # Scope data operations to the parent user (owner)
+            try:
+                g.scoped_user = current_user.parent or db.session.get(User, current_user.parent_user_id)
+            except Exception:
+                g.scoped_user = None
+            # Restrict to single platoon if configured
+            g.subuser_platoon = getattr(current_user, "assigned_platoon", None)
+
+            # Gate UI/routes by allowed modules list
+            path = request.path or ""
+            # Always allow safe paths
+            for pref in SUBUSER_SAFE_PREFIXES:
+                if path.startswith(pref):
+                    return
+            allowed_prefixes = current_user.get_allowed_modules()
+            if not any(path.startswith(p) for p in (allowed_prefixes or [])):
+                flash("Nu aveți permisiunea să accesați această pagină (subutilizator).", "danger")
+                return redirect(url_for("dashboard"))
+    except Exception:
+        # Fail-open to avoid locking users out on unexpected errors
+        pass
 
 
 @app.route("/set_personal_code", methods=["GET", "POST"])
@@ -4891,11 +4975,18 @@ def scoped_logout():
 
 
 def get_current_user_or_scoped():
-    """Helper to get the active user, either from Flask-Login or the scoped session."""
-    if current_user.is_authenticated:
-        return current_user
-    elif hasattr(g, "scoped_user"):
+    """Helper to get the active user, either from a scoped context or Flask-Login.
+    If a gradat subuser is logged in, this returns the parent gradat as the effective user.
+    """
+    if hasattr(g, "scoped_user"):
         return g.scoped_user
+    if current_user.is_authenticated:
+        try:
+            if getattr(current_user, "parent_user_id", None):
+                return current_user.parent or db.session.get(User, current_user.parent_user_id)
+        except Exception:
+            pass
+        return current_user
     return None
 
 
