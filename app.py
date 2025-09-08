@@ -11586,6 +11586,149 @@ def gradat_bulk_add_permission():
     )
 
 
+@app.route(
+    "/gradat/daily_leave/bulk_add",
+    methods=["GET", "POST"],
+    endpoint="gradat_bulk_add_daily_leave",
+)
+@login_required
+def gradat_bulk_add_daily_leave():
+    if current_user.role != "gradat":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        # Step 2: process submitted per-student daily leave details
+        student_ids_to_process = [
+            key.split("_")[2]
+            for key in request.form
+            if key.startswith("student_id_")
+        ]
+        added_count = 0
+        error_count = 0
+        conflict_details = []
+
+        for sid_str in student_ids_to_process:
+            sid = int(sid_str)
+            leave_date_str = request.form.get(f"leave_date_{sid}")
+            start_time_str = request.form.get(f"start_time_{sid}")
+            end_time_str = request.form.get(f"end_time_{sid}")
+            reason = (request.form.get(f"reason_{sid}") or "").strip()
+
+            stud = db.session.get(Student, sid)
+            if not stud or stud.created_by_user_id != current_user.id:
+                error_count += 1
+                conflict_details.append(f"Student ID {sid} invalid sau nu vă aparține.")
+                continue
+
+            if not leave_date_str or not start_time_str or not end_time_str:
+                error_count += 1
+                conflict_details.append(f"Date incomplete pentru {stud.nume} {stud.prenume}.")
+                continue
+
+            try:
+                leave_date_obj = datetime.strptime(leave_date_str, "%Y-%m-%d").date()
+                start_time_obj = datetime.strptime(start_time_str, "%H:%M").time()
+                end_time_obj = datetime.strptime(end_time_str, "%H:%M").time()
+            except ValueError:
+                error_count += 1
+                conflict_details.append(f"Format dată/oră invalid pentru {stud.nume} {stud.prenume}.")
+                continue
+
+            valid_day, msg = validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj)
+            if not valid_day:
+                error_count += 1
+                conflict_details.append(f"{stud.nume} {stud.prenume}: {msg}")
+                continue
+
+            start_dt = datetime.combine(leave_date_obj, start_time_obj)
+            effective_end_date = leave_date_obj
+            if end_time_obj < start_time_obj:
+                effective_end_date += timedelta(days=1)
+            end_dt = datetime.combine(effective_end_date, end_time_obj)
+
+            if end_dt <= start_dt:
+                error_count += 1
+                conflict_details.append(f"Interval invalid pentru {stud.nume} {stud.prenume}.")
+                continue
+
+            conflict = check_leave_conflict(sid, start_dt, end_dt, leave_type="daily_leave")
+            if conflict:
+                error_count += 1
+                conflict_details.append(f"{stud.nume} {stud.prenume}: Conflict ({conflict}).")
+                continue
+
+            new_leave = DailyLeave(
+                student_id=sid,
+                leave_date=leave_date_obj,
+                start_time=start_time_obj,
+                end_time=end_time_obj,
+                reason=reason or None,
+                status="Aprobată",
+                created_by_user_id=current_user.id,
+            )
+            db.session.add(new_leave)
+            log_student_action(
+                sid,
+                "DAILY_LEAVE_CREATED_BULK_FORM",
+                f"Invoire zilnică adăugată prin formular multiplu: {leave_date_obj.strftime('%d.%m.%Y')} {start_time_str}-{end_time_str}.",
+            )
+            added_count += 1
+
+        if added_count > 0:
+            try:
+                db.session.commit()
+                flash(f"{added_count} învoiri zilnice au fost adăugate cu succes.", "success")
+            except Exception as e:
+                db.session.rollback()
+                error_count += added_count
+                added_count = 0
+                flash(f"Eroare majoră la salvarea învoirilor zilnice: {str(e)}", "danger")
+
+        if error_count > 0:
+            flash(
+                f"{error_count} înregistrări nu au putut fi adăugate din cauza erorilor sau conflictelor.",
+                "danger",
+            )
+            for msg in conflict_details[:10]:
+                flash(msg, "warning")
+
+        return redirect(url_for("list_daily_leaves"))
+
+    # GET: Step 1 (selection) or Step 2 (details)
+    student_ids_selected = request.args.getlist("student_ids", type=int)
+    students_to_prepare = None
+
+    if student_ids_selected:
+        students_to_prepare = (
+            Student.query.filter(
+                Student.id.in_(student_ids_selected),
+                Student.created_by_user_id == current_user.id,
+            )
+            .order_by(Student.pluton, Student.nume)
+            .all()
+        )
+        if len(students_to_prepare) != len(student_ids_selected):
+            flash(
+                "Unii studenți selectați nu au putut fi găsiți sau nu vă aparțin.",
+                "warning",
+            )
+            return redirect(url_for("gradat_bulk_add_daily_leave"))
+
+    all_students_managed = (
+        Student.query.filter_by(created_by_user_id=current_user.id)
+        .order_by(Student.pluton, Student.nume)
+        .all()
+    )
+
+    return render_template(
+        "bulk_add_daily_leave.html",
+        students=all_students_managed,
+        students_to_prepare=students_to_prepare,
+        today_str=get_localized_now().date().isoformat(),
+    )
+
+
 # --- Istoric Învoiri Gradat ---
 @app.route(
     "/gradat/invoiri/istoric",

@@ -305,17 +305,8 @@
 <!-- Hidden Form Snippets for Batch Actions -->
 <div id="batch-action-form-templates" style="display: none;">
 
-    <!-- Snippet pentru Permisii -->
+    <!-- Snippet pentru Permisii (fără șabloane) -->
     <div id="form-snippet-permission">
-        <div class="mb-3">
-            <label class="form-label">Folosește un Șablon (Opțional)</label>
-            <select class="form-select template-selector" data-action-type="permission">
-                <option value="">-- Manual --</option>
-                {% for t in leave_templates if t.template_type == 'permission' %}
-                <option value='{{ t.get_data()|tojson|forceescape }}'>{{ t.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
         <div class="row">
             <div class="col-md-6 mb-3"><label class="form-label">Data și Ora de Început</label><input type="datetime-local" name="start_datetime" class="form-control" required></div>
             <div class="col-md-6 mb-3"><label class="form-label">Data și Ora de Sfârșit</label><input type="datetime-local" name="end_datetime" class="form-control" required></div>
@@ -325,17 +316,8 @@
         </div>
     </div>
 
-    <!-- Snippet pentru Învoiri Zilnice -->
+    <!-- Snippet pentru Învoiri Zilnice (fără șabloane) -->
     <div id="form-snippet-daily_leave">
-        <div class="mb-3">
-            <label class="form-label">Folosește un Șablon (Opțional)</label>
-            <select class="form-select template-selector" data-action-type="daily_leave">
-                <option value="">-- Manual --</option>
-                {% for t in leave_templates if t.template_type == 'daily_leave' %}
-                <option value='{{ t.get_data()|tojson|forceescape }}'>{{ t.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
         <div class="row">
             <div class="col-md-4 mb-3"><label class="form-label">Data Învoirii</label><input type="date" name="leave_date" class="form-control" required></div>
             <div class="col-md-4 mb-3"><label class="form-label">Ora de Început</label><input type="time" name="start_time" class="form-control" required></div>
@@ -343,17 +325,8 @@
         </div>
     </div>
 
-    <!-- Snippet pentru Servicii -->
+    <!-- Snippet pentru Servicii (fără șabloane) -->
     <div id="form-snippet-service">
-        <div class="mb-3">
-            <label class="form-label">Folosește un Șablon (Opțional)</label>
-            <select class="form-select template-selector" data-action-type="service">
-                <option value="">-- Manual --</option>
-                {% for t in leave_templates if t.template_type == 'service' %}
-                <option value='{{ t.get_data()|tojson|forceescape }}'>{{ t.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
         <div class="row">
             <div class="col-md-6 mb-3"><label class="form-label">Tip Serviciu</label>
                 <select name="service_type" class="form-select" required>
@@ -423,39 +396,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const formSnippet = document.getElementById(`form-snippet-${actionType}`);
         if (formSnippet) {
             modalFormContent.innerHTML = formSnippet.innerHTML;
-            const templateSelector = modalFormContent.querySelector('.template-selector');
-            if(templateSelector) {
-                templateSelector.addEventListener('change', handleTemplateSelection);
-            }
         } else {
             modalFormContent.innerHTML = '<p class="text-danger">Eroare: Nu s-a găsit formularul pentru această acțiune.</p>';
         }
     });
-
-    function handleTemplateSelection(event) {
-        const selector = event.target;
-        const selectedOption = selector.options[selector.selectedIndex];
-        const formContainer = selector.closest('#modal-form-content');
-
-        if (!selectedOption.value) return;
-
-        try {
-            const data = JSON.parse(selectedOption.value);
-            const actionType = selector.dataset.actionType;
-
-            if (actionType === 'daily_leave') {
-                formContainer.querySelector('[name="start_time"]').value = data.start_time || '';
-                formContainer.querySelector('[name="end_time"]').value = data.end_time || '';
-            } else if (actionType === 'permission') {
-                formContainer.querySelector('[name="destination"]').value = data.destination || '';
-                formContainer.querySelector('[name="transport_mode"]').value = data.transport_mode || '';
-            } else if (actionType === 'service') {
-                formContainer.querySelector('[name="service_type"]').value = data.service_type || '';
-            }
-        } catch (e) {
-            console.error("Error parsing template data:", e);
-        }
-    }
 
     updateBatchActionUI();
 });

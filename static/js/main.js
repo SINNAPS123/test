@@ -5,11 +5,20 @@ document.addEventListener('DOMContentLoaded', function () {
     function showLoader() { if (loadingOverlay) loadingOverlay.classList.add('show'); }
     function hideLoader() { if (loadingOverlay) loadingOverlay.classList.remove('show'); }
     hideLoader();
+
+    // Track if a Bootstrap modal is open to avoid trapping UI behind overlay/backdrop
+    let modalOpen = false;
+    document.addEventListener('shown.bs.modal', () => { modalOpen = true; hideLoader(); });
+    document.addEventListener('hidden.bs.modal', () => { modalOpen = false; hideLoader(); });
+
     document.querySelectorAll('a').forEach(link => {
         link.addEventListener('click', function (e) {
             // Ignore links that should not trigger the global loader
+            if (modalOpen) return; // Never show loader while a modal is open
             if (this.target === '_blank' || this.href.startsWith('javascript:') || this.classList.contains('no-loader')) return;
             if (this.hash && (this.pathname === window.location.pathname)) return;
+            // Ignore clicks inside any modal dialog
+            if (this.closest('.modal')) return;
             const tgl = this.getAttribute('data-bs-toggle');
             if (tgl === 'dropdown' || tgl === 'collapse' || tgl === 'modal') return;
             const href = (this.getAttribute('href') || '').toLowerCase();
@@ -18,10 +27,11 @@ document.addEventListener('DOMContentLoaded', function () {
             if (this.classList.contains('fc-event') || this.closest('.fc')) return;
             showLoader();
             setTimeout(hideLoader, 8000);
-        });
+        }, true);
     });
     document.querySelectorAll('form').forEach(form => {
         form.addEventListener('submit', function () {
+            if (modalOpen) return; // avoid overlay when submitting forms inside modals
             if (this.target === '_blank' || this.classList.contains('no-loader')) return;
             showLoader();
             setTimeout(hideLoader, 8000);
