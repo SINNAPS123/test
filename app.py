@@ -12975,8 +12975,11 @@ def morning_invigoration_report():
         flash("Acces neautorizat.", "danger")
         return redirect(url_for("dashboard"))
 
+    # Implicit: raportează pentru DIMINEAȚA ZILEI URMĂTOARE (conform cerinței)
+    _today_local = get_localized_now().date()
+    _tomorrow_local = _today_local + timedelta(days=1)
     form_data = {
-        "report_date_str": get_localized_now().date().isoformat(),
+        "report_date_str": _tomorrow_local.isoformat(),
         "platoon_3_participates": False,  # Default for the toggle
     }
     report_data_to_render = None
