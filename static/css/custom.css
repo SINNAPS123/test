@@ -553,6 +553,15 @@ html.dark-mode-preload .list-group-item-success {
     background-color: #0f3b26 !important;
     color: #d1fae5 !important;
 }
+/* Improve contrast for success rows/badges/links on dark theme tables/lists */
+[data-theme="dark"] tr.table-success > * {
+    color: #e6ffed !important;
+}
+[data-theme="dark"] .table-success a,
+[data-theme="dark"] tr.table-success a,
+[data-theme="dark"] .table-success .text-muted {
+    color: #f0fff4 !important;
+}
 
 /* Ensure .text-dark remains readable in dark mode when used with bg-* */
 body.dark-mode .text-dark,
@@ -560,3 +569,7 @@ body.dark-mode .text-dark,
 html.dark-mode-preload .text-dark {
     color: #0f172a !important;
 }
+
+/* Raise z-index for Bootstrap modal to ensure it is clickable above any custom overlays */
+.modal { z-index: 3000 !important; }
+.modal-backdrop { z-index: 2950 !important; }
