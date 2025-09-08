@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">
+            Adăugare Învoiri Zilnice în Masă
+        </h2>
+        <div>
+            <a href="{{ url_for('list_daily_leaves') }}" class="btn btn-outline-secondary btn-sm">&laquo; Înapoi la Învoiri Zilnice</a>
+        </div>
+    </div>
+
+    {% if not students_to_prepare %}
+    <!-- Step 1: Select students -->
+    <form method="GET" action="{{ url_for('gradat_bulk_add_daily_leave') }}" class="card shadow-sm">
+        <div class="card-header">
+            <strong>Selectează studenții</strong>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th style="width:30px;"><input type="checkbox" id="select-all" class="form-check-input"></th>
+                            <th>Pluton</th>
+                            <th>Nume</th>
+                            <th>Prenume</th>
+                            <th>Grad</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in students %}
+                        <tr>
+                            <td><input type="checkbox" name="student_ids" value="{{ s.id }}" class="form-check-input row-cb"></td>
+                            <td>{{ s.pluton }}</td>
+                            <td>{{ s.nume }}</td>
+                            <td>{{ s.prenume }}</td>
+                            <td>{{ s.grad_militar }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-muted small mb-2">Selectează unul sau mai mulți studenți și apasă Continuă.</p>
+            <button type="submit" class="btn btn-primary">Continuă</button>
+        </div>
+    </form>
+    {% else %}
+    <!-- Step 2: Provide details per selected student -->
+    <form method="POST" action="{{ url_for('gradat_bulk_add_daily_leave') }}" class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Completează detaliile învoirii pentru fiecare student selectat</strong>
+            <small class="text-muted">Sugestie dată: <code>{{ today_str }}</code></small>
+        </div>
+        <div class="card-body">
+            {% for s in students_to_prepare %}
+                <input type="hidden" name="student_id_{{ s.id }}" value="{{ s.id }}">
+                <div class="border rounded p-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <strong>{{ s.grad_militar }} {{ s.nume }} {{ s.prenume }}</strong>
+                            <span class="badge bg-light text-dark ms-2">Pluton {{ s.pluton }}</span>
+                        </div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label">Data Învoirii</label>
+                            <input type="date" name="leave_date_{{ s.id }}" class="form-control" value="{{ today_str }}" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Început</label>
+                            <input type="time" name="start_time_{{ s.id }}" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Sfârșit</label>
+                            <input type="time" name="end_time_{{ s.id }}" class="form-control" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Motiv (opțional)</label>
+                            <input type="text" name="reason_{{ s.id }}" class="form-control" placeholder="Ex. medical, familie, etc.">
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+        <div class="card-footer d-flex justify-content-between">
+            <a href="{{ url_for('gradat_bulk_add_daily_leave') }}" class="btn btn-outline-secondary">Înapoi</a>
+            <button type="submit" class="btn btn-primary">Adaugă Învoiri</button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+    const selectAll = document.getElementById('select-all');
+    if (selectAll) {
+        selectAll.addEventListener('change', function(){
+            document.querySelectorAll('.row-cb').forEach(cb => cb.checked = selectAll.checked);
+        });
+    }
+});
+</script>
+{% endblock %}
