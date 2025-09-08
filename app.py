@@ -2799,7 +2799,7 @@ def admin_create_user():
                 f'Utilizatorul "{username}" ({role}) a fost creat cu succes! Cod unic de autentificare: {unique_code}',
                 "success",
             )
-        except Exception:
+        except Exception as e:
             db.session.rollback()
             flash_msg = "Eroare la crearea utilizatorului."
             flash(flash_msg, "danger")
@@ -8519,21 +8519,26 @@ def process_daily_leaves_text():
         current_iter_start_time = default_start_time_obj
         current_iter_end_time = default_end_time_obj
 
-        time_match_in_line = re.search(
+        # Accept either a range HH:MM-HH:MM OR a single end time HH:MM at the end of the line
+        time_range_match = re.search(
             r"(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$", line_for_student_find
         )
+        single_time_match = None if time_range_match else re.search(
+            r"(\d{1,2}:\d{2})$", line_for_student_find
+        )
+
         student_name_grad_part = line_for_student_find
 
-        if time_match_in_line:
+        if time_range_match:
             student_name_grad_part = line_for_student_find[
-                : time_match_in_line.start()
+                : time_range_match.start()
             ].strip()
             try:
                 parsed_line_start_time = datetime.strptime(
-                    time_match_in_line.group(1), "%H:%M"
+                    time_range_match.group(1), "%H:%M"
                 ).time()
                 parsed_line_end_time = datetime.strptime(
-                    time_match_in_line.group(2), "%H:%M"
+                    time_range_match.group(2), "%H:%M"
                 ).time()
                 current_iter_start_time = parsed_line_start_time
                 current_iter_end_time = parsed_line_end_time
@@ -8541,7 +8546,20 @@ def process_daily_leaves_text():
                 error_details_import_dl.append(
                     f"Linia '{line_raw}': Format orar invalid, s-au folosit orele implicite."
                 )
-                # We proceed with defaults, but log it as a soft error/warning for the user.
+        elif single_time_match:
+            # If only one time is provided, interpret it as the END time and keep default start (15:00)
+            student_name_grad_part = line_for_student_find[
+                : single_time_match.start()
+            ].strip()
+            try:
+                parsed_single_end_time = datetime.strptime(
+                    single_time_match.group(1), "%H:%M"
+                ).time()
+                current_iter_end_time = parsed_single_end_time
+            except ValueError:
+                error_details_import_dl.append(
+                    f"Linia '{line_raw}': Oră invalidă, s-au folosit orele implicite."
+                )
 
         if not student_name_grad_part:
             error_details_import_dl.append(

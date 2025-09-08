@@ -7,12 +7,15 @@ document.addEventListener('DOMContentLoaded', function () {
     hideLoader();
     document.querySelectorAll('a').forEach(link => {
         link.addEventListener('click', function (e) {
+            // Ignore links that should not trigger the global loader
             if (this.target === '_blank' || this.href.startsWith('javascript:') || this.classList.contains('no-loader')) return;
             if (this.hash && (this.pathname === window.location.pathname)) return;
             const tgl = this.getAttribute('data-bs-toggle');
             if (tgl === 'dropdown' || tgl === 'collapse' || tgl === 'modal') return;
             const href = (this.getAttribute('href') || '').toLowerCase();
             if (href.includes('export') || href.includes('download') || href.endsWith('.docx') || href.endsWith('.csv') || href.endsWith('.xlsx')) return;
+            // Do not show the loader for FullCalendar event anchors (they render as <a> inside .fc)
+            if (this.classList.contains('fc-event') || this.closest('.fc')) return;
             showLoader();
             setTimeout(hideLoader, 8000);
         });
