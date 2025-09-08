@@ -150,76 +150,24 @@ Absenti motivat:
                 </div>
             </div>
         </div>
-        <!-- Card pentru Acces Delegat -->
-        <div class="col-md-12 mb-4">
-            <div class="card shadow-sm">
-                <div class="card-header">
-                    <h4><i class="fas fa-user-shield me-2"></i>Acces Delegat (Coduri de Acces Special)</h4>
-                </div>
+        
+
+        <!-- Acces Public (Doar Vizualizare) -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header"><i class="fas fa-eye me-2"></i>Acces Public (Doar Vizualizare)</div>
                 <div class="card-body">
-                    <div class="row">
-                        <div class="col-lg-6">
-                            <h5>Generează un Cod Nou</h5>
-                            <form method="POST" action="{{ url_for('generate_scoped_access_code') }}">
-                                <div class="mb-3">
-                                    <label for="description" class="form-label">Descriere (ex: "Acces pentru Sdt. Ionescu")</label>
-                                    <input type="text" class="form-control" id="description" name="description" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Permisiuni Acordate</label>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" name="permissions" value="/volunteer" id="perm_volunteer" checked>
-                                        <label class="form-check-label" for="perm_volunteer">
-                                            Management Voluntariat (Clasament, Activități, Generare)
-                                        </label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" name="permissions" value="/gradat/students" id="perm_students">
-                                        <label class="form-check-label" for="perm_students">
-                                            Vizualizare Listă Studenți
-                                        </label>
-                                    </div>
-                                    <!-- Adaugă aici alte checkbox-uri pentru alte module -->
-                                </div>
-                                <div class="mb-3">
-                                    <label for="expiry_hours" class="form-label">Valabilitate (în ore)</label>
-                                    <select class="form-select" id="expiry_hours" name="expiry_hours">
-                                        <option value="1">1 Oră</option>
-                                        <option value="8" selected>8 Ore</option>
-                                        <option value="24">24 Ore</option>
-                                        <option value="72">3 Zile</option>
-                                    </select>
-                                </div>
-                                <button type="submit" class="btn btn-primary"><i class="fas fa-plus-circle me-1"></i> Generează Cod</button>
-                            </form>
+                    <p class="small text-muted">Generează un cod de vizualizare publică pentru plutonul tău. Codul permite doar vizualizare și este valabil pe durata setată.</p>
+                    <form method="POST" action="{{ url_for('generate_public_view_code') }}">
+                        <input type="hidden" name="scope_type" value="platoon">
+                        <div class="mb-3">
+                            <label class="form-label">Valabilitate Cod (în ore):</label>
+                            <input type="number" class="form-control" name="expiry_hours" value="24" min="1" required>
                         </div>
-                        <div class="col-lg-6">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <h5>Coduri Active</h5>
-                                <a href="{{ url_for('scoped_login') }}" class="btn btn-sm btn-outline-info" target="_blank">
-                                    <i class="fas fa-sign-in-alt me-1"></i> Pagină Login Delegat
-                                </a>
-                            </div>
-                            {% if active_scoped_codes %}
-                                <ul class="list-group mt-2">
-                                    {% for code in active_scoped_codes %}
-                                        <li class="list-group-item">
-                                            <strong>{{ code.code }}</strong> - {{ code.description }}
-                                            <br>
-                                            <small class="text-muted">Expiră la: {{ code.expires_at|localdatetime }}</small>
-                                            <form action="{{ url_for('deactivate_scoped_access_code', code_id=code.id) }}" method="POST" class="d-inline float-end">
-                                                <button type="submit" class="btn btn-xs btn-outline-danger" title="Dezactivează">
-                                                    <i class="fas fa-power-off"></i>
-                                                </button>
-                                            </form>
-                                        </li>
-                                    {% endfor %}
-                                </ul>
-                            {% else %}
-                                <p class="text-muted">Nu există coduri de acces active.</p>
-                            {% endif %}
-                        </div>
-                    </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-link me-1"></i> Generează Cod (Plutonul meu)
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>

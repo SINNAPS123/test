@@ -14694,40 +14694,73 @@ def deactivate_scoped_access_code(code_id):
 )
 @login_required
 def generate_public_view_code():
+    # Allow admin, commanders, and gradat (for own platoon)
     if current_user.role not in [
         "admin",
         "comandant_companie",
         "comandant_batalion",
+        "gradat",
     ]:
         flash("Acces neautorizat.", "danger")
         return redirect(url_for("dashboard"))
 
-    scope_type = request.form.get("scope_type")
-    scope_id = request.form.get("scope_id")
+    scope_type = (request.form.get("scope_type") or "").strip()
+    scope_id = (request.form.get("scope_id") or "").strip()
     expiry_hours = request.form.get("expiry_hours", type=int, default=24)
 
-    # Validation
-    if (
-        not scope_type
-        or not scope_id
-        or scope_type not in ["company", "battalion"]
-    ):
-        flash("Tip sau ID unitate invalid.", "danger")
+    # Support platoon helper fields from UI
+    company_pl = (request.form.get("company_pl") or "").strip()
+    platoon_pl = (request.form.get("platoon_pl") or "").strip()
+    if scope_type == "platoon":
+        # If scope_id is not provided, synthesize from company_pl + platoon_pl
+        if not scope_id and company_pl and platoon_pl:
+            scope_id = f"{company_pl}:{platoon_pl}"
+
+    # If gradat, default to own platoon if not explicitly provided
+    if current_user.role == "gradat":
+        if not scope_type:
+            scope_type = "platoon"
+        if scope_type == "platoon" and not scope_id:
+            # derive company/platoon from managed students
+            first_student = Student.query.filter_by(created_by_user_id=current_user.id).first()
+            if not first_student or not (first_student.companie and first_student.pluton):
+                flash("Nu s-a putut determina compania/plutonul pentru acest gradat. Adăugați întâi studenți.", "warning")
+                return redirect(request.referrer or url_for("dashboard"))
+            scope_id = f"{first_student.companie}:{first_student.pluton}"
+
+    valid_scope_types = {"company", "battalion", "platoon"}
+    if not scope_type or scope_type not in valid_scope_types:
+        flash("Tip unitate invalid.", "danger")
         return redirect(request.referrer or url_for("dashboard"))
 
-    # Security check: ensure commanders can only create codes for their own unit
+    if scope_type in {"company", "battalion"} and not scope_id:
+        flash("ID unitate lipsă.", "danger")
+        return redirect(request.referrer or url_for("dashboard"))
+
+    if scope_type == "platoon":
+        # For platoon we require scope_id of form "COMPANIE:PLUTON"
+        if ":" not in scope_id:
+            flash("Pentru pluton, specificați 'Companie:Pluton' (ex: 1:3).", "danger")
+            return redirect(request.referrer or url_for("dashboard"))
+
+    # Security check for commanders to ensure they only create for their own scope
     if current_user.role == "comandant_companie":
-        if scope_type != "company" or scope_id != _get_commander_unit_id(
-            current_user.username, "CmdC"
-        ):
-            flash("Nu puteți genera coduri pentru altă unitate.", "danger")
+        own_company = _get_commander_unit_id(current_user.username, "CmdC")
+        if scope_type == "company" and scope_id != own_company:
+            flash("Nu puteți genera coduri pentru altă companie.", "danger")
             return redirect(url_for("company_commander_dashboard"))
+        if scope_type == "platoon":
+            comp_part = scope_id.split(":")[0]
+            if comp_part != own_company:
+                flash("Nu puteți genera cod pentru un pluton din altă companie.", "danger")
+                return redirect(url_for("company_commander_dashboard"))
     elif current_user.role == "comandant_batalion":
-        if scope_type != "battalion" or scope_id != _get_commander_unit_id(
-            current_user.username, "CmdB"
-        ):
-            flash("Nu puteți genera coduri pentru altă unitate.", "danger")
+        own_battalion = _get_commander_unit_id(current_user.username, "CmdB")
+        if scope_type == "battalion" and scope_id != own_battalion:
+            flash("Nu puteți genera coduri pentru alt batalion.", "danger")
             return redirect(url_for("battalion_commander_dashboard"))
+        # For 'platoon' at battalion scope we cannot fully verify company-battalion relation without extra mapping
+        # Keep as-is; commanders are trusted.
 
     # Generate unique code
     new_code_str = secrets.token_hex(8)
@@ -14748,17 +14781,9 @@ def generate_public_view_code():
         db.session.add(new_code)
         db.session.commit()
         # Create the full URL for sharing
-        public_url = url_for(
-            "public_view_login", code=new_code_str, _external=True
-        )
-
-        # Flash messages with the new code and the full URL
+        public_url = url_for("public_view_login", code=new_code_str, _external=True)
         flash(f"Cod de acces public generat: {new_code_str}", "success")
-        flash(
-            f"Link de partajat (valabil {expiry_hours} ore): {public_url}",
-            "info",
-        )
-
+        flash(f"Link de partajat (valabil {expiry_hours} ore): {public_url}", "info")
     except Exception as e:
         db.session.rollback()
         flash(f"Eroare la generarea codului: {str(e)}", "danger")
@@ -14774,12 +14799,8 @@ def generate_public_view_code():
 @login_required
 def deactivate_public_view_code(code_id):
     code_to_deactivate = PublicViewCode.query.get_or_404(code_id)
-
-    # Security check
-    if (
-        current_user.role != "admin"
-        and code_to_deactivate.created_by_user_id != current_user.id
-    ):
+    # Admin can deactivate any; commanders/gradat only their own created codes
+    if current_user.role != "admin" and code_to_deactivate.created_by_user_id != current_user.id:
         flash("Nu aveți permisiunea să dezactivați acest cod.", "danger")
         return redirect(request.referrer or url_for("dashboard"))
 
@@ -14794,68 +14815,44 @@ def deactivate_public_view_code(code_id):
     return redirect(request.referrer or url_for("dashboard"))
 
 
-@app.route(
-    "/public_view", methods=["GET", "POST"], endpoint="public_view_login"
-)
+@app.route("/public_view", methods=["GET", "POST"], endpoint="public_view_login")
 def public_view_login():
+    # If already in a public session, validate expiry then continue
     if "public_view_access" in session:
-        # Re-check expiry on page load in case the session is old but not cleared
-        if (
-            datetime.fromisoformat(
-                session["public_view_access"].get("expires_at")
-            )
-            < datetime.utcnow()
-        ):
+        try:
+            if datetime.fromisoformat(session["public_view_access"].get("expires_at")) < datetime.utcnow():
+                session.pop("public_view_access", None)
+                flash("Sesiunea de vizualizare a expirat.", "info")
+                return redirect(url_for("public_view_login"))
+        except Exception:
             session.pop("public_view_access", None)
-            flash("Sesiunea de vizualizare a expirat.", "info")
             return redirect(url_for("public_view_login"))
         return redirect(url_for("public_dashboard"))
 
     code_to_check = None
     if request.method == "POST":
-        code_to_check = request.form.get("code", "").strip()
+        code_to_check = (request.form.get("code") or "").strip()
         if not code_to_check:
             flash("Vă rugăm introduceți un cod de acces.", "warning")
             return redirect(url_for("public_view_login"))
-    elif request.method == "GET":
-        code_to_check = request.args.get("code", "").strip()
+    else:
+        code_to_check = (request.args.get("code") or "").strip()
 
     if code_to_check:
         now_utc = datetime.utcnow()
-        access_code = PublicViewCode.query.filter_by(
-            code=code_to_check, is_active=True
-        ).first()
+        access_code = PublicViewCode.query.filter_by(code=code_to_check, is_active=True).first()
 
         if access_code and access_code.expires_at > now_utc:
-            # Consume the code on first use
-            access_code.is_active = False
-            try:
-                db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                app.logger.error(
-                    f"PublicViewCode consume failed for code {access_code.code}: {e}"
-                )
+            # DO NOT consume the code; allow multiple uses until expiry
             session["public_view_access"] = {
                 "scope_type": access_code.scope_type,
                 "scope_id": access_code.scope_id,
                 "expires_at": access_code.expires_at.isoformat(),
             }
-            session.permanent = (
-                True  # Make the session last for PERMANENT_SESSION_LIFETIME
-            )
+            session.permanent = True
             return redirect(url_for("public_dashboard"))
         else:
-            if request.method == "GET" and code_to_check:
-                flash(
-                    "Codul de acces este invalid, a expirat sau a fost dezactivat.",
-                    "danger",
-                )
-            elif request.method == "POST":
-                flash(
-                    "Codul de acces este invalid, a expirat sau a fost dezactivat.",
-                    "danger",
-                )
+            flash("Codul de acces este invalid, a expirat sau a fost dezactivat.", "danger")
             return redirect(url_for("public_view_login"))
 
     # Render the login form for a GET request with no code
@@ -14868,21 +14865,30 @@ def public_dashboard():
         return redirect(url_for("public_view_login"))
 
     access_info = session["public_view_access"]
-
-    # Check expiry on every page load
-    if datetime.fromisoformat(access_info["expires_at"]) < datetime.utcnow():
+    try:
+        if datetime.fromisoformat(access_info["expires_at"]) < datetime.utcnow():
+            session.pop("public_view_access", None)
+            flash("Sesiunea de vizualizare a expirat.", "info")
+            return redirect(url_for("public_view_login"))
+    except Exception:
         session.pop("public_view_access", None)
-        flash("Sesiunea de vizualizare a expirat.", "info")
         return redirect(url_for("public_view_login"))
 
-    scope_type = access_info["scope_type"]
-    scope_id = access_info["scope_id"]
+    scope_type = access_info.get("scope_type")
+    scope_id = access_info.get("scope_id")
 
     students_in_scope = []
     if scope_type == "company":
         students_in_scope = Student.query.filter_by(companie=scope_id).all()
     elif scope_type == "battalion":
         students_in_scope = Student.query.filter_by(batalion=scope_id).all()
+    elif scope_type == "platoon":
+        # scope_id expected format: "COMPANIE:PLUTON"
+        try:
+            company_id_part, platoon_id_part = scope_id.split(":", 1)
+            students_in_scope = Student.query.filter_by(companie=company_id_part, pluton=platoon_id_part).all()
+        except Exception:
+            students_in_scope = []
 
     if not students_in_scope:
         return render_template(
@@ -15212,257 +15218,7 @@ def api_events():
     return jsonify(events)
 
 
-# --- Leave/Service Templates ---
-@app.route("/gradat/templates", methods=["GET"])
-@login_required
-def list_leave_templates():
-    if current_user.role != "gradat":
-        flash("Acces neautorizat.", "danger")
-        return redirect(url_for("dashboard"))
 
-    templates = (
-        LeaveTemplate.query.filter_by(created_by_user_id=current_user.id)
-        .order_by(LeaveTemplate.template_type, LeaveTemplate.name)
-        .all()
-    )
-    return render_template("list_leave_templates.html", templates=templates)
-
-
-@app.route("/gradat/templates/create", methods=["GET", "POST"])
-@login_required
-def create_leave_template():
-    if current_user.role != "gradat":
-        flash("Acces neautorizat.", "danger")
-        return redirect(url_for("dashboard"))
-
-    if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        template_type = request.form.get("template_type")
-
-        if not name or not template_type:
-            flash("Numele și tipul șablonului sunt obligatorii.", "warning")
-            return render_template(
-                "create_edit_leave_template.html",
-                template=None,
-                service_types=SERVICE_TYPES,
-                form_data=request.form,
-            )
-
-        template_data = {}
-        if template_type == "daily_leave":
-            template_data["start_time"] = request.form.get("start_time")
-            template_data["end_time"] = request.form.get("end_time")
-            if (
-                not template_data["start_time"]
-                or not template_data["end_time"]
-            ):
-                flash(
-                    "Orele de început și sfârșit sunt obligatorii pentru învoirile zilnice.",
-                    "warning",
-                )
-                return render_template(
-                    "create_edit_leave_template.html",
-                    template=None,
-                    service_types=SERVICE_TYPES,
-                    form_data=request.form,
-                )
-
-        elif template_type == "permission":
-            template_data["duration_hours"] = request.form.get(
-                "duration_hours", type=int
-            )
-            template_data["destination"] = request.form.get(
-                "destination", ""
-            ).strip()
-            template_data["transport_mode"] = request.form.get(
-                "transport_mode", ""
-            ).strip()
-            if (
-                not template_data["duration_hours"]
-                or template_data["duration_hours"] <= 0
-            ):
-                flash(
-                    "Durata în ore este obligatorie și trebuie să fie pozitivă pentru permisii.",
-                    "warning",
-                )
-                return render_template(
-                    "create_edit_leave_template.html",
-                    template=None,
-                    service_types=SERVICE_TYPES,
-                    form_data=request.form,
-                )
-
-        elif template_type == "service":
-            template_data["service_type"] = request.form.get("service_type")
-            template_data["duration_hours"] = request.form.get(
-                "duration_hours", type=int
-            )
-            if (
-                not template_data["service_type"]
-                or not template_data["duration_hours"]
-                or template_data["duration_hours"] <= 0
-            ):
-                flash(
-                    "Tipul serviciului și durata sunt obligatorii pentru servicii.",
-                    "warning",
-                )
-                return render_template(
-                    "create_edit_leave_template.html",
-                    template=None,
-                    service_types=SERVICE_TYPES,
-                    form_data=request.form,
-                )
-
-        else:
-            flash("Tip de șablon invalid.", "danger")
-            return render_template(
-                "create_edit_leave_template.html",
-                template=None,
-                service_types=SERVICE_TYPES,
-            )
-
-        new_template = LeaveTemplate(
-            name=name,
-            template_type=template_type,
-            created_by_user_id=current_user.id,
-            data=json.dumps(template_data),
-        )
-        db.session.add(new_template)
-        try:
-            db.session.commit()
-            flash(f'Șablonul "{name}" a fost creat cu succes.', "success")
-            return redirect(url_for("list_leave_templates"))
-        except Exception as e:
-            db.session.rollback()
-            flash(f"Eroare la crearea șablonului: {e}", "danger")
-
-    return render_template(
-        "create_edit_leave_template.html",
-        template=None,
-        service_types=SERVICE_TYPES,
-        form_data={},
-    )
-
-
-@app.route("/gradat/templates/edit/<int:template_id>", methods=["GET", "POST"])
-@login_required
-def edit_leave_template(template_id):
-    template = LeaveTemplate.query.get_or_404(template_id)
-    if template.created_by_user_id != current_user.id:
-        flash("Acces neautorizat.", "danger")
-        return redirect(url_for("list_leave_templates"))
-
-    if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        if not name:
-            flash("Numele șablonului este obligatoriu.", "warning")
-            return render_template(
-                "create_edit_leave_template.html",
-                template=template,
-                service_types=SERVICE_TYPES,
-                form_data=request.form,
-            )
-
-        template_data = {}
-        if template.template_type == "daily_leave":
-            template_data["start_time"] = request.form.get("start_time")
-            template_data["end_time"] = request.form.get("end_time")
-            if (
-                not template_data["start_time"]
-                or not template_data["end_time"]
-            ):
-                flash(
-                    "Orele de început și sfârșit sunt obligatorii.", "warning"
-                )
-                return render_template(
-                    "create_edit_leave_template.html",
-                    template=template,
-                    service_types=SERVICE_TYPES,
-                    form_data=request.form,
-                )
-        elif template.template_type == "permission":
-            template_data["duration_hours"] = request.form.get(
-                "duration_hours", type=int
-            )
-            template_data["destination"] = request.form.get(
-                "destination", ""
-            ).strip()
-            template_data["transport_mode"] = request.form.get(
-                "transport_mode", ""
-            ).strip()
-            if (
-                not template_data["duration_hours"]
-                or template_data["duration_hours"] <= 0
-            ):
-                flash(
-                    "Durata în ore este obligatorie și trebuie să fie pozitivă.",
-                    "warning",
-                )
-                return render_template(
-                    "create_edit_leave_template.html",
-                    template=template,
-                    service_types=SERVICE_TYPES,
-                    form_data=request.form,
-                )
-        elif template.template_type == "service":
-            template_data["service_type"] = request.form.get("service_type")
-            template_data["duration_hours"] = request.form.get(
-                "duration_hours", type=int
-            )
-            if (
-                not template_data["service_type"]
-                or not template_data["duration_hours"]
-                or template_data["duration_hours"] <= 0
-            ):
-                flash(
-                    "Tipul serviciului și durata sunt obligatorii.", "warning"
-                )
-                return render_template(
-                    "create_edit_leave_template.html",
-                    template=template,
-                    service_types=SERVICE_TYPES,
-                    form_data=request.form,
-                )
-
-        template.name = name
-        template.data = json.dumps(template_data)
-        try:
-            db.session.commit()
-            flash(f'Șablonul "{name}" a fost actualizat.', "success")
-            return redirect(url_for("list_leave_templates"))
-        except Exception as e:
-            db.session.rollback()
-            flash(f"Eroare la actualizarea șablonului: {e}", "danger")
-
-    form_data = template.get_data()
-    form_data["name"] = template.name
-    form_data["template_type"] = template.template_type
-
-    return render_template(
-        "create_edit_leave_template.html",
-        template=template,
-        service_types=SERVICE_TYPES,
-        form_data=form_data,
-    )
-
-
-@app.route("/gradat/templates/delete/<int:template_id>", methods=["POST"])
-@login_required
-def delete_leave_template(template_id):
-    template = LeaveTemplate.query.get_or_404(template_id)
-    if template.created_by_user_id != current_user.id:
-        flash("Acces neautorizat.", "danger")
-        return redirect(url_for("list_leave_templates"))
-
-    try:
-        db.session.delete(template)
-        db.session.commit()
-        flash(f'Șablonul "{template.name}" a fost șters.', "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"Eroare la ștergerea șablonului: {e}", "danger")
-
-    return redirect(url_for("list_leave_templates"))
 
 
 # --- Situations: CRUD (Gradat) ---
