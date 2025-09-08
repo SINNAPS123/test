@@ -140,7 +140,7 @@
     <nav aria-label="Page navigation">
         <ul class="pagination justify-content-center">
             {% if logs_pagination.has_prev %}
-                <li class="page-item"><a class="page-link" href="{{ url_for(request.endpoint, page=logs_pagination.prev_num, **request.args) }}">&laquo; Precedenta</a></li>
+                <li class="page-item"><a class="page-link" href="{{ url_for(request.endpoint, page=logs_pagination.prev_num, action_type_filter_val=action_type_filter_val, target_model_filter_val=target_model_filter_val, performed_by_user_filter_val=performed_by_user_filter_val, filter_date_from=filter_date_from, filter_date_to=filter_date_to) }}">&laquo; Precedenta</a></li>
             {% else %}
                 <li class="page-item disabled"><span class="page-link">&laquo; Precedenta</span></li>
             {% endif %}
@@ -150,7 +150,7 @@
                     {% if logs_pagination.page == page_num %}
                         <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
                     {% else %}
-                        <li class="page-item"><a class="page-link" href="{{ url_for(request.endpoint, page=page_num, **request.args) }}">{{ page_num }}</a></li>
+                        <li class="page-item"><a class="page-link" href="{{ url_for(request.endpoint, page=page_num, action_type_filter_val=action_type_filter_val, target_model_filter_val=target_model_filter_val, performed_by_user_filter_val=performed_by_user_filter_val, filter_date_from=filter_date_from, filter_date_to=filter_date_to) }}">{{ page_num }}</a></li>
                     {% endif %}
                 {% elif loop.index0 == 0 or loop.index0 == logs_pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=3)|length -1 %}
                 {% else %}
@@ -159,7 +159,7 @@
             {% endfor %}
 
             {% if logs_pagination.has_next %}
-                <li class="page-item"><a class="page-link" href="{{ url_for(request.endpoint, page=logs_pagination.next_num, **request.args) }}">Următoarea &raquo;</a></li>
+                <li class="page-item"><a class="page-link" href="{{ url_for(request.endpoint, page=logs_pagination.next_num, action_type_filter_val=action_type_filter_val, target_model_filter_val=target_model_filter_val, performed_by_user_filter_val=performed_by_user_filter_val, filter_date_from=filter_date_from, filter_date_to=filter_date_to) }}">Următoarea &raquo;</a></li>
             {% else %}
                 <li class="page-item disabled"><span class="page-link">Următoarea &raquo;</span></li>
             {% endif %}

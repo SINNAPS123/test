@@ -139,15 +139,7 @@ a:hover {
   margin-bottom: var(--spacing-4);
   transition: background 0.2s, box-shadow 0.2s;
 }
-.section-title {
-  font-size: 1.6rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  margin-bottom: var(--spacing-2);
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-}
+
 .card-header {
   background: none;
   border-bottom: 1px solid var(--border);
@@ -380,24 +372,7 @@ html.dark-mode-preload #loading-overlay {
   to { opacity: 1; transform: none;}
 }
 
-/*-----------------------------------------------------------------------------
-  10. Debug/Dev Bar (admin/debug bar top offset)
------------------------------------------------------------------------------*/
-#admin-debug-bar {
-  position: sticky;
-  top: var(--navbar-height);
-  z-index: 1050;
-  background: var(--bg);
-  color: var(--muted);
-  font-size: 0.97rem;
-  padding: 0.35em 1.25em;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-  margin-bottom: 0.5em;
-  box-shadow: var(--shadow-sm);
-  display: flex;
-  gap: 1.5em;
-}
+
 
 /* Responsive adjustments */
 @media (max-width: 992px) {
@@ -540,6 +515,32 @@ html.dark-mode-preload .badge.bg-light {
     color: #0f172a !important; /* slate-900 */
     border: 1px solid #94a3b8 !important;
 }
+/* Extend badge contrast to all contextual variants */
+body.dark-mode .badge.bg-primary,
+[data-theme="dark"] .badge.bg-primary,
+html.dark-mode-preload .badge.bg-primary {
+    background-color: #1d4ed8 !important; /* blue-700 */
+    color: #e6f0ff !important;
+}
+body.dark-mode .badge.bg-secondary,
+[data-theme="dark"] .badge.bg-secondary,
+html.dark-mode-preload .badge.bg-secondary {
+    background-color: #475569 !important; /* slate-600 */
+    color: #e2e8f0 !important;
+}
+body.dark-mode .badge.bg-danger,
+[data-theme="dark"] .badge.bg-danger,
+html.dark-mode-preload .badge.bg-danger {
+    background-color: #991b1b !important; /* red-800 */
+    color: #ffe5e9 !important;
+}
+body.dark-mode .badge.bg-dark,
+[data-theme="dark"] .badge.bg-dark,
+html.dark-mode-preload .badge.bg-dark {
+    background-color: #1f2937 !important; /* gray-800 */
+    color: #f1f5f9 !important;
+}
+
 body.dark-mode .alert-success,
 [data-theme="dark"] .alert-success,
 html.dark-mode-preload .alert-success {
@@ -547,12 +548,183 @@ html.dark-mode-preload .alert-success {
     color: #d1fae5 !important;
     border-color: #14532d !important;
 }
+body.dark-mode .alert-danger,
+[data-theme="dark"] .alert-danger,
+html.dark-mode-preload .alert-danger {
+    background-color: #3f1014 !important;
+    color: #ffe5e9 !important;
+    border-color: #7f1d1d !important;
+}
+body.dark-mode .alert-warning,
+[data-theme="dark"] .alert-warning,
+html.dark-mode-preload .alert-warning {
+    background-color: #3b2a03 !important;
+    color: #fff4c2 !important;
+    border-color: #a16207 !important;
+}
+body.dark-mode .alert-info,
+[data-theme="dark"] .alert-info,
+html.dark-mode-preload .alert-info {
+    background-color: #0a2a3a !important;
+    color: #dff7ff !important;
+    border-color: #075985 !important;
+}
+body.dark-mode .alert-primary,
+[data-theme="dark"] .alert-primary,
+html.dark-mode-preload .alert-primary {
+    background-color: #12213f !important;
+    color: #e6f0ff !important;
+    border-color: #1d4ed8 !important;
+}
+body.dark-mode .alert-secondary,
+[data-theme="dark"] .alert-secondary,
+html.dark-mode-preload .alert-secondary {
+    background-color: #1f2732 !important;
+    color: #e2e8f0 !important;
+    border-color: #475569 !important;
+}
+body.dark-mode .alert-dark,
+[data-theme="dark"] .alert-dark,
+html.dark-mode-preload .alert-dark {
+    background-color: #0b1220 !important;
+    color: #f1f5f9 !important;
+    border-color: #111827 !important;
+}
+
+/* List-group contextual items */
 body.dark-mode .list-group-item-success,
 [data-theme="dark"] .list-group-item-success,
 html.dark-mode-preload .list-group-item-success {
     background-color: #0f3b26 !important;
     color: #d1fae5 !important;
 }
+body.dark-mode .list-group-item-danger,
+[data-theme="dark"] .list-group-item-danger,
+html.dark-mode-preload .list-group-item-danger {
+    background-color: #3f1014 !important;
+    color: #ffe5e9 !important;
+}
+body.dark-mode .list-group-item-warning,
+[data-theme="dark"] .list-group-item-warning,
+html.dark-mode-preload .list-group-item-warning {
+    background-color: #3b2a03 !important;
+    color: #fff4c2 !important;
+}
+body.dark-mode .list-group-item-info,
+[data-theme="dark"] .list-group-item-info,
+html.dark-mode-preload .list-group-item-info {
+    background-color: #0a2a3a !important;
+    color: #dff7ff !important;
+}
+body.dark-mode .list-group-item-primary,
+[data-theme="dark"] .list-group-item-primary,
+html.dark-mode-preload .list-group-item-primary {
+    background-color: #12213f !important;
+    color: #e6f0ff !important;
+}
+body.dark-mode .list-group-item-secondary,
+[data-theme="dark"] .list-group-item-secondary,
+html.dark-mode-preload .list-group-item-secondary {
+    background-color: #1f2732 !important;
+    color: #e2e8f0 !important;
+}
+body.dark-mode .list-group-item-light,
+[data-theme="dark"] .list-group-item-light,
+html.dark-mode-preload .list-group-item-light {
+    background-color: #cbd5e1 !important;
+    color: #0f172a !important;
+}
+body.dark-mode .list-group-item-dark,
+[data-theme="dark"] .list-group-item-dark,
+html.dark-mode-preload .list-group-item-dark {
+    background-color: #0b1220 !important;
+    color: #f1f5f9 !important;
+}
+
+/* Improve contrast for contextual table rows across all variants */
+[data-theme="dark"] tr.table-success > *,
+html.dark-mode-preload tr.table-success > *,
+body.dark-mode tr.table-success > * {
+    color: #e6ffed !important;
+}
+[data-theme="dark"] tr.table-danger > *,
+html.dark-mode-preload tr.table-danger > *,
+body.dark-mode tr.table-danger > * {
+    color: #ffe5e9 !important;
+}
+[data-theme="dark"] tr.table-warning > *,
+html.dark-mode-preload tr.table-warning > *,
+body.dark-mode tr.table-warning > * {
+    color: #fff4c2 !important;
+}
+[data-theme="dark"] tr.table-info > *,
+html.dark-mode-preload tr.table-info > *,
+body.dark-mode tr.table-info > * {
+    color: #dff7ff !important;
+}
+[data-theme="dark"] tr.table-primary > *,
+html.dark-mode-preload tr.table-primary > *,
+body.dark-mode tr.table-primary > * {
+    color: #e6f0ff !important;
+}
+[data-theme="dark"] tr.table-secondary > *,
+html.dark-mode-preload tr.table-secondary > *,
+body.dark-mode tr.table-secondary > * {
+    color: #e3e8ee !important;
+}
+[data-theme="dark"] tr.table-light > *,
+html.dark-mode-preload tr.table-light > *,
+body.dark-mode tr.table-light > * {
+    color: #0f172a !important; /* dark text on light row */
+}
+[data-theme="dark"] tr.table-dark > *,
+html.dark-mode-preload tr.table-dark > *,
+body.dark-mode tr.table-dark > * {
+    color: #f1f5f9 !important;
+}
+
+/* Links and muted text inside contextual rows */
+[data-theme="dark"] .table-success a,
+[data-theme="dark"] tr.table-success a,
+[data-theme="dark"] .table-success .text-muted { color: #f0fff4 !important; }
+
+[data-theme="dark"] .table-danger a,
+[data-theme="dark"] tr.table-danger a,
+[data-theme="dark"] .table-danger .text-muted { color: #ffd9df !important; }
+
+[data-theme="dark"] .table-warning a,
+[data-theme="dark"] tr.table-warning a,
+[data-theme="dark"] .table-warning .text-muted { color: #ffeaa0 !important; }
+
+[data-theme="dark"] .table-info a,
+[data-theme="dark"] tr.table-info a,
+[data-theme="dark"] .table-info .text-muted { color: #c9f1ff !important; }
+
+[data-theme="dark"] .table-primary a,
+[data-theme="dark"] tr.table-primary a,
+[data-theme="dark"] .table-primary .text-muted { color: #cfe2ff !important; }
+
+[data-theme="dark"] .table-secondary a,
+[data-theme="dark"] tr.table-secondary a,
+[data-theme="dark"] .table-secondary .text-muted { color: #d0d6dd !important; }
+
+[data-theme="dark"] .table-light a,
+[data-theme="dark"] tr.table-light a,
+[data-theme="dark"] .table-light .text-muted { color: #1f2937 !important; }
+
+[data-theme="dark"] .table-dark a,
+[data-theme="dark"] tr.table-dark a,
+[data-theme="dark"] .table-dark .text-muted { color: #e2e8f0 !important; }
+
+/* Generic bg-* utilities: ensure text has sufficient contrast in dark mode */
+[data-theme="dark"] .bg-success { color: #e6ffed !important; }
+[data-theme="dark"] .bg-danger { color: #ffe5e9 !important; }
+[data-theme="dark"] .bg-warning { color: #111827 !important; } /* keep dark text on yellow */
+[data-theme="dark"] .bg-info    { color: #dff7ff !important; }
+[data-theme="dark"] .bg-primary { color: #e6f0ff !important; }
+[data-theme="dark"] .bg-secondary { color: #e2e8f0 !important; }
+[data-theme="dark"] .bg-light   { color: #0f172a !important; }
+[data-theme="dark"] .bg-dark    { color: #f1f5f9 !important; }
 
 /* Ensure .text-dark remains readable in dark mode when used with bg-* */
 body.dark-mode .text-dark,
@@ -560,3 +732,7 @@ body.dark-mode .text-dark,
 html.dark-mode-preload .text-dark {
     color: #0f172a !important;
 }
+
+/* Raise z-index for Bootstrap modal to ensure it is clickable above any custom overlays */
+.modal { z-index: 3000 !important; }
+.modal-backdrop { z-index: 2950 !important; }

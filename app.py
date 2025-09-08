@@ -1052,29 +1052,9 @@ class SituationEntry(db.Model):
             return json.loads(self.data)
         except (json.JSONDecodeError, TypeError):
             return {}
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(150), nullable=False)
-    template_type = db.Column(
-        db.String(50), nullable=False
-    )  # 'permission', 'daily_leave', 'service'
-    created_by_user_id = db.Column(
-        db.Integer, db.ForeignKey("user.id"), nullable=False
-    )
-    # JSON column to store the template data
-    data = db.Column(db.Text, nullable=False)
-
-    creator = db.relationship(
-        "User", backref=db.backref("leave_templates", lazy=True)
-    )
-
-    def get_data(self):
-        try:
-            return json.loads(self.data)
-        except (json.JSONDecodeError, TypeError):
-            return {}
 
     def __repr__(self):
-        return f"<LeaveTemplate {self.id}: {self.name} ({self.template_type})>"
+        return f"<SituationEntry {self.id} for Situation {self.situation_id}>"
 
 
 @login_manager.user_loader
@@ -15466,6 +15446,7 @@ def situation_entries(situation_id):
 @app.route("/gradat/situations/<int:situation_id>/export_csv", methods=["GET"])
 @login_required
 def export_situation_csv(situation_id):
+    # Export as Word (.docx) instead of CSV
     if current_user.role != "gradat":
         flash("Acces neautorizat.", "danger")
         return redirect(url_for("dashboard"))
@@ -15473,23 +15454,61 @@ def export_situation_csv(situation_id):
     if sit.created_by_user_id != current_user.id:
         flash("Nu aveți drepturi la această situație.", "danger")
         return redirect(url_for("list_situations"))
-    # Build CSV in-memory
+
     fields = sit.get_fields()
-    headers = ["ID", "Created At"] + [f.get("label", f.get("name", "")) for f in fields]
-    import csv
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(headers)
-    for e in SituationEntry.query.filter_by(situation_id=situation_id).order_by(SituationEntry.created_at.asc()).all():
+    # Build a Word document table with headers and all entries
+    document = Document()
+    document.add_heading(f"Situație: {sit.title}", level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    if sit.description:
+        p_desc = document.add_paragraph()
+        p_desc.add_run(sit.description).italic = True
+    document.add_paragraph(f"Generat de: {current_user.username} | {get_localized_now().strftime('%d-%m-%Y %H:%M')}")
+
+    headers = ["ID", "Creat la"] + [f.get("label") or f.get("name", "") for f in fields]
+    table = document.add_table(rows=1, cols=len(headers))
+    table.style = "Table Grid"
+    hdr_cells = table.rows[0].cells
+    for i, title in enumerate(headers):
+        hdr_cells[i].text = title
+        if hdr_cells[i].paragraphs and hdr_cells[i].paragraphs[0].runs:
+            hdr_cells[i].paragraphs[0].runs[0].font.bold = True
+
+    entries = SituationEntry.query.filter_by(situation_id=situation_id).order_by(SituationEntry.created_at.asc()).all()
+    for e in entries:
         data = e.get_data()
-        row = [e.id, e.created_at.strftime("%Y-%m-%d %H:%M")]
-        for f in fields:
-            row.append(data.get(f.get("name", ""), ""))
-        writer.writerow(row)
-    mem = io.BytesIO(output.getvalue().encode("utf-8"))
-    mem.seek(0)
-    filename = f"Situatie_{sit.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.csv"
-    return send_file(mem, download_name=filename, as_attachment=True, mimetype="text/csv")
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(e.id)
+        row_cells[1].text = e.created_at.strftime("%Y-%m-%d %H:%M")
+        for idx_f, fdef in enumerate(fields, start=2):
+            row_cells[idx_f].text = str(data.get(fdef.get("name", ""), ""))
+
+    # Basic column width tuning (optional)
+    try:
+        from docx.shared import Inches
+        widths = [Inches(0.6), Inches(1.4)] + [Inches(1.6)] * (len(headers) - 2)
+        for col_idx, width in enumerate(widths):
+            for r in table.rows:
+                if col_idx < len(r.cells):
+                    r.cells[col_idx].width = width
+    except Exception:
+        pass
+
+    # Apply base font
+    style = document.styles["Normal"]
+    font = style.font
+    font.name = "Calibri"
+    font.size = Pt(11)
+
+    f = io.BytesIO()
+    document.save(f)
+    f.seek(0)
+    filename = f"Situatie_{sit.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.docx"
+    return send_file(
+        f,
+        download_name=filename,
+        as_attachment=True,
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
 
 
 @app.route("/gradat/situations/<int:situation_id>/generate_link", methods=["POST"])
