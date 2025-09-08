@@ -993,6 +993,90 @@ class LeaveTemplate(db.Model):
         return f"<LeaveTemplate {self.id}: {self.name} ({self.template_type})>"
 
 
+# --- Situations (Configurable Forms) ---
+class Situation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    # JSON array of field definitions: [{name, label, type, required, options?}]
+    fields_schema = db.Column(db.Text, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    # Public submission link code (unique, optional until generated)
+    public_code = db.Column(db.String(24), unique=True, nullable=True)
+    public_expires_at = db.Column(db.DateTime, nullable=True)
+
+    created_by_user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id"), nullable=False
+    )
+    creator = db.relationship(
+        "User", backref=db.backref("situations", lazy=True)
+    )
+
+    def get_fields(self):
+        try:
+            data = json.loads(self.fields_schema)
+            return data if isinstance(data, list) else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def is_public_open(self):
+        if not self.is_active or not self.public_code:
+            return False
+        if self.public_expires_at is None:
+            return True
+        # public_expires_at stored naive UTC or naive local; for simplicity treat as naive UTC
+        return self.public_expires_at > datetime.utcnow()
+
+    def __repr__(self):
+        return f"<Situation {self.id}: {self.title}>"
+
+
+class SituationEntry(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    situation_id = db.Column(
+        db.Integer, db.ForeignKey("situation.id", ondelete="CASCADE"), nullable=False
+    )
+    # Optional: link a student if the form included student selection (by id)
+    student_id = db.Column(db.Integer, db.ForeignKey("student.id"), nullable=True)
+    data = db.Column(db.Text, nullable=False)  # JSON of answers
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_ip = db.Column(db.String(64), nullable=True)
+
+    situation = db.relationship(
+        "Situation", backref=db.backref("entries", lazy=True, cascade="all, delete-orphan")
+    )
+    student = db.relationship("Student", backref=db.backref("situation_entries", lazy=True))
+
+    def get_data(self):
+        try:
+            return json.loads(self.data)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    template_type = db.Column(
+        db.String(50), nullable=False
+    )  # 'permission', 'daily_leave', 'service'
+    created_by_user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id"), nullable=False
+    )
+    # JSON column to store the template data
+    data = db.Column(db.Text, nullable=False)
+
+    creator = db.relationship(
+        "User", backref=db.backref("leave_templates", lazy=True)
+    )
+
+    def get_data(self):
+        try:
+            return json.loads(self.data)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    def __repr__(self):
+        return f"<LeaveTemplate {self.id}: {self.name} ({self.template_type})>"
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
@@ -15225,6 +15309,268 @@ def delete_leave_template(template_id):
         flash(f"Eroare la ștergerea șablonului: {e}", "danger")
 
     return redirect(url_for("list_leave_templates"))
+
+
+# --- Situations: CRUD (Gradat) ---
+@app.route("/gradat/situations", methods=["GET"])
+@login_required
+def list_situations():
+    if current_user.role != "gradat":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+    situations = (
+        Situation.query.filter_by(created_by_user_id=current_user.id)
+        .order_by(Situation.id.desc())
+        .all()
+    )
+    return render_template("list_situations.html", situations=situations)
+
+
+@app.route("/gradat/situations/create", methods=["GET", "POST"])
+@login_required
+def create_situation():
+    if current_user.role != "gradat":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        description = request.form.get("description", "").strip()
+        fields_raw = request.form.get("fields_schema", "").strip()
+        if not title:
+            flash("Titlul situației este obligatoriu.", "warning")
+            return render_template("create_edit_situation.html", form_data=request.form, situation=None)
+        # Parse fields JSON (simple validation)
+        try:
+            fields_list = json.loads(fields_raw) if fields_raw else []
+            if not isinstance(fields_list, list):
+                raise ValueError("Schema trebuie să fie o listă de câmpuri.")
+        except Exception as e:
+            flash(f"Schema de câmpuri nu este JSON valid: {e}", "danger")
+            return render_template("create_edit_situation.html", form_data=request.form, situation=None)
+        new_sit = Situation(
+            title=title,
+            description=description or None,
+            fields_schema=json.dumps(fields_list, ensure_ascii=False),
+            created_by_user_id=current_user.id,
+            is_active=True,
+        )
+        db.session.add(new_sit)
+        try:
+            db.session.commit()
+            flash("Situația a fost creată.", "success")
+            return redirect(url_for("list_situations"))
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Eroare la creare: {e}", "danger")
+            return render_template("create_edit_situation.html", form_data=request.form, situation=None)
+    # GET
+    # Provide a small example schema
+    example = [
+        {"name": "student_name", "label": "Nume student", "type": "text", "required": True},
+        {"name": "date", "label": "Data", "type": "date", "required": True},
+        {"name": "start_time", "label": "Ora început", "type": "time", "required": False},
+        {"name": "end_time", "label": "Ora sfârșit", "type": "time", "required": False},
+        {"name": "details", "label": "Detalii", "type": "textarea", "required": False}
+    ]
+    return render_template("create_edit_situation.html", form_data={"fields_schema": json.dumps(example, ensure_ascii=False, indent=2)}, situation=None)
+
+
+@app.route("/gradat/situations/edit/<int:situation_id>", methods=["GET", "POST"])
+@login_required
+def edit_situation(situation_id):
+    if current_user.role != "gradat":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+    sit = Situation.query.get_or_404(situation_id)
+    if sit.created_by_user_id != current_user.id:
+        flash("Nu aveți drepturi la această situație.", "danger")
+        return redirect(url_for("list_situations"))
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        description = request.form.get("description", "").strip()
+        fields_raw = request.form.get("fields_schema", "").strip()
+        is_active = "is_active" in request.form
+        if not title:
+            flash("Titlul este obligatoriu.", "warning")
+            return render_template("create_edit_situation.html", form_data=request.form, situation=sit)
+        try:
+            fields_list = json.loads(fields_raw) if fields_raw else []
+            if not isinstance(fields_list, list):
+                raise ValueError("Schema trebuie să fie o listă.")
+        except Exception as e:
+            flash(f"Schema invalidă: {e}", "danger")
+            return render_template("create_edit_situation.html", form_data=request.form, situation=sit)
+        sit.title = title
+        sit.description = description or None
+        sit.fields_schema = json.dumps(fields_list, ensure_ascii=False)
+        sit.is_active = is_active
+        try:
+            db.session.commit()
+            flash("Situația a fost actualizată.", "success")
+            return redirect(url_for("list_situations"))
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Eroare la salvare: {e}", "danger")
+            return render_template("create_edit_situation.html", form_data=request.form, situation=sit)
+    # GET
+    return render_template(
+        "create_edit_situation.html",
+        form_data={
+            "title": sit.title,
+            "description": sit.description or "",
+            "fields_schema": json.dumps(sit.get_fields(), ensure_ascii=False, indent=2),
+            "is_active": sit.is_active,
+        },
+        situation=sit,
+    )
+
+
+@app.route("/gradat/situations/delete/<int:situation_id>", methods=["POST"])
+@login_required
+def delete_situation(situation_id):
+    if current_user.role != "gradat":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+    sit = Situation.query.get_or_404(situation_id)
+    if sit.created_by_user_id != current_user.id:
+        flash("Nu aveți drepturi la această situație.", "danger")
+        return redirect(url_for("list_situations"))
+    try:
+        db.session.delete(sit)
+        db.session.commit()
+        flash("Situația a fost ștearsă.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Eroare la ștergere: {e}", "danger")
+    return redirect(url_for("list_situations"))
+
+
+@app.route("/gradat/situations/<int:situation_id>/entries", methods=["GET"])
+@login_required
+def situation_entries(situation_id):
+    if current_user.role != "gradat":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+    sit = Situation.query.get_or_404(situation_id)
+    if sit.created_by_user_id != current_user.id:
+        flash("Nu aveți drepturi la această situație.", "danger")
+        return redirect(url_for("list_situations"))
+    entries = (
+        SituationEntry.query.filter_by(situation_id=situation_id)
+        .order_by(SituationEntry.created_at.desc())
+        .all()
+    )
+    return render_template("situation_entries.html", situation=sit, entries=entries)
+
+
+@app.route("/gradat/situations/<int:situation_id>/export_csv", methods=["GET"])
+@login_required
+def export_situation_csv(situation_id):
+    if current_user.role != "gradat":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+    sit = Situation.query.get_or_404(situation_id)
+    if sit.created_by_user_id != current_user.id:
+        flash("Nu aveți drepturi la această situație.", "danger")
+        return redirect(url_for("list_situations"))
+    # Build CSV in-memory
+    fields = sit.get_fields()
+    headers = ["ID", "Created At"] + [f.get("label", f.get("name", "")) for f in fields]
+    import csv
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    for e in SituationEntry.query.filter_by(situation_id=situation_id).order_by(SituationEntry.created_at.asc()).all():
+        data = e.get_data()
+        row = [e.id, e.created_at.strftime("%Y-%m-%d %H:%M")]
+        for f in fields:
+            row.append(data.get(f.get("name", ""), ""))
+        writer.writerow(row)
+    mem = io.BytesIO(output.getvalue().encode("utf-8"))
+    mem.seek(0)
+    filename = f"Situatie_{sit.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.csv"
+    return send_file(mem, download_name=filename, as_attachment=True, mimetype="text/csv")
+
+
+@app.route("/gradat/situations/<int:situation_id>/generate_link", methods=["POST"])
+@login_required
+def generate_situation_link(situation_id):
+    if current_user.role != "gradat":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+    sit = Situation.query.get_or_404(situation_id)
+    if sit.created_by_user_id != current_user.id:
+        flash("Nu aveți drepturi la această situație.", "danger")
+        return redirect(url_for("list_situations"))
+    expiry_hours = request.form.get("expiry_hours", type=int, default=24)
+    new_code = secrets.token_hex(8)
+    # Ensure uniqueness
+    while Situation.query.filter_by(public_code=new_code).first():
+        new_code = secrets.token_hex(8)
+    sit.public_code = new_code
+    sit.public_expires_at = datetime.utcnow() + timedelta(hours=expiry_hours)
+    try:
+        db.session.commit()
+        share_url = url_for("public_situation_submit", code=new_code, _external=True)
+        flash(f"Link generat: {share_url}", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Eroare la generarea linkului: {e}", "danger")
+    return redirect(url_for("situation_entries", situation_id=situation_id))
+
+
+# --- Public submission page ---
+@app.route("/public/s/<code>", methods=["GET", "POST"])
+def public_situation_submit(code):
+    sit = Situation.query.filter_by(public_code=code).first()
+    if not sit or not sit.is_public_open():
+        flash("Link invalid sau expirat.", "danger")
+        return redirect(url_for("public_view_login"))
+    fields = sit.get_fields()
+    if request.method == "POST":
+        # Validate and store
+        answers = {}
+        errors = []
+        for fdef in fields:
+            name = fdef.get("name")
+            if not name:
+                continue
+            ftype = fdef.get("type", "text")
+            required = bool(fdef.get("required"))
+            val = request.form.get(name, "").strip()
+            if required and not val:
+                errors.append(f'Campul "{fdef.get("label", name)}" este obligatoriu.')
+                continue
+            # minimal normalization
+            if ftype in ("date", "time"):
+                # accept as text; client provides proper input types
+                answers[name] = val
+            elif ftype == "select":
+                answers[name] = val
+            elif ftype == "textarea":
+                answers[name] = val
+            else:
+                answers[name] = val
+        if errors:
+            for e in errors:
+                flash(e, "warning")
+            return render_template("public_situation_submit.html", situation=sit, fields=fields, form_data=request.form)
+        new_entry = SituationEntry(
+            situation_id=sit.id,
+            data=json.dumps(answers, ensure_ascii=False),
+            created_ip=request.remote_addr or None,
+        )
+        db.session.add(new_entry)
+        try:
+            db.session.commit()
+            flash("Răspuns trimis. Mulțumim!", "success")
+            return render_template("public_situation_submit.html", situation=sit, fields=fields, form_data={})
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Eroare la salvare: {e}", "danger")
+            return render_template("public_situation_submit.html", situation=sit, fields=fields, form_data=request.form)
+    # GET
+    return render_template("public_situation_submit.html", situation=sit, fields=fields, form_data={})
 
 
 if __name__ == "__main__":

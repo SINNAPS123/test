@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Situații (Formulare){% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0"><i class="fas fa-list-alt me-2"></i> Situații (Formulare)</h2>
+  <a href="{{ url_for('create_situation') }}" class="btn btn-primary">
+    <i class="fas fa-plus me-2"></i> Creează Situație
+  </a>
+</div>
+
+<p class="text-muted">Creează și distribuie formulare personalizate (situații/tabele) pentru a colecta informații direct de la studenți. Poți genera link public temporar pentru completare.</p>
+
+<div class="card shadow-sm">
+  <div class="list-group list-group-flush">
+    {% if situations %}
+      {% for s in situations %}
+      <div class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+          <h5 class="mb-1">{{ s.title }}</h5>
+          <small class="text-muted">
+            {{ s.description or '' }}
+            {% if s.is_active %}
+              <span class="badge bg-success ms-2">Activă</span>
+            {% else %}
+              <span class="badge bg-secondary ms-2">Inactivă</span>
+            {% endif %}
+            {% if s.public_code %}
+              <span class="badge bg-info ms-2">Link</span>
+            {% endif %}
+          </small>
+        </div>
+        <div class="btn-group">
+          <a href="{{ url_for('situation_entries', situation_id=s.id) }}" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-table"></i> Răspunsuri
+          </a>
+          <a href="{{ url_for('edit_situation', situation_id=s.id) }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-edit"></i> Editează
+          </a>
+          <form action="{{ url_for('delete_situation', situation_id=s.id) }}" method="POST" onsubmit="return confirm('Ștergi situația?');" style="display:inline;">
+            <button type="submit" class="btn btn-outline-danger btn-sm">
+              <i class="fas fa-trash"></i> Șterge
+            </button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="list-group-item">
+        <div class="alert alert-info mb-0">Nu ai creat nicio situație încă.</div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
