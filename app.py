@@ -267,6 +267,7 @@ SUBUSER_MODULE_CHOICES = [
     ("/gradat/daily_leaves", "Învoiri Zilnice"),
     ("/gradat/weekend_leaves", "Învoiri Weekend"),
     ("/gradat/services", "Servicii"),
+    ("/gradat/situations", "Formulare (Situații)"),
     ("/volunteer", "Voluntariat"),
     ("/gradat/brief", "Brief"),
     ("/gradat/insights", "Insights"),
@@ -2578,11 +2579,40 @@ def _apply_subuser_scope_and_permissions():
 
             # Explicit synonyms for modules that have action endpoints under slightly different prefixes
             synonyms = {
-                "/gradat/students": ["/gradat/student", "/gradat/delete_student"],
-                "/gradat/permissions": ["/gradat/permission"],
-                "/gradat/daily_leaves": ["/gradat/daily_leave"],
-                "/gradat/weekend_leaves": ["/gradat/weekend_leave"],
-                "/gradat/services": ["/gradat/service"],
+                "/gradat/students": [
+                    "/gradat/student",
+                    "/gradat/delete_student",
+                    "/gradat/batch_action",  # batch ops on students
+                    "/gradat/students/batch_action",
+                    "/gradat/students/bulk_import_page",
+                ],
+                "/gradat/permissions": [
+                    "/gradat/permission",
+                    "/gradat/bulk_add_permission",
+                    "/gradat/gradat_import_permissions",
+                    "/gradat/import_permissions",
+                ],
+                "/gradat/daily_leaves": [
+                    "/gradat/daily_leave",
+                    "/gradat/bulk_add_daily_leave",
+                ],
+                "/gradat/weekend_leaves": [
+                    "/gradat/weekend_leave",
+                    "/gradat/bulk_add_weekend_leave",
+                    "/gradat/gradat_import_weekend_leaves",
+                    "/gradat/import_weekend_leaves",
+                ],
+                "/gradat/services": [
+                    "/gradat/service",
+                    "/gradat/assign_service",
+                    "/assign_multiple_services",
+                ],
+                "/gradat/situations": [
+                    "/gradat/situation",
+                    "/gradat/situations",
+                    "/public_situation",
+                    "/public_situation_submit",
+                ],
             }
             for base, extras in synonyms.items():
                 if base in allowed_prefixes:

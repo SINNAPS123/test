@@ -52,6 +52,25 @@ html.dark-mode-preload {
   --shadow-sm: 0 1px 2px 0 rgba(20,25,40,0.18);
 }
 
+/* Improve contrast for list groups and active items in dark mode */
+[data-theme="dark"] .list-group-item,
+html.dark-mode-preload .list-group-item {
+  background-color: #1f2735 !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+[data-theme="dark"] .list-group-item.active,
+html.dark-mode-preload .list-group-item.active {
+  background-color: #0f172a !important; /* darker highlight */
+  color: #e6f0ff !important;
+  border-color: #1e293b !important;
+}
+[data-theme="dark"] .bg-light,
+html.dark-mode-preload .bg-light {
+  background-color: #1f2735 !important;
+  color: var(--text) !important;
+}
+
 /*------------------------------------------------------------------------------
   2. Bootstrap Variable Overrides & Body
 ------------------------------------------------------------------------------*/
