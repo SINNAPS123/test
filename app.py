@@ -2564,8 +2564,40 @@ def _apply_subuser_scope_and_permissions():
             for pref in SUBUSER_SAFE_PREFIXES:
                 if path.startswith(pref):
                     return
-            allowed_prefixes = current_user.get_allowed_modules()
-            if not any(path.startswith(p) for p in (allowed_prefixes or [])):
+            allowed_prefixes = current_user.get_allowed_modules() or []
+
+            # Expand aliases so that granting a module gives access to its add/edit/cancel endpoints too.
+            effective_allowed = set()
+            for pref in allowed_prefixes:
+                if not pref:
+                    continue
+                base = pref.rstrip("/")
+                # include base with and without trailing slash
+                effective_allowed.add(base)
+                effective_allowed.add(base + "/")
+                # Generic singularization: '/.../permissions' -> '/.../permission', '/.../students' -> '/.../student', etc.
+                if base.endswith("s"):
+                    singular = base[:-1]
+                    effective_allowed.add(singular)
+                    effective_allowed.add(singular + "/")
+
+            # Explicit synonyms for modules that have action endpoints under slightly different prefixes
+            synonyms = {
+                "/gradat/students": ["/gradat/student", "/gradat/delete_student"],
+                "/gradat/permissions": ["/gradat/permission"],
+                "/gradat/daily_leaves": ["/gradat/daily_leave"],
+                "/gradat/weekend_leaves": ["/gradat/weekend_leave"],
+                "/gradat/services": ["/gradat/service"],
+            }
+            for base, extras in synonyms.items():
+                if base in allowed_prefixes:
+                    for extra in extras:
+                        # add with and without trailing slash
+                        eff_base = extra.rstrip("/")
+                        effective_allowed.add(eff_base)
+                        effective_allowed.add(eff_base + "/")
+
+            if not any(path.startswith(p) for p in effective_allowed):
                 flash("Nu aveți permisiunea să accesați această pagină (subutilizator).", "danger")
                 return redirect(url_for("dashboard"))
     except Exception:
