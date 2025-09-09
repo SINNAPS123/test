@@ -1187,9 +1187,15 @@ def gradat_insights():
         flash("Acces neautorizat.", "danger")
         return redirect(url_for("dashboard"))
 
-    # Scope to students managed by current gradat
+    eff_user = get_current_user_or_scoped()
+    students_q = Student.query.filter_by(created_by_user_id=eff_user.id)
+    try:
+        if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+            students_q = students_q.filter(Student.pluton == str(g.subuser_platoon))
+    except Exception:
+        pass
     students_managed = (
-        Student.query.filter_by(created_by_user_id=current_user.id)
+        students_q
         .with_entities(Student.id, Student.nume, Student.prenume)
         .all()
     )
@@ -1795,11 +1801,14 @@ def gradat_brief():
     if current_user.role != "gradat":
         flash("Acces neautorizat.", "danger")
         return redirect(url_for("dashboard"))
-    students = (
-        Student.query.filter_by(created_by_user_id=current_user.id)
-        .with_entities(Student.id)
-        .all()
-    )
+    eff_user = get_current_user_or_scoped()
+    students_q = Student.query.filter_by(created_by_user_id=eff_user.id)
+    try:
+        if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+            students_q = students_q.filter(Student.pluton == str(g.subuser_platoon))
+    except Exception:
+        pass
+    students = students_q.with_entities(Student.id).all()
     student_ids = [sid for sid, in students]
     data = _collect_brief(scope_student_ids=student_ids)
     return render_template(
@@ -1975,11 +1984,14 @@ def gradat_conflicts():
     if current_user.role != "gradat":
         flash("Acces neautorizat.", "danger")
         return redirect(url_for("dashboard"))
-    students = (
-        Student.query.filter_by(created_by_user_id=current_user.id)
-        .with_entities(Student.id)
-        .all()
-    )
+    eff_user = get_current_user_or_scoped()
+    students_q = Student.query.filter_by(created_by_user_id=eff_user.id)
+    try:
+        if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+            students_q = students_q.filter(Student.pluton == str(g.subuser_platoon))
+    except Exception:
+        pass
+    students = students_q.with_entities(Student.id).all()
     student_ids = [sid for sid, in students]
     conflicts = _collect_conflicts(student_ids)
     return render_template(
@@ -2749,14 +2761,14 @@ def dashboard():
     if current_user.role == "admin":
         return redirect(url_for("admin_dashboard_route"))
     elif current_user.role == "gradat":
-        student_ids_managed = [
-            sid
-            for (sid,) in Student.query.filter_by(
-                created_by_user_id=current_user.id
-            )
-            .with_entities(Student.id)
-            .all()
-        ]
+        eff_user = get_current_user_or_scoped()
+        students_q = Student.query.filter_by(created_by_user_id=eff_user.id)
+        try:
+            if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                students_q = students_q.filter(Student.pluton == str(g.subuser_platoon))
+        except Exception:
+            pass
+        student_ids_managed = [sid for (sid,) in students_q.with_entities(Student.id).all()]
         student_count = len(student_ids_managed)
 
         today_localized = get_localized_now().date()
@@ -2806,14 +2818,12 @@ def dashboard():
         ).count()
 
         total_volunteer_activities = VolunteerActivity.query.filter_by(
-            created_by_user_id=current_user.id
+            created_by_user_id=eff_user.id
         ).count()
 
         # Data for "Mini Situație Pluton (ACUM)"
         now_for_dashboard = get_localized_now()
-        students_managed_by_gradat = Student.query.filter_by(
-            created_by_user_id=current_user.id
-        ).all()
+        students_managed_by_gradat = students_q.all()
 
         # Use _calculate_presence_data for current situation
         # Ensure _calculate_presence_data correctly identifies "present in formation"
@@ -2894,11 +2904,11 @@ def dashboard():
             todays_services=todays_services,
             # Quick Stats
             students_with_high_points=Student.query.filter(
-                Student.created_by_user_id == current_user.id,
+                Student.created_by_user_id == eff_user.id,
                 Student.volunteer_points > 10,
             ).count(),
             active_scoped_codes=ScopedAccessCode.query.filter_by(
-                created_by_user_id=current_user.id, is_active=True
+                created_by_user_id=eff_user.id, is_active=True
             )
             .filter(ScopedAccessCode.expires_at > get_localized_now())
             .all(),
@@ -6485,12 +6495,20 @@ def batch_action_students():
     skipped_count = 0
     conflict_details = []
 
+    eff_user = get_current_user_or_scoped()
+
     # This is a single transaction. If one fails, the whole batch is rolled back.
     try:
         for student_id_str in student_ids:
             student_id = int(student_id_str)
             student = db.session.get(Student, student_id)
-            if not student or student.created_by_user_id != current_user.id:
+            allowed = bool(student and student.created_by_user_id == eff_user.id)
+            try:
+                if allowed and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                    allowed = str(student.pluton).strip() == str(g.subuser_platoon)
+            except Exception:
+                pass
+            if not allowed:
                 conflict_details.append(
                     f"Studentul cu ID {student_id_str} nu este valid sau nu vă aparține."
                 )
@@ -6664,6 +6682,11 @@ def add_student():
         pluton = form.get("pluton", "").strip()
         companie = form.get("companie", "").strip()
         batalion = form.get("batalion", "").strip()
+        try:
+            if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                pluton = str(g.subuser_platoon)
+        except Exception:
+            pass
         is_platoon_graded_duty_val = "is_platoon_graded_duty" in request.form
         is_smt_val = "is_smt" in request.form  # Read SMT status
         exemption_details_val = (
@@ -6714,6 +6737,7 @@ def add_student():
                 form_data=request.form,
             )
 
+        eff_user = get_current_user_or_scoped()
         new_student = Student(
             nume=nume,
             prenume=prenume,
@@ -6727,7 +6751,7 @@ def add_student():
             assigned_graded_platoon=assigned_graded_platoon_val,
             is_smt=is_smt_val,
             exemption_details=exemption_details_val,
-            created_by_user_id=current_user.id,
+            created_by_user_id=eff_user.id,
         )
         db.session.add(new_student)
         try:
@@ -6803,8 +6827,9 @@ def edit_student(student_id):
         flash("Acces neautorizat.", "danger")
         return redirect(url_for("home"))
 
+    eff_user = get_current_user_or_scoped()
     s_edit = Student.query.filter_by(
-        id=student_id, created_by_user_id=current_user.id
+        id=student_id, created_by_user_id=eff_user.id
     ).first_or_404()
     details_before_edit = model_to_dict(
         s_edit
@@ -6815,7 +6840,13 @@ def edit_student(student_id):
         s_edit.nume = form.get("nume", "").strip()
         s_edit.prenume = form.get("prenume", "").strip()
         s_edit.grad_militar = form.get("grad_militar", "").strip()
-        s_edit.pluton = form.get("pluton", "").strip()
+        new_pluton_val = form.get("pluton", "").strip()
+        try:
+            if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                new_pluton_val = str(g.subuser_platoon)
+        except Exception:
+            pass
+        s_edit.pluton = new_pluton_val
         s_edit.companie = form.get("companie", "").strip()
         s_edit.batalion = form.get("batalion", "").strip()
         s_edit.gender = form.get("gender")
@@ -7178,12 +7209,17 @@ def delete_student(student_id):
         flash("Acces neautorizat.", "danger")
         return redirect(url_for("home"))
     student_to_delete = Student.query.get_or_404(student_id)
-    if (
-        current_user.role == "gradat"
-        and student_to_delete.created_by_user_id != current_user.id
-    ):
-        flash("Nu puteți șterge studenți care nu vă sunt arondați.", "danger")
-        return redirect(url_for("list_students"))
+    if current_user.role == "gradat":
+        eff_user = get_current_user_or_scoped()
+        allowed = student_to_delete.created_by_user_id == eff_user.id
+        try:
+            if allowed and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                allowed = str(student_to_delete.pluton).strip() == str(g.subuser_platoon)
+        except Exception:
+            pass
+        if not allowed:
+            flash("Nu puteți șterge studenți care nu vă sunt arondați.", "danger")
+            return redirect(url_for("list_students"))
 
     if (
         current_user.role == "admin"
@@ -7248,11 +7284,14 @@ def list_permissions():
     if current_user.role != "gradat":
         flash("Acces neautorizat.", "danger")
         return redirect(url_for("dashboard"))
-    student_id_tuples = (
-        db.session.query(Student.id)
-        .filter_by(created_by_user_id=current_user.id)
-        .all()
-    )
+    eff_user = get_current_user_or_scoped()
+    students_q = Student.query.filter_by(created_by_user_id=eff_user.id)
+    try:
+        if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+            students_q = students_q.filter(Student.pluton == str(g.subuser_platoon))
+    except Exception:
+        pass
+    student_id_tuples = students_q.with_entities(Student.id).all()
     student_ids_managed_by_gradat = [sid for (sid,) in student_id_tuples]
     if not student_ids_managed_by_gradat:
         return render_template(
@@ -7319,18 +7358,31 @@ def add_edit_permission(permission_id=None):
         return redirect(url_for("dashboard"))
     form_title = "Adaugă Permisie Nouă"
     permission = None
+    eff_user = get_current_user_or_scoped()
     if permission_id:
         permission = Permission.query.get_or_404(permission_id)
         student_of_permission = Student.query.get(permission.student_id)
-        if (
-            not student_of_permission
-            or student_of_permission.created_by_user_id != current_user.id
-        ):
+        allowed = bool(
+            student_of_permission
+            and student_of_permission.created_by_user_id == eff_user.id
+        )
+        try:
+            if allowed and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                allowed = str(student_of_permission.pluton).strip() == str(g.subuser_platoon)
+        except Exception:
+            pass
+        if not allowed:
             flash("Acces neautorizat la această permisie.", "danger")
             return redirect(url_for("list_permissions"))
         form_title = f"Editare Permisie: {student_of_permission.grad_militar} {student_of_permission.nume} {student_of_permission.prenume}"
+    students_managed_q = Student.query.filter_by(created_by_user_id=eff_user.id)
+    try:
+        if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+            students_managed_q = students_managed_q.filter(Student.pluton == str(g.subuser_platoon))
+    except Exception:
+        pass
     students_managed = (
-        Student.query.filter_by(created_by_user_id=current_user.id)
+        students_managed_q
         .order_by(Student.nume)
         .all()
     )
@@ -7385,10 +7437,16 @@ def add_edit_permission(permission_id=None):
         student_to_check = db.session.get(
             Student, int(student_id)
         )  # Use db.session.get for clarity
-        if (
-            not student_to_check
-            or student_to_check.created_by_user_id != current_user.id
-        ):
+        eff_user = get_current_user_or_scoped()
+        allowed_student = bool(
+            student_to_check and student_to_check.created_by_user_id == eff_user.id
+        )
+        try:
+            if allowed_student and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                allowed_student = str(student_to_check.pluton).strip() == str(g.subuser_platoon)
+        except Exception:
+            pass
+        if not allowed_student:
             flash("Student invalid sau nu vă aparține.", "danger")
             return render_template(
                 "add_edit_permission.html",
@@ -8164,6 +8222,20 @@ def cancel_permission(permission_id):
         return redirect(url_for("dashboard"))
     permission = Permission.query.get_or_404(permission_id)
     student_of_permission = Student.query.get(permission.student_id)
+    eff_user = get_current_user_or_scoped()
+    allowed = bool(
+        student_of_permission
+        and student_of_permission.created_by_user_id == eff_user.id
+    )
+    try:
+        if allowed and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+            allowed = str(student_of_permission.pluton).strip() == str(g.subuser_platoon)
+    except Exception:
+        pass
+    if not allowed:
+        flash("Acces neautorizat la această permisie.", "danger")
+        return redirect(url_for("list_permissions"))
+    form_title = f"Editare Permisie: {student_of_permission.grad_militar} {student_of_permission.nume} {student_of_permission.prenume}"
     if (
         not student_of_permission
         or student_of_permission.created_by_user_id != current_user.id
