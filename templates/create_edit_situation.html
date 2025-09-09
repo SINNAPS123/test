@@ -43,34 +43,34 @@
   {% endif %}
 
   <div class="mb-2">
-    <label class="form-label">Schema câmpuri (JSON - listă de obiecte)</label>
+    <label class="form-label">Structura Formularului (generată automat)</label>
     <textarea class="form-control" name="fields_schema" id="fields_schema" rows="10">{{ form_data.fields_schema or '' }}</textarea>
     <div class="form-text">
-      Aveți mai jos un constructor vizual de câmpuri. Puteți folosi doar constructorul, JSON-ul se va completa automat.
+      Folosiți constructorul de mai jos pentru a adăuga și edita câmpuri. Câmpul de text de mai sus se va actualiza automat și nu necesită editare manuală.
     </div>
   </div>
 
   <!-- Builder vizual pentru câmpuri -->
   <div class="card mb-3">
     <div class="card-header d-flex align-items-center justify-content-between">
-      <span><i class="fas fa-wrench me-2"></i>Constructor câmpuri</span>
+      <span><i class="fas fa-wrench me-2"></i>Constructor Câmpuri Formular</span>
       <div class="d-none d-md-flex align-items-center gap-2 small text-muted">
-        <i class="fas fa-mouse-pointer"></i> Dublu-clic pe un câmp din listă pentru editare
+        <i class="fas fa-mouse-pointer"></i> Dublu-clic pe un câmp pentru a-l edita.
       </div>
     </div>
     <div class="card-body">
       <div class="row g-2">
         <div class="col-md-3">
-          <label class="form-label">Label</label>
+          <label class="form-label">Etichetă Câmp</label>
           <input type="text" id="b_label" class="form-control" placeholder="Ex. Nume student">
         </div>
         <div class="col-md-3">
-          <label class="form-label">Name</label>
+          <label class="form-label">Nume Tehnic (ID)</label>
           <input type="text" id="b_name" class="form-control" placeholder="ex: student_name">
-          <div class="form-text">Se generează automat din Label (poți personaliza).</div>
+          <div class="form-text">ID unic. Se generează automat din etichetă.</div>
         </div>
         <div class="col-md-3">
-          <label class="form-label">Tip</label>
+          <label class="form-label">Tip Câmp</label>
           <select id="b_type" class="form-select">
             <option value="text">text</option>
             <option value="textarea">textarea</option>
@@ -85,8 +85,7 @@
             <option value="student_select">student_select</option>
           </select>
           <div class="form-text">
-            Tipuri suportate: text, textarea, date, time, number, email, tel, checkbox (da/nu),
-            radio/select (cu opțiuni), student_select (lista studenților din plutonul tău).
+            Tipuri: text, textarea, date, time, number, email, tel, checkbox, radio/select, student_select (listă studenți).
           </div>
         </div>
         <div class="col-md-3">
@@ -98,26 +97,28 @@
         </div>
 
         <div class="col-12 col-md-6">
-          <label class="form-label">Opțiuni (pentru select/radio) - separate prin virgulă</label>
+          <label class="form-label">Opțiuni (separate prin virgulă)</label>
           <input type="text" id="b_options" class="form-control" placeholder="ex: Opțiunea 1, Opțiunea 2">
         </div>
         <div class="col-12 col-md-6">
-          <label class="form-label">Placeholder</label>
-          <input type="text" id="b_placeholder" class="form-control" placeholder="Text de ajutor în câmp">
+          <label class="form-label">Text Sugerare (Placeholder)</label>
+          <input type="text" id="b_placeholder" class="form-control" placeholder="Apare în interiorul câmpului gol.">
         </div>
         <div class="col-12">
-          <label class="form-label">Text ajutător (sub câmp)</label>
-          <input type="text" id="b_help" class="form-control" placeholder="Instrucțiuni scurte pentru utilizator">
+          <label class="form-label">Text Ajutător (sub câmp)</label>
+          <input type="text" id="b_help" class="form-control" placeholder="Apare sub câmp ca o instrucțiune.">
         </div>
         <div class="col-12 col-md-6">
-          <label class="form-label">Valoare implicită</label>
-          <input type="text" id="b_default" class="form-control" placeholder="Ex: da / un text / o opțiune">
+          <label class="form-label">Valoare Predefinită</label>
+          <input type="text" id="b_default" class="form-control" placeholder="Pentru checkbox, folosiți 'true'.">
         </div>
       </div>
 
-      <div class="mt-3 d-flex flex-wrap gap-2">
-        <button type="button" id="add_field_btn" class="btn btn-outline-primary"><i class="fas fa-plus me-1"></i>Adaugă câmp</button>
-        <button type="button" id="clear_fields_btn" class="btn btn-outline-danger"><i class="fas fa-trash me-1"></i>Golește lista</button>
+      <div class="mt-3 d-flex flex-wrap gap-2" id="form_actions">
+        <button type="button" id="add_field_btn" class="btn btn-outline-primary"><i class="fas fa-plus me-1"></i>Adaugă Câmp Nou</button>
+        <button type="button" id="update_field_btn" class="btn btn-primary d-none"><i class="fas fa-save me-1"></i>Salvează Modificările</button>
+        <button type="button" id="cancel_edit_btn" class="btn btn-secondary d-none"><i class="fas fa-times me-1"></i>Anulează</button>
+        <button type="button" id="clear_fields_btn" class="btn btn-outline-danger"><i class="fas fa-trash me-1"></i>Golește Toate Câmpurile</button>
 
         <div class="dropdown">
           <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
@@ -135,13 +136,13 @@
 
       <hr>
       <div class="d-flex justify-content-between align-items-center">
-        <h6 class="mb-0">Câmpuri definite</h6>
-        <small class="text-muted">Trage și plasează sau folosește săgețile pentru reordonare</small>
+        <h6 class="mb-0">Listă Câmpuri</h6>
+        <small class="text-muted">Trageți pentru a reordona.</small>
       </div>
       <ul id="fields_list" class="list-group small mt-2"></ul>
 
       <hr>
-      <h6>Previzualizare formular</h6>
+      <h6>Previzualizare Formular</h6>
       <div id="form_preview" class="border rounded p-3 bg-light"></div>
     </div>
   </div>
@@ -154,7 +155,7 @@
 
 <script>
 (function(){
-  const $ = (sel) => document.querySelector(sel);
+  let currentlyEditingIndex = null;
 
   function slugify(str){
     return (str || '')
@@ -211,14 +212,17 @@
       </div>
     `;
 
-    // Drag & drop handlers
     li.addEventListener('dragstart', (e)=> {
-      e.dataTransfer.setData('text/plain', String(idx));
-      li.classList.add('opacity-50');
+      if (currentlyEditingIndex !== null) e.preventDefault();
+      else {
+        e.dataTransfer.setData('text/plain', String(idx));
+        li.classList.add('opacity-50');
+      }
     });
     li.addEventListener('dragend', ()=> li.classList.remove('opacity-50'));
     li.addEventListener('dragover', (e)=> e.preventDefault());
     li.addEventListener('drop', (e)=> {
+      if (currentlyEditingIndex !== null) return;
       e.preventDefault();
       const from = parseInt(e.dataTransfer.getData('text/plain'),10);
       const to = idx;
@@ -228,12 +232,11 @@
       refreshList();
     });
 
-    // Double click to edit
     li.addEventListener('dblclick', ()=> openEditor(idx));
 
-    // Button actions
     li.querySelectorAll('button').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        if (currentlyEditingIndex !== null && btn.getAttribute('data-act') !== 'edit') return;
         const act = btn.getAttribute('data-act');
         const arr = readSchema();
         if (act === 'up'){
@@ -253,7 +256,6 @@
         }
       });
     });
-
     return li;
   }
 
@@ -273,101 +275,18 @@
       label.textContent = f.label || f.name;
       if (f.required) label.innerHTML += ' <span class="text-danger">*</span>';
       wrap.appendChild(label);
-
       let inputEl = null;
       switch(f.type){
-        case 'textarea':
-          inputEl = document.createElement('textarea');
-          inputEl.className = 'form-control';
-          inputEl.rows = 3;
-          inputEl.placeholder = f.placeholder || ('Introduceți ' + (f.label||f.name).toLowerCase() + '...');
-          inputEl.value = f.default || '';
-          break;
-        case 'date':
-        case 'time':
-        case 'email':
-        case 'tel':
-        case 'number':
-        case 'text':
-          inputEl = document.createElement('input');
-          inputEl.type = f.type === 'text' ? 'text' : f.type;
-          inputEl.className = 'form-control';
-          inputEl.placeholder = f.placeholder || '';
-          inputEl.value = f.default || '';
-          break;
-        case 'select':
-        case 'student_select':
-          inputEl = document.createElement('select');
-          inputEl.className = 'form-select';
-          const placeholderOpt = document.createElement('option');
-          placeholderOpt.value = '';
-          placeholderOpt.textContent = f.placeholder || '-- selectează --';
-          inputEl.appendChild(placeholderOpt);
-          (f.options || []).forEach(opt=>{
-            const o = document.createElement('option');
-            o.value = opt; o.textContent = opt;
-            if (f.default && f.default === opt) o.selected = true;
-            inputEl.appendChild(o);
-          });
-          break;
-        case 'radio':
-          inputEl = document.createElement('div');
-          inputEl.className = 'd-flex flex-wrap gap-3';
-          (f.options || []).forEach((opt, i)=>{
-            const div = document.createElement('div');
-            div.className = 'form-check';
-            const inp = document.createElement('input');
-            inp.type = 'radio';
-            inp.className = 'form-check-input';
-            inp.name = f.name;
-            inp.id = f.name + '_' + (i+1);
-            inp.value = opt;
-            if (f.default && f.default === opt) inp.checked = true;
-            inp.disabled = true;
-            const lab = document.createElement('label');
-            lab.className = 'form-check-label';
-            lab.setAttribute('for', inp.id);
-            lab.textContent = opt;
-            div.appendChild(inp); div.appendChild(lab);
-            inputEl.appendChild(div);
-          });
-          break;
-        case 'checkbox':
-          inputEl = document.createElement('div');
-          inputEl.className = 'form-check';
-          const chk = document.createElement('input');
-          chk.type = 'checkbox';
-          chk.className = 'form-check-input';
-          chk.id = f.name;
-          if (['1','true','True','on','yes'].includes(String(f.default))) chk.checked = true;
-          chk.disabled = true;
-          const labc = document.createElement('label');
-          labc.className = 'form-check-label';
-          labc.setAttribute('for', f.name);
-          labc.textContent = f.placeholder || 'Bifează dacă este cazul';
-          inputEl.appendChild(chk); inputEl.appendChild(labc);
-          break;
-        default:
-          inputEl = document.createElement('input');
-          inputEl.type = 'text';
-          inputEl.className = 'form-control';
-          inputEl.placeholder = f.placeholder || ('Introduceți ' + (f.label||f.name).toLowerCase() + '...');
-          inputEl.value = f.default || '';
+        case 'textarea': inputEl = document.createElement('textarea'); inputEl.className='form-control'; inputEl.rows=3; break;
+        case 'select': case 'student_select': inputEl = document.createElement('select'); inputEl.className='form-select'; inputEl.innerHTML=`<option value="">${f.placeholder||'-- selectează --'}</option>`+(f.options||[]).map(o=>`<option value="${o}">${o}</option>`).join(''); break;
+        case 'radio': inputEl = document.createElement('div'); inputEl.className='d-flex flex-wrap gap-3'; (f.options||[]).forEach((opt,i)=>{ const div=document.createElement('div'); div.className='form-check'; div.innerHTML=`<input type="radio" class="form-check-input" name="${f.name}" id="${f.name}_${i+1}" value="${o}" disabled><label class="form-check-label" for="${f.name}_${i+1}">${o}</label>`; inputEl.appendChild(div); }); break;
+        case 'checkbox': inputEl = document.createElement('div'); inputEl.className='form-check'; inputEl.innerHTML=`<input type="checkbox" class="form-check-input" id="${f.name}" disabled><label class="form-check-label" for="${f.name}">${f.placeholder||'Bifează'}</label>`; break;
+        default: inputEl = document.createElement('input'); inputEl.type = f.type || 'text'; inputEl.className = 'form-control';
       }
-
-      // In previzualizare nu validăm browser-side și nu blocăm salvarea: nu setăm required și dezactivăm câmpurile.
-      if (inputEl) {
-        if (inputEl.tagName !== 'DIV') {
-          inputEl.disabled = true;
-        }
-      }
-      wrap.appendChild(inputEl);
-      if (f.help){
-        const help = document.createElement('div');
-        help.className = 'form-text';
-        help.textContent = f.help;
-        wrap.appendChild(help);
-      }
+      if(inputEl.placeholder !== undefined) inputEl.placeholder = f.placeholder || '';
+      if(f.default && inputEl.value !== undefined) inputEl.value = f.default;
+      if (inputEl) { if (inputEl.tagName !== 'DIV') inputEl.disabled = true; wrap.appendChild(inputEl); }
+      if (f.help){ const help = document.createElement('div'); help.className = 'form-text'; help.textContent = f.help; wrap.appendChild(help); }
       container.appendChild(wrap);
     });
   }
@@ -376,9 +295,7 @@
     const ul = document.getElementById('fields_list');
     const arr = readSchema();
     ul.innerHTML = '';
-    arr.forEach((f, idx) => {
-      ul.appendChild(renderListItem(f, idx));
-    });
+    arr.forEach((f, idx) => ul.appendChild(renderListItem(f, idx)));
     renderPreview();
   }
 
@@ -386,18 +303,15 @@
     const label = document.getElementById('b_label').value.trim();
     const nameManual = document.getElementById('b_name').value.trim();
     const name = nameManual || slugify(label);
+    if (!name) { alert('Eticheta (Label) sau Numele Tehnic (Name) este obligatoriu.'); return null; }
     const type = document.getElementById('b_type').value;
     const required = document.getElementById('b_required').value === 'true';
     const optionsRaw = document.getElementById('b_options').value.trim();
     const placeholder = document.getElementById('b_placeholder').value.trim();
     const help = document.getElementById('b_help').value.trim();
     const def = document.getElementById('b_default').value.trim();
-
-    if (!name) { alert('Câmpul name este obligatoriu (completează Label sau Name).'); return null; }
     const field = { name, label: label || name, type, required };
-    if (type === 'select' || type === 'radio') {
-      field.options = optionsRaw ? optionsRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
-    }
+    if (type === 'select' || type === 'radio') field.options = optionsRaw ? optionsRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
     if (placeholder) field.placeholder = placeholder;
     if (help) field.help = help;
     if (def) field.default = def;
@@ -417,105 +331,86 @@
 
   function clearBuilderInputs(){
     setInputsFromField({type:'text', required:false});
+    document.getElementById('b_label').focus();
+  }
+
+  function setBuilderMode(mode, index = null) {
+    currentlyEditingIndex = (mode === 'edit') ? index : null;
+    document.getElementById('add_field_btn').classList.toggle('d-none', mode === 'edit');
+    document.getElementById('update_field_btn').classList.toggle('d-none', mode !== 'edit');
+    document.getElementById('cancel_edit_btn').classList.toggle('d-none', mode !== 'edit');
+    // Vizual, blochează alte acțiuni în mod editare
+    document.getElementById('form_actions').nextElementSibling.classList.toggle('pe-none', mode === 'edit');
+    document.getElementById('form_actions').nextElementSibling.classList.toggle('opacity-50', mode === 'edit');
   }
 
   function openEditor(idx){
+    if (currentlyEditingIndex !== null) return;
     const arr = readSchema();
     const f = arr[idx];
     setInputsFromField(f);
-    // Focus label for quick edit
     document.getElementById('b_label').focus();
-    // Switch add button to save mode temporarily
-    const addBtn = document.getElementById('add_field_btn');
-    const origText = addBtn.innerHTML;
-    addBtn.innerHTML = '<i class="fas fa-save me-1"></i>Salvează modificările';
-    addBtn.classList.remove('btn-outline-primary'); addBtn.classList.add('btn-primary');
-
-    const handler = ()=>{
-      const updated = getFieldFromInputs();
-      if (!updated) return;
-      // preserve name if user didn't change it manually and label changed
-      arr[idx] = updated;
-      writeSchema(arr);
-      refreshList();
-      // restore
-      addBtn.innerHTML = origText;
-      addBtn.classList.remove('btn-primary'); addBtn.classList.add('btn-outline-primary');
-      addBtn.removeEventListener('click', handler);
-      addBtn.addEventListener('click', addHandler, { once:true });
-      clearBuilderInputs();
-    };
-
-    function addHandler(){} // placeholder replaced immediately below
-
-    // Replace click handler once
-    addBtn.replaceWith(addBtn.cloneNode(true));
-    const newAddBtn = document.getElementById('add_field_btn');
-    newAddBtn.addEventListener('click', handler, { once:true });
+    setBuilderMode('edit', idx);
   }
 
-  // Auto-generate 'name' from label while typing (if name untouched)
   let nameWasTouched = false;
   document.getElementById('b_name').addEventListener('input', ()=> nameWasTouched = true);
-  document.getElementById('b_label').addEventListener('input', (e)=>{
-    if (!nameWasTouched){
-      document.getElementById('b_name').value = slugify(e.target.value);
-    }
-  });
+  document.getElementById('b_label').addEventListener('input', (e)=>{ if (!nameWasTouched) document.getElementById('b_name').value = slugify(e.target.value); });
 
-  // Add field
   function onAddClick(){
+    if (currentlyEditingIndex !== null) return;
     const field = getFieldFromInputs();
     if (!field) return;
     const arr = readSchema();
-    // Ensure unique 'name'
     const existing = new Set(arr.map(x=>x.name));
-    let base = field.name; let i=1;
-    while (existing.has(field.name)){
-      field.name = `${base}_${i++}`;
-    }
+    let base = field.name, i=1;
+    while (existing.has(field.name)) field.name = `${base}_${i++}`;
     arr.push(field);
     writeSchema(arr);
     refreshList();
     clearBuilderInputs();
     nameWasTouched = false;
   }
+
+  function onUpdateClick(){
+    if (currentlyEditingIndex === null) return;
+    const updated = getFieldFromInputs();
+    if (!updated) return;
+    const arr = readSchema();
+    arr[currentlyEditingIndex] = updated;
+    writeSchema(arr);
+    refreshList();
+    setBuilderMode('add');
+    clearBuilderInputs();
+    nameWasTouched = false;
+  }
+
+  function onCancelClick(){
+    setBuilderMode('add');
+    clearBuilderInputs();
+    nameWasTouched = false;
+  }
+
   document.getElementById('add_field_btn')?.addEventListener('click', onAddClick);
+  document.getElementById('update_field_btn')?.addEventListener('click', onUpdateClick);
+  document.getElementById('cancel_edit_btn')?.addEventListener('click', onCancelClick);
+  document.getElementById('clear_fields_btn')?.addEventListener('click', function(){ if (confirm('Sigur ștergi toate câmpurile din schemă?')) { writeSchema([]); refreshList(); } });
 
-  // Clear all
-  document.getElementById('clear_fields_btn')?.addEventListener('click', function(){
-    if (confirm('Sigur ștergi toate câmpurile din schemă?')) {
-      writeSchema([]);
-      refreshList();
-    }
-  });
-
-  // Quick templates
   document.querySelectorAll('.quick-template').forEach(a=>{
     a.addEventListener('click', ()=>{
       const tpl = a.getAttribute('data-tpl');
       let field = null;
-      if (tpl === 'nume'){
-        field = { label:'Nume complet', name:'nume_complet', type:'text', required:true, placeholder:'Ex: Popescu Ion' };
-      } else if (tpl === 'telefon'){
-        field = { label:'Telefon', name:'telefon', type:'tel', required:false, placeholder:'07xx xxx xxx' };
-      } else if (tpl === 'email'){
-        field = { label:'Email', name:'email', type:'email', required:false, placeholder:'nume@exemplu.ro' };
-      } else if (tpl === 'data'){
-        field = { label:'Data', name:'data', type:'date', required:true };
-      } else if (tpl === 'student'){
-        field = { label:'Student', name:'student_id', type:'student_select', required:true, placeholder:'-- selectează student --' };
-      }
-      if (field){
-        const arr = readSchema(); arr.push(field); writeSchema(arr); refreshList();
-      }
+      if (tpl === 'nume') field = { label:'Nume complet', name:'nume_complet', type:'text', required:true, placeholder:'Ex: Popescu Ion' };
+      else if (tpl === 'telefon') field = { label:'Telefon', name:'telefon', type:'tel', required:false, placeholder:'07xx xxx xxx' };
+      else if (tpl === 'email') field = { label:'Email', name:'email', type:'email', required:false, placeholder:'nume@exemplu.ro' };
+      else if (tpl === 'data') field = { label:'Data', name:'data', type:'date', required:true };
+      else if (tpl === 'student') field = { label:'Student', name:'student_id', type:'student_select', required:true, placeholder:'-- selectează student --' };
+      if (field){ const arr = readSchema(); arr.push(field); writeSchema(arr); refreshList(); }
     });
   });
 
-  // Init list and preview
   refreshList();
 
-  // --- UX helpers: copy-to-clipboard for public link ---
   document.querySelectorAll('[data-copy-text]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const txt = btn.getAttribute('data-copy-text') || '';
@@ -523,61 +418,24 @@
         await navigator.clipboard.writeText(txt);
         btn.innerHTML = '<i class="fas fa-check me-1"></i>Copiat';
         setTimeout(()=>{ btn.innerHTML = '<i class="fas fa-copy me-1"></i> Copiază'; }, 1500);
-      }catch(e){
-        alert('Nu s-a putut copia în clipboard.');
-      }
+      }catch(e){ alert('Nu s-a putut copia în clipboard.'); }
     });
   });
 
-  // --- Client-side validation for fields_schema before submit ---
-  const formEl = document.querySelector('form');
-  formEl?.addEventListener('submit', function(e){
+  document.querySelector('form')?.addEventListener('submit', function(e){
     const errors = [];
     const allowedTypes = new Set(['text','textarea','date','time','number','email','tel','checkbox','radio','select','student_select']);
     let schema = [];
     const raw = document.getElementById('fields_schema').value.trim();
-    if (raw){
-      try{
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) {
-          errors.push('Schema trebuie să fie o listă (array) de obiecte.');
-        } else {
-          schema = parsed;
-        }
-      } catch(err){
-        errors.push('JSON invalid în schema câmpurilor.');
-      }
-    }
-
-    // Validate each field
+    if (raw){ try{ const parsed = JSON.parse(raw); if (!Array.isArray(parsed)) errors.push('Schema trebuie să fie o listă (array) de obiecte.'); else schema = parsed; } catch(err){ errors.push('JSON invalid în schema câmpurilor.'); } }
     const names = new Set();
     schema.forEach((f, idx)=>{
-      if (!f || typeof f !== 'object'){
-        errors.push(`Elementul #${idx+1} din schemă nu este un obiect valid.`);
-        return;
-      }
-      if (!f.name || typeof f.name !== 'string'){
-        errors.push(`Câmpul #${idx+1}: proprietatea "name" este obligatorie.`);
-      } else {
-        const slug = String(f.name).trim();
-        if (!slug) errors.push(`Câmpul #${idx+1}: "name" nu poate fi gol.`);
-        if (names.has(slug)) errors.push(`Numele de câmp "${slug}" este duplicat.`);
-        names.add(slug);
-      }
-      if (!f.type || typeof f.type !== 'string' || !allowedTypes.has(f.type)){
-        errors.push(`Câmpul "${f.name || ('#'+(idx+1))}": tip invalid. Tipuri permise: ${Array.from(allowedTypes).join(', ')}`);
-      }
-      if ((f.type === 'select' || f.type === 'radio') && (!Array.isArray(f.options) || f.options.length === 0)){
-        errors.push(`Câmpul "${f.name || ('#'+(idx+1))}": pentru tipul ${f.type} trebuie definite "options".`);
-      }
+      if (!f || typeof f !== 'object'){ errors.push(`Elementul #${idx+1} din schemă nu este un obiect valid.`); return; }
+      if (!f.name || typeof f.name !== 'string'){ errors.push(`Câmpul #${idx+1}: proprietatea "name" este obligatorie.`); } else { const slug = String(f.name).trim(); if (!slug) errors.push(`Câmpul #${idx+1}: "name" nu poate fi gol.`); if (names.has(slug)) errors.push(`Numele de câmp "${slug}" este duplicat.`); names.add(slug); }
+      if (!f.type || typeof f.type !== 'string' || !allowedTypes.has(f.type)){ errors.push(`Câmpul "${f.name || ('#'+(idx+1))}": tip invalid. Tipuri permise: ${Array.from(allowedTypes).join(', ')}`); }
+      if ((f.type === 'select' || f.type === 'radio') && (!Array.isArray(f.options) || f.options.length === 0)){ errors.push(`Câmpul "${f.name || ('#'+(idx+1))}": pentru tipul ${f.type} trebuie definite "options".`); }
     });
-
-    if (errors.length){
-      e.preventDefault();
-      e.stopPropagation();
-      alert('Verifică schema câmpurilor înainte de salvare:\n\n- ' + errors.join('\n- '));
-      return false;
-    }
+    if (errors.length){ e.preventDefault(); e.stopPropagation(); alert('Verifică schema câmpurilor înainte de salvare:\n\n- ' + errors.join('\n- ')); return false; }
     return true;
   });
 
