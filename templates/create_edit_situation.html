@@ -8,7 +8,20 @@
   {{ situation and 'Editează Situație' or 'Creează Situație' }}
 </h2>
 
-<form method="POST">
+{% if situation and situation.public_code %}
+  <div class="alert alert-info d-flex align-items-center justify-content-between">
+    <div>
+      Link public pentru completare:
+      <code>{{ url_for('public_situation_submit', code=situation.public_code, _external=True) }}</code>
+      {% if situation.public_expires_at %}<small class="text-muted">(expiră la {{ situation.public_expires_at|localdatetime }})</small>{% endif %}
+    </div>
+    <a href="{{ url_for('situation_entries', situation_id=situation.id) }}" class="btn btn-sm btn-outline-primary">
+      <i class="fas fa-table me-1"></i> Răspunsuri
+    </a>
+  </div>
+{% endif %}
+
+<form method="POST" novalidate>
   <div class="mb-3">
     <label class="form-label">Titlu *</label>
     <input type="text" class="form-control" name="title" value="{{ form_data.title or '' }}" required>
@@ -130,7 +143,7 @@
   </div>
 
   <div class="d-flex gap-2">
-    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i> Salvează</button>
+    <button type="submit" class="btn btn-primary" formnovalidate><i class="fas fa-save me-2"></i> Salvează</button>
     <a href="{{ url_for('list_situations') }}" class="btn btn-secondary">Înapoi</a>
   </div>
 </form>
@@ -306,6 +319,7 @@
             inp.id = f.name + '_' + (i+1);
             inp.value = opt;
             if (f.default && f.default === opt) inp.checked = true;
+            inp.disabled = true;
             const lab = document.createElement('label');
             lab.className = 'form-check-label';
             lab.setAttribute('for', inp.id);
@@ -322,6 +336,7 @@
           chk.className = 'form-check-input';
           chk.id = f.name;
           if (['1','true','True','on','yes'].includes(String(f.default))) chk.checked = true;
+          chk.disabled = true;
           const labc = document.createElement('label');
           labc.className = 'form-check-label';
           labc.setAttribute('for', f.name);
@@ -336,7 +351,12 @@
           inputEl.value = f.default || '';
       }
 
-      if (f.required && inputEl && inputEl.tagName !== 'DIV') inputEl.required = true;
+      // In previzualizare nu validăm browser-side și nu blocăm salvarea: nu setăm required și dezactivăm câmpurile.
+      if (inputEl) {
+        if (inputEl.tagName !== 'DIV') {
+          inputEl.disabled = true;
+        }
+      }
       wrap.appendChild(inputEl);
       if (f.help){
         const help = document.createElement('div');
