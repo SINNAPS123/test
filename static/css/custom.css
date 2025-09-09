@@ -822,3 +822,31 @@ html.dark-mode-preload .text-dark {
 /* Raise z-index for Bootstrap modal to ensure it is clickable above any custom overlays */
 .modal { z-index: 3000 !important; }
 .modal-backdrop { z-index: 2950 !important; }
+
+/* --- Mobile ergonomics & overflow fixes for navbar/menu/dropdowns --- */
+@media (max-width: 576px) {
+  /* 1) Navbar should not be sticky on phones */
+  .navbar.sticky-top {
+    position: static !important;
+  }
+
+  /* 2) Make collapsed menu scrollable when expanded so long lists are reachable */
+  .navbar .collapse.show {
+    max-height: calc(100vh - var(--navbar-height));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 3) Allow long dropdowns (e.g., Navigare Rapidă) to scroll on phones */
+  .navbar .dropdown-menu {
+    max-height: 70vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 4) Admin debug bar should not stick on phones to avoid covering content */
+  #admin-debug-bar {
+    position: static;
+    top: auto;
+  }
+}
