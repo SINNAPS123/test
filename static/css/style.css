@@ -120,37 +120,6 @@ html { scroll-behavior: smooth; }
     color: var(--text-primary) !important;
 }
 
-
-[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
-    background-color: rgba(0, 0, 0, 0.1); /* Darker subtle stripe for dark mode */
-}
-[data-theme="dark"] .table-hover > tbody > tr:hover > * {
-    background-color: rgba(0, 0, 0, 0.15); /* Darker subtle hover for dark mode */
-}
-
-/* Ensure text in table-danger is light and background is dark enough in dark mode */
-[data-theme="dark"] .table-danger,
-[data-theme="dark"] .table-danger > th,
-[data-theme="dark"] .table-danger > td {
-    background-color: rgba(220, 53, 69, 0.25) !important; /* Darker, more transparent red */
-    border-color: rgba(220, 53, 69, 0.35) !important; /* Adjusted border color */
-}
-[data-theme="dark"] .table-danger a {
-    color: #fcc9cf !important; /* Lighter links for visibility */
-}
-
-
-[data-theme="dark"] .badge.bg-light { /* Make .bg-light distinct in dark mode */
-    background-color: #cbd5e1 !important; /* slate-300 */
-    color: #0f172a !important; /* slate-900 */
-    border: 1px solid #94a3b8 !important;
-}
-/* Light button in dark mode should look subtle */
-[data-theme="dark"] .btn-light {
-    background-color: var(--bg-surface-hover) !important;
-    border-color: var(--border-color) !important;
-    color: var(--text-primary) !important;
-}
 /* Ensure text on .badge.bg-warning is dark for readability */
 [data-theme="dark"] .badge.bg-warning,
 [data-theme="dark"] .badge.status-urmeaza, /* Common class for "upcoming" status */
@@ -197,90 +166,78 @@ html { scroll-behavior: smooth; }
     color: var(--text-primary); /* Ensure header text is also correct */
 }
 
-/* === START JULES' REVISED MODIFICATIONS FOR DARK MODE TABLE/LIST STYLING === */
-
-/* General table cell styling for dark mode */
-body.dark-mode .table th,
-body.dark-mode .table td {
-    color: var(--text-primary) !important; /* Ensure high contrast text */
-    border-color: var(--border-color); /* Use dark mode border color */
-    background-color: transparent; /* Default to transparent cells over surface */
+/* === START JULES' CONSOLIDATED DARK MODE TABLE/LIST STYLING === */
+[data-theme="dark"] .table {
+    background-color: var(--bg-surface);
 }
 
-/* Table header specific styling */
-[data-theme="dark"] .table thead th {
-    background-color: var(--bg-surface-hover) !important; /* Slightly different header bg */
-    color: var(--text-primary) !important;
-    border-bottom-width: 2px;
+[data-theme="dark"] .table th,
+[data-theme="dark"] .table td {
+    color: var(--text-primary);
     border-color: var(--border-color);
 }
 
-/* Subtle striping for table rows in dark mode */
-[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
-    /* A very subtle difference from the default (even) rows */
-    /* Default even rows will be transparent over --bg-surface */
-    /* Odd rows will be slightly darker than --bg-surface */
-    background-color: rgba(0, 0, 0, 0.05) !important; /* Adjust alpha for subtlety */
-}
-
-/* Hover effect for table rows */
-[data-theme="dark"] .table-hover > tbody > tr:hover > * {
-    background-color: rgba(255, 255, 255, 0.07) !important; /* Slightly lighter subtle hover */
-    color: var(--text-primary) !important; /* Ensure text color remains high contrast on hover */
-}
-
-/* Contextual backgrounds (e.g., .table-success) - make them subtle and ensure text contrast */
-/* If these are not used for student lists, this might be less critical for the described issue */
-/* For now, we'll keep them subtle but distinct from fully transparent */
-
-[data-theme="dark"] .table-success > td, [data-theme="dark"] .table-success > th {
-    background-color: rgba(40, 167, 69, 0.15) !important; /* Subtle green indication */
-}
-[data-theme="dark"] .table-warning > td, [data-theme="dark"] .table-warning > th {
-    background-color: rgba(255, 193, 7, 0.15) !important; /* Subtle yellow indication */
-}
-[data-theme="dark"] .table-danger > td, [data-theme="dark"] .table-danger > th {
-    background-color: rgba(220, 53, 69, 0.15) !important; /* Subtle red indication */
-}
-[data-theme="dark"] .table-info > td, [data-theme="dark"] .table-info > th {
-    background-color: rgba(13, 202, 240, 0.1) !important; /* Subtle cyan indication */
-}
-
-/* Ensure links within tables are also styled for dark mode */
-[data-theme="dark"] .table a {
-    color: var(--link-color) !important;
-}
-[data-theme="dark"] .table a:hover {
-    color: var(--link-hover-color) !important;
-}
-
-/* List group items (used for services/leaves display in some cards) */
-[data-theme="dark"] .list-group-item {
-    background-color: var(--bg-surface) !important; /* Ensure consistent surface background */
-    color: var(--text-primary) !important;         /* Ensure high contrast text */
-    border-color: var(--border-color) !important;   /* Dark mode appropriate border */
-}
-/* For striped list groups, if any are used */
-[data-theme="dark"] .list-group-item-striped:nth-of-type(odd) {
-     background-color: rgba(0, 0, 0, 0.05) !important; /* Subtle striping */
-}
-/* Ensure text on specific status list items is readable */
-[data-theme="dark"] .list-group-item-success {
-    background-color: rgba(40, 167, 69, 0.15) !important;
-}
-[data-theme="dark"] .list-group-item-warning {
-    background-color: rgba(255, 193, 7, 0.15) !important;
-}
-[data-theme="dark"] .list-group-item-danger {
-    background-color: rgba(220, 53, 69, 0.15) !important;
-}
-/* === END JULES' REVISED MODIFICATIONS FOR DARK MODE TABLE/LIST STYLING === */
-
-[data-theme="dark"] .table thead th { /* This rule was already present, ensure it's not conflicting or duplicate if my additions are above */
+[data-theme="dark"] .table thead th {
     background-color: var(--bg-surface-hover);
-    border-bottom: 2px solid var(--border-color);
-    color: var(--text-primary); /* Ensure table header text is correct */
+    border-bottom-width: 2px;
 }
+
+[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
+    background-color: rgba(255, 255, 255, 0.035);
+}
+
+[data-theme="dark"] .table-hover > tbody > tr:hover > * {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .table-success > td,
+[data-theme="dark"] .table-success > th {
+    background-color: rgba(40, 167, 69, 0.15);
+}
+
+[data-theme="dark"] .table-warning > td,
+[data-theme="dark"] .table-warning > th {
+    background-color: rgba(255, 193, 7, 0.15);
+}
+
+[data-theme="dark"] .table-danger > td,
+[data-theme="dark"] .table-danger > th {
+    background-color: rgba(220, 53, 69, 0.15);
+}
+
+[data-theme="dark"] .table-info > td,
+[data-theme="dark"] .table-info > th {
+    background-color: rgba(13, 202, 240, 0.1);
+}
+
+[data-theme="dark"] .table a {
+    color: var(--link-color);
+}
+
+[data-theme="dark"] .table a:hover {
+    color: var(--link-hover-color);
+}
+
+[data-theme="dark"] .list-group-item {
+    background-color: var(--bg-surface);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .list-group-item-action:hover,
+[data-theme="dark"] .list-group-item-action:focus {
+    background-color: var(--bg-surface-hover);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .list-group-item-striped:nth-of-type(odd) {
+     background-color: rgba(255, 255, 255, 0.035);
+}
+
+[data-theme="dark"] .list-group-item-success { background-color: rgba(40, 167, 69, 0.15); }
+[data-theme="dark"] .list-group-item-warning { background-color: rgba(255, 193, 7, 0.15); }
+[data-theme="dark"] .list-group-item-danger { background-color: rgba(220, 53, 69, 0.15); }
+/* === END CONSOLIDATED DARK MODE TABLE/LIST STYLING === */
 
 /* General Modal Styling (ensure visibility) */
 .modal {
