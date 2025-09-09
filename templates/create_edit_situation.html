@@ -8,7 +8,24 @@
   {{ situation and 'Editează Situație' or 'Creează Situație' }}
 </h2>
 
-<form method="POST">
+{% if situation and situation.public_code %}
+  <div class="alert alert-info d-flex align-items-center justify-content-between">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <span>Link public pentru completare:</span>
+      {% set public_url = url_for('public_situation_submit', code=situation.public_code, _external=True) %}
+      <code class="me-2">{{ public_url }}</code>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-copy-text="{{ public_url }}">
+        <i class="fas fa-copy me-1"></i> Copiază
+      </button>
+      {% if situation.public_expires_at %}<small class="text-muted">(expiră la {{ situation.public_expires_at|localdatetime }})</small>{% endif %}
+    </div>
+    <a href="{{ url_for('situation_entries', situation_id=situation.id) }}" class="btn btn-sm btn-outline-primary">
+      <i class="fas fa-table me-1"></i> Răspunsuri
+    </a>
+  </div>
+{% endif %}
+
+<form method="POST" novalidate>
   <div class="mb-3">
     <label class="form-label">Titlu *</label>
     <input type="text" class="form-control" name="title" value="{{ form_data.title or '' }}" required>
@@ -130,7 +147,7 @@
   </div>
 
   <div class="d-flex gap-2">
-    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i> Salvează</button>
+    <button type="submit" class="btn btn-primary" formnovalidate><i class="fas fa-save me-2"></i> Salvează</button>
     <a href="{{ url_for('list_situations') }}" class="btn btn-secondary">Înapoi</a>
   </div>
 </form>
@@ -306,6 +323,7 @@
             inp.id = f.name + '_' + (i+1);
             inp.value = opt;
             if (f.default && f.default === opt) inp.checked = true;
+            inp.disabled = true;
             const lab = document.createElement('label');
             lab.className = 'form-check-label';
             lab.setAttribute('for', inp.id);
@@ -322,6 +340,7 @@
           chk.className = 'form-check-input';
           chk.id = f.name;
           if (['1','true','True','on','yes'].includes(String(f.default))) chk.checked = true;
+          chk.disabled = true;
           const labc = document.createElement('label');
           labc.className = 'form-check-label';
           labc.setAttribute('for', f.name);
@@ -336,7 +355,12 @@
           inputEl.value = f.default || '';
       }
 
-      if (f.required && inputEl && inputEl.tagName !== 'DIV') inputEl.required = true;
+      // In previzualizare nu validăm browser-side și nu blocăm salvarea: nu setăm required și dezactivăm câmpurile.
+      if (inputEl) {
+        if (inputEl.tagName !== 'DIV') {
+          inputEl.disabled = true;
+        }
+      }
       wrap.appendChild(inputEl);
       if (f.help){
         const help = document.createElement('div');
@@ -490,6 +514,73 @@
 
   // Init list and preview
   refreshList();
+
+  // --- UX helpers: copy-to-clipboard for public link ---
+  document.querySelectorAll('[data-copy-text]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const txt = btn.getAttribute('data-copy-text') || '';
+      try{
+        await navigator.clipboard.writeText(txt);
+        btn.innerHTML = '<i class="fas fa-check me-1"></i>Copiat';
+        setTimeout(()=>{ btn.innerHTML = '<i class="fas fa-copy me-1"></i> Copiază'; }, 1500);
+      }catch(e){
+        alert('Nu s-a putut copia în clipboard.');
+      }
+    });
+  });
+
+  // --- Client-side validation for fields_schema before submit ---
+  const formEl = document.querySelector('form');
+  formEl?.addEventListener('submit', function(e){
+    const errors = [];
+    const allowedTypes = new Set(['text','textarea','date','time','number','email','tel','checkbox','radio','select','student_select']);
+    let schema = [];
+    const raw = document.getElementById('fields_schema').value.trim();
+    if (raw){
+      try{
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+          errors.push('Schema trebuie să fie o listă (array) de obiecte.');
+        } else {
+          schema = parsed;
+        }
+      } catch(err){
+        errors.push('JSON invalid în schema câmpurilor.');
+      }
+    }
+
+    // Validate each field
+    const names = new Set();
+    schema.forEach((f, idx)=>{
+      if (!f || typeof f !== 'object'){
+        errors.push(`Elementul #${idx+1} din schemă nu este un obiect valid.`);
+        return;
+      }
+      if (!f.name || typeof f.name !== 'string'){
+        errors.push(`Câmpul #${idx+1}: proprietatea "name" este obligatorie.`);
+      } else {
+        const slug = String(f.name).trim();
+        if (!slug) errors.push(`Câmpul #${idx+1}: "name" nu poate fi gol.`);
+        if (names.has(slug)) errors.push(`Numele de câmp "${slug}" este duplicat.`);
+        names.add(slug);
+      }
+      if (!f.type || typeof f.type !== 'string' || !allowedTypes.has(f.type)){
+        errors.push(`Câmpul "${f.name || ('#'+(idx+1))}": tip invalid. Tipuri permise: ${Array.from(allowedTypes).join(', ')}`);
+      }
+      if ((f.type === 'select' || f.type === 'radio') && (!Array.isArray(f.options) || f.options.length === 0)){
+        errors.push(`Câmpul "${f.name || ('#'+(idx+1))}": pentru tipul ${f.type} trebuie definite "options".`);
+      }
+    });
+
+    if (errors.length){
+      e.preventDefault();
+      e.stopPropagation();
+      alert('Verifică schema câmpurilor înainte de salvare:\n\n- ' + errors.join('\n- '));
+      return false;
+    }
+    return true;
+  });
+
 })();
 </script>
 {% endblock %}
