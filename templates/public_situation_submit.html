@@ -20,14 +20,16 @@
     {% set flabel = f.label or f.name %}
     {% set ftype = f.type or 'text' %}
     {% set frequired = f.required %}
-    {% set val = form_data.get(fname, '') %}
+    {% set val = form_data.get(fname, f.get('default','')) %}
+    {% set placeholder = f.get('placeholder') %}
+    {% set help_text = f.get('help') %}
 
     <div class="mb-3">
       <label class="form-label">{{ flabel }}{% if frequired %} *{% endif %}</label>
 
       {# Long text #}
       {% if ftype == 'textarea' %}
-        <textarea class="form-control" name="{{ fname }}" rows="4" placeholder="Introduceți {{ flabel|lower }}..." {% if frequired %}required{% endif %}>{{ val }}</textarea>
+        <textarea class="form-control" name="{{ fname }}" rows="4" placeholder="{{ placeholder or ('Introduceți ' ~ flabel|lower ~ '...') }}" {% if frequired %}required{% endif %}>{{ val }}</textarea>
 
       {# Date and Time #}
       {% elif ftype == 'date' %}
@@ -37,16 +39,16 @@
 
       {# Numeric, Email, Phone #}
       {% elif ftype == 'number' %}
-        <input type="number" class="form-control" name="{{ fname }}" value="{{ val }}" {% if frequired %}required{% endif %}>
+        <input type="number" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or '' }}" {% if frequired %}required{% endif %}>
       {% elif ftype == 'email' %}
-        <input type="email" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="ex: nume@exemplu.ro" {% if frequired %}required{% endif %}>
+        <input type="email" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or 'ex: nume@exemplu.ro' }}" {% if frequired %}required{% endif %}>
       {% elif ftype == 'tel' %}
-        <input type="tel" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="ex: 07xx xxx xxx" {% if frequired %}required{% endif %}>
+        <input type="tel" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or 'ex: 07xx xxx xxx' }}" {% if frequired %}required{% endif %}>
 
       {# Select with options #}
       {% elif ftype == 'select' and f.options %}
         <select class="form-select" name="{{ fname }}" {% if frequired %}required{% endif %}>
-          <option value="">-- selectează --</option>
+          <option value="">{% if placeholder %}{{ placeholder }}{% else %}-- selectează --{% endif %}</option>
           {% for opt in f.options %}
             <option value="{{ opt }}" {% if val == opt %}selected{% endif %}>{{ opt }}</option>
           {% endfor %}
@@ -66,14 +68,14 @@
       {# Checkbox (boolean) #}
       {% elif ftype == 'checkbox' %}
         <div class="form-check">
-          <input class="form-check-input" type="checkbox" name="{{ fname }}" id="{{ fname }}" value="1" {% if val in ['1','true','True','on','yes'] %}checked{% endif %}>
-          <label class="form-check-label" for="{{ fname }}">Bifează dacă este cazul</label>
+          <input class="form-check-input" type="checkbox" name="{{ fname }}" id="{{ fname }}" value="1" {% if val in ['1','true','True','on','yes'] or f.get('default') in ['1','true','True','on','yes'] %}checked{% endif %}>
+          <label class="form-check-label" for="{{ fname }}">{{ placeholder or 'Bifează dacă este cazul' }}</label>
         </div>
 
       {# Student selector (scoped to creator's students) #}
       {% elif ftype == 'student_select' and students_options %}
         <select class="form-select" name="{{ fname }}" {% if frequired %}required{% endif %}>
-          <option value="">-- selectează student --</option>
+          <option value="">{% if placeholder %}{{ placeholder }}{% else %}-- selectează student --{% endif %}</option>
           {% for opt in students_options %}
             <option value="{{ opt.value }}" {% if val == opt.value %}selected{% endif %}>{{ opt.label }}</option>
           {% endfor %}
@@ -81,7 +83,11 @@
 
       {# Default text input #}
       {% else %}
-        <input type="text" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="Introduceți {{ flabel|lower }}..." {% if frequired %}required{% endif %}>
+        <input type="text" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or ('Introduceți ' ~ flabel|lower ~ '...') }}" {% if frequired %}required{% endif %}>
+      {% endif %}
+
+      {% if help_text %}
+        <div class="form-text">{{ help_text }}</div>
       {% endif %}
     </div>
   {% endfor %}

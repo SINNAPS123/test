@@ -35,7 +35,12 @@
 
   <!-- Builder vizual pentru câmpuri -->
   <div class="card mb-3">
-    <div class="card-header"><i class="fas fa-wrench me-2"></i>Constructor câmpuri</div>
+    <div class="card-header d-flex align-items-center justify-content-between">
+      <span><i class="fas fa-wrench me-2"></i>Constructor câmpuri</span>
+      <div class="d-none d-md-flex align-items-center gap-2 small text-muted">
+        <i class="fas fa-mouse-pointer"></i> Dublu-clic pe un câmp din listă pentru editare
+      </div>
+    </div>
     <div class="card-body">
       <div class="row g-2">
         <div class="col-md-3">
@@ -45,6 +50,7 @@
         <div class="col-md-3">
           <label class="form-label">Name</label>
           <input type="text" id="b_name" class="form-control" placeholder="ex: student_name">
+          <div class="form-text">Se generează automat din Label (poți personaliza).</div>
         </div>
         <div class="col-md-3">
           <label class="form-label">Tip</label>
@@ -73,18 +79,53 @@
             <option value="true">Da</option>
           </select>
         </div>
-        <div class="col-12">
+
+        <div class="col-12 col-md-6">
           <label class="form-label">Opțiuni (pentru select/radio) - separate prin virgulă</label>
           <input type="text" id="b_options" class="form-control" placeholder="ex: Opțiunea 1, Opțiunea 2">
         </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label">Placeholder</label>
+          <input type="text" id="b_placeholder" class="form-control" placeholder="Text de ajutor în câmp">
+        </div>
+        <div class="col-12">
+          <label class="form-label">Text ajutător (sub câmp)</label>
+          <input type="text" id="b_help" class="form-control" placeholder="Instrucțiuni scurte pentru utilizator">
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label">Valoare implicită</label>
+          <input type="text" id="b_default" class="form-control" placeholder="Ex: da / un text / o opțiune">
+        </div>
       </div>
-      <div class="mt-3 d-flex gap-2">
+
+      <div class="mt-3 d-flex flex-wrap gap-2">
         <button type="button" id="add_field_btn" class="btn btn-outline-primary"><i class="fas fa-plus me-1"></i>Adaugă câmp</button>
         <button type="button" id="clear_fields_btn" class="btn btn-outline-danger"><i class="fas fa-trash me-1"></i>Golește lista</button>
+
+        <div class="dropdown">
+          <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+            <i class="fas fa-bolt me-1"></i> Șabloane rapide
+          </button>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item quick-template" data-tpl="nume">Nume complet (text, obligatoriu)</a></li>
+            <li><a class="dropdown-item quick-template" data-tpl="telefon">Telefon (tel)</a></li>
+            <li><a class="dropdown-item quick-template" data-tpl="email">Email (email)</a></li>
+            <li><a class="dropdown-item quick-template" data-tpl="data">Dată (date, obligatoriu)</a></li>
+            <li><a class="dropdown-item quick-template" data-tpl="student">Select student (student_select)</a></li>
+          </ul>
+        </div>
       </div>
+
       <hr>
-      <h6>Câmpuri definite</h6>
-      <ul id="fields_list" class="list-group small"></ul>
+      <div class="d-flex justify-content-between align-items-center">
+        <h6 class="mb-0">Câmpuri definite</h6>
+        <small class="text-muted">Trage și plasează sau folosește săgețile pentru reordonare</small>
+      </div>
+      <ul id="fields_list" class="list-group small mt-2"></ul>
+
+      <hr>
+      <h6>Previzualizare formular</h6>
+      <div id="form_preview" class="border rounded p-3 bg-light"></div>
     </div>
   </div>
 
@@ -96,6 +137,18 @@
 
 <script>
 (function(){
+  const $ = (sel) => document.querySelector(sel);
+
+  function slugify(str){
+    return (str || '')
+      .toString()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g,'_')
+      .replace(/^_+|_+$/g,'')
+      .substring(0,60);
+  }
+
   function readSchema() {
     const ta = document.getElementById('fields_schema');
     try {
@@ -106,49 +159,336 @@
   function writeSchema(arr) {
     document.getElementById('fields_schema').value = JSON.stringify(arr, null, 2);
   }
+
+  function moveItem(arr, from, to){
+    if (to < 0 || to >= arr.length) return arr;
+    const copy = arr.slice();
+    const [item] = copy.splice(from,1);
+    copy.splice(to,0,item);
+    return copy;
+  }
+
+  function renderListItem(f, idx){
+    const optionsBadge = (f.options && f.options.length) ? ' • opțiuni: ' + f.options.join('/') : '';
+    const reqBadge = f.required ? ' • obligatoriu' : '';
+    const extra = [];
+    if (f.placeholder) extra.push(`ph: "${f.placeholder}"`);
+    if (f.help) extra.push(`help`);
+    if (f.default !== undefined && f.default !== '') extra.push(`default: "${f.default}"`);
+    const extras = extra.length ? ' • ' + extra.join(', ') : '';
+
+    const li = document.createElement('li');
+    li.className = 'list-group-item d-flex justify-content-between align-items-center';
+    li.setAttribute('draggable','true');
+
+    li.innerHTML = `
+      <div class="me-2 flex-grow-1">
+        <strong>${f.label || f.name}</strong> <code>(${f.name})</code> - ${f.type}${reqBadge}${optionsBadge}${extras}
+      </div>
+      <div class="btn-group btn-group-sm">
+        <button type="button" class="btn btn-outline-secondary" data-act="up" title="Mută sus"><i class="fas fa-arrow-up"></i></button>
+        <button type="button" class="btn btn-outline-secondary" data-act="down" title="Mută jos"><i class="fas fa-arrow-down"></i></button>
+        <button type="button" class="btn btn-outline-primary" data-act="edit" title="Editează"><i class="fas fa-pen"></i></button>
+        <button type="button" class="btn btn-outline-warning" data-act="dup" title="Duplică"><i class="fas fa-clone"></i></button>
+        <button type="button" class="btn btn-outline-danger" data-act="del" title="Șterge"><i class="fas fa-times"></i></button>
+      </div>
+    `;
+
+    // Drag & drop handlers
+    li.addEventListener('dragstart', (e)=> {
+      e.dataTransfer.setData('text/plain', String(idx));
+      li.classList.add('opacity-50');
+    });
+    li.addEventListener('dragend', ()=> li.classList.remove('opacity-50'));
+    li.addEventListener('dragover', (e)=> e.preventDefault());
+    li.addEventListener('drop', (e)=> {
+      e.preventDefault();
+      const from = parseInt(e.dataTransfer.getData('text/plain'),10);
+      const to = idx;
+      const arr = readSchema();
+      const newArr = moveItem(arr, from, to);
+      writeSchema(newArr);
+      refreshList();
+    });
+
+    // Double click to edit
+    li.addEventListener('dblclick', ()=> openEditor(idx));
+
+    // Button actions
+    li.querySelectorAll('button').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const act = btn.getAttribute('data-act');
+        const arr = readSchema();
+        if (act === 'up'){
+          writeSchema(moveItem(arr, idx, idx-1));
+          refreshList();
+        } else if (act === 'down'){
+          writeSchema(moveItem(arr, idx, idx+1));
+          refreshList();
+        } else if (act === 'del'){
+          arr.splice(idx,1); writeSchema(arr); refreshList();
+        } else if (act === 'dup'){
+          const clone = JSON.parse(JSON.stringify(arr[idx]));
+          clone.name = slugify(clone.name + '_copy');
+          arr.splice(idx+1,0,clone); writeSchema(arr); refreshList();
+        } else if (act === 'edit'){
+          openEditor(idx);
+        }
+      });
+    });
+
+    return li;
+  }
+
+  function renderPreview(){
+    const container = document.getElementById('form_preview');
+    const fields = readSchema();
+    container.innerHTML = '';
+    if (!fields.length){
+      container.innerHTML = '<div class="text-muted small">Niciun câmp definit încă.</div>';
+      return;
+    }
+    fields.forEach((f)=>{
+      const wrap = document.createElement('div');
+      wrap.className = 'mb-2';
+      const label = document.createElement('label');
+      label.className = 'form-label';
+      label.textContent = f.label || f.name;
+      if (f.required) label.innerHTML += ' <span class="text-danger">*</span>';
+      wrap.appendChild(label);
+
+      let inputEl = null;
+      switch(f.type){
+        case 'textarea':
+          inputEl = document.createElement('textarea');
+          inputEl.className = 'form-control';
+          inputEl.rows = 3;
+          inputEl.placeholder = f.placeholder || ('Introduceți ' + (f.label||f.name).toLowerCase() + '...');
+          inputEl.value = f.default || '';
+          break;
+        case 'date':
+        case 'time':
+        case 'email':
+        case 'tel':
+        case 'number':
+        case 'text':
+          inputEl = document.createElement('input');
+          inputEl.type = f.type === 'text' ? 'text' : f.type;
+          inputEl.className = 'form-control';
+          inputEl.placeholder = f.placeholder || '';
+          inputEl.value = f.default || '';
+          break;
+        case 'select':
+        case 'student_select':
+          inputEl = document.createElement('select');
+          inputEl.className = 'form-select';
+          const placeholderOpt = document.createElement('option');
+          placeholderOpt.value = '';
+          placeholderOpt.textContent = f.placeholder || '-- selectează --';
+          inputEl.appendChild(placeholderOpt);
+          (f.options || []).forEach(opt=>{
+            const o = document.createElement('option');
+            o.value = opt; o.textContent = opt;
+            if (f.default && f.default === opt) o.selected = true;
+            inputEl.appendChild(o);
+          });
+          break;
+        case 'radio':
+          inputEl = document.createElement('div');
+          inputEl.className = 'd-flex flex-wrap gap-3';
+          (f.options || []).forEach((opt, i)=>{
+            const div = document.createElement('div');
+            div.className = 'form-check';
+            const inp = document.createElement('input');
+            inp.type = 'radio';
+            inp.className = 'form-check-input';
+            inp.name = f.name;
+            inp.id = f.name + '_' + (i+1);
+            inp.value = opt;
+            if (f.default && f.default === opt) inp.checked = true;
+            const lab = document.createElement('label');
+            lab.className = 'form-check-label';
+            lab.setAttribute('for', inp.id);
+            lab.textContent = opt;
+            div.appendChild(inp); div.appendChild(lab);
+            inputEl.appendChild(div);
+          });
+          break;
+        case 'checkbox':
+          inputEl = document.createElement('div');
+          inputEl.className = 'form-check';
+          const chk = document.createElement('input');
+          chk.type = 'checkbox';
+          chk.className = 'form-check-input';
+          chk.id = f.name;
+          if (['1','true','True','on','yes'].includes(String(f.default))) chk.checked = true;
+          const labc = document.createElement('label');
+          labc.className = 'form-check-label';
+          labc.setAttribute('for', f.name);
+          labc.textContent = f.placeholder || 'Bifează dacă este cazul';
+          inputEl.appendChild(chk); inputEl.appendChild(labc);
+          break;
+        default:
+          inputEl = document.createElement('input');
+          inputEl.type = 'text';
+          inputEl.className = 'form-control';
+          inputEl.placeholder = f.placeholder || ('Introduceți ' + (f.label||f.name).toLowerCase() + '...');
+          inputEl.value = f.default || '';
+      }
+
+      if (f.required && inputEl && inputEl.tagName !== 'DIV') inputEl.required = true;
+      wrap.appendChild(inputEl);
+      if (f.help){
+        const help = document.createElement('div');
+        help.className = 'form-text';
+        help.textContent = f.help;
+        wrap.appendChild(help);
+      }
+      container.appendChild(wrap);
+    });
+  }
+
   function refreshList() {
     const ul = document.getElementById('fields_list');
     const arr = readSchema();
     ul.innerHTML = '';
     arr.forEach((f, idx) => {
-      const li = document.createElement('li');
-      li.className = 'list-group-item d-flex justify-content-between align-items-center';
-      li.innerHTML = `<span><strong>${f.label||f.name}</strong> <code>(${f.name})</code> - ${f.type}${f.required ? ' • obligatoriu' : ''}${(f.options && f.options.length)? ' • opțiuni: ' + f.options.join('/') : ''}</span>
-      <button type="button" class="btn btn-sm btn-outline-danger" data-idx="${idx}"><i class="fas fa-times"></i></button>`;
-      li.querySelector('button').addEventListener('click', function(){
-        const i = parseInt(this.getAttribute('data-idx'),10);
-        const a = readSchema();
-        a.splice(i,1);
-        writeSchema(a);
-        refreshList();
-      });
-      ul.appendChild(li);
+      ul.appendChild(renderListItem(f, idx));
     });
+    renderPreview();
   }
-  document.getElementById('add_field_btn')?.addEventListener('click', function(){
+
+  function getFieldFromInputs(){
     const label = document.getElementById('b_label').value.trim();
-    const name = document.getElementById('b_name').value.trim();
+    const nameManual = document.getElementById('b_name').value.trim();
+    const name = nameManual || slugify(label);
     const type = document.getElementById('b_type').value;
     const required = document.getElementById('b_required').value === 'true';
     const optionsRaw = document.getElementById('b_options').value.trim();
+    const placeholder = document.getElementById('b_placeholder').value.trim();
+    const help = document.getElementById('b_help').value.trim();
+    const def = document.getElementById('b_default').value.trim();
 
-    if (!name) { alert('Câmpul name este obligatoriu.'); return; }
+    if (!name) { alert('Câmpul name este obligatoriu (completează Label sau Name).'); return null; }
     const field = { name, label: label || name, type, required };
     if (type === 'select' || type === 'radio') {
       field.options = optionsRaw ? optionsRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
     }
+    if (placeholder) field.placeholder = placeholder;
+    if (help) field.help = help;
+    if (def) field.default = def;
+    return field;
+  }
+
+  function setInputsFromField(f){
+    document.getElementById('b_label').value = f.label || '';
+    document.getElementById('b_name').value = f.name || '';
+    document.getElementById('b_type').value = f.type || 'text';
+    document.getElementById('b_required').value = f.required ? 'true' : 'false';
+    document.getElementById('b_options').value = (f.options || []).join(', ');
+    document.getElementById('b_placeholder').value = f.placeholder || '';
+    document.getElementById('b_help').value = f.help || '';
+    document.getElementById('b_default').value = (f.default !== undefined && f.default !== null) ? String(f.default) : '';
+  }
+
+  function clearBuilderInputs(){
+    setInputsFromField({type:'text', required:false});
+  }
+
+  function openEditor(idx){
     const arr = readSchema();
+    const f = arr[idx];
+    setInputsFromField(f);
+    // Focus label for quick edit
+    document.getElementById('b_label').focus();
+    // Switch add button to save mode temporarily
+    const addBtn = document.getElementById('add_field_btn');
+    const origText = addBtn.innerHTML;
+    addBtn.innerHTML = '<i class="fas fa-save me-1"></i>Salvează modificările';
+    addBtn.classList.remove('btn-outline-primary'); addBtn.classList.add('btn-primary');
+
+    const handler = ()=>{
+      const updated = getFieldFromInputs();
+      if (!updated) return;
+      // preserve name if user didn't change it manually and label changed
+      arr[idx] = updated;
+      writeSchema(arr);
+      refreshList();
+      // restore
+      addBtn.innerHTML = origText;
+      addBtn.classList.remove('btn-primary'); addBtn.classList.add('btn-outline-primary');
+      addBtn.removeEventListener('click', handler);
+      addBtn.addEventListener('click', addHandler, { once:true });
+      clearBuilderInputs();
+    };
+
+    function addHandler(){} // placeholder replaced immediately below
+
+    // Replace click handler once
+    addBtn.replaceWith(addBtn.cloneNode(true));
+    const newAddBtn = document.getElementById('add_field_btn');
+    newAddBtn.addEventListener('click', handler, { once:true });
+  }
+
+  // Auto-generate 'name' from label while typing (if name untouched)
+  let nameWasTouched = false;
+  document.getElementById('b_name').addEventListener('input', ()=> nameWasTouched = true);
+  document.getElementById('b_label').addEventListener('input', (e)=>{
+    if (!nameWasTouched){
+      document.getElementById('b_name').value = slugify(e.target.value);
+    }
+  });
+
+  // Add field
+  function onAddClick(){
+    const field = getFieldFromInputs();
+    if (!field) return;
+    const arr = readSchema();
+    // Ensure unique 'name'
+    const existing = new Set(arr.map(x=>x.name));
+    let base = field.name; let i=1;
+    while (existing.has(field.name)){
+      field.name = `${base}_${i++}`;
+    }
     arr.push(field);
     writeSchema(arr);
     refreshList();
-  });
+    clearBuilderInputs();
+    nameWasTouched = false;
+  }
+  document.getElementById('add_field_btn')?.addEventListener('click', onAddClick);
+
+  // Clear all
   document.getElementById('clear_fields_btn')?.addEventListener('click', function(){
     if (confirm('Sigur ștergi toate câmpurile din schemă?')) {
       writeSchema([]);
       refreshList();
     }
   });
-  // Init list
+
+  // Quick templates
+  document.querySelectorAll('.quick-template').forEach(a=>{
+    a.addEventListener('click', ()=>{
+      const tpl = a.getAttribute('data-tpl');
+      let field = null;
+      if (tpl === 'nume'){
+        field = { label:'Nume complet', name:'nume_complet', type:'text', required:true, placeholder:'Ex: Popescu Ion' };
+      } else if (tpl === 'telefon'){
+        field = { label:'Telefon', name:'telefon', type:'tel', required:false, placeholder:'07xx xxx xxx' };
+      } else if (tpl === 'email'){
+        field = { label:'Email', name:'email', type:'email', required:false, placeholder:'nume@exemplu.ro' };
+      } else if (tpl === 'data'){
+        field = { label:'Data', name:'data', type:'date', required:true };
+      } else if (tpl === 'student'){
+        field = { label:'Student', name:'student_id', type:'student_select', required:true, placeholder:'-- selectează student --' };
+      }
+      if (field){
+        const arr = readSchema(); arr.push(field); writeSchema(arr); refreshList();
+      }
+    });
+  });
+
+  // Init list and preview
   refreshList();
 })();
 </script>
