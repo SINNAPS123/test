@@ -21,10 +21,15 @@
 {% endif %}
 
 {% if situation.public_code %}
-<div class="alert alert-info">
-  Link public: <code>{{ url_for('public_situation_submit', code=situation.public_code, _external=True) }}</code>
+{% set public_url = url_for('public_situation_submit', code=situation.public_code, _external=True) %}
+<div class="alert alert-info d-flex align-items-center gap-2 flex-wrap">
+  <span>Link public:</span>
+  <code class="me-2">{{ public_url }}</code>
+  <button type="button" class="btn btn-sm btn-outline-secondary" data-copy-text="{{ public_url }}">
+    <i class="fas fa-copy me-1"></i> Copiază
+  </button>
   {% if situation.public_expires_at %}
-    (expiră la {{ situation.public_expires_at|localdatetime }})
+    <span>(expiră la {{ situation.public_expires_at|localdatetime }})</span>
   {% endif %}
 </div>
 {% endif %}
@@ -62,4 +67,22 @@
 <div class="mt-3">
   <a href="{{ url_for('list_situations') }}" class="btn btn-secondary">Înapoi</a>
 </div>
+
+<script>
+  // Copy helper
+  (function(){
+    document.querySelectorAll('[data-copy-text]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const txt = btn.getAttribute('data-copy-text') || '';
+        try{
+          await navigator.clipboard.writeText(txt);
+          btn.innerHTML = '<i class="fas fa-check me-1"></i>Copiat';
+          setTimeout(()=>{ btn.innerHTML = '<i class="fas fa-copy me-1"></i> Copiază'; }, 1500);
+        }catch(e){
+          alert('Nu s-a putut copia în clipboard.');
+        }
+      });
+    });
+  })();
+</script>
 {% endblock %}

@@ -31,9 +31,13 @@
             {% endif %}
           </small>
           {% if s.public_code %}
-            <div class="mt-1 small">
+            {% set public_url = url_for('public_situation_submit', code=s.public_code, _external=True) %}
+            <div class="mt-1 small d-flex flex-wrap align-items-center gap-2">
               <span class="text-muted">Link public:</span>
-              <code>{{ url_for('public_situation_submit', code=s.public_code, _external=True) }}</code>
+              <code class="me-2">{{ public_url }}</code>
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-copy-text="{{ public_url }}">
+                <i class="fas fa-copy me-1"></i> Copiază
+              </button>
             </div>
           {% endif %}
         </div>
@@ -59,4 +63,22 @@
     {% endif %}
   </div>
 </div>
+
+<script>
+  // Inline copy handler scoped to this page
+  (function(){
+    document.querySelectorAll('[data-copy-text]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const txt = btn.getAttribute('data-copy-text') || '';
+        try{
+          await navigator.clipboard.writeText(txt);
+          btn.innerHTML = '<i class="fas fa-check me-1"></i>Copiat';
+          setTimeout(()=>{ btn.innerHTML = '<i class="fas fa-copy me-1"></i> Copiază'; }, 1500);
+        }catch(e){
+          alert('Nu s-a putut copia în clipboard.');
+        }
+      });
+    });
+  })();
+</script>
 {% endblock %}
