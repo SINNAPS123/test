@@ -3964,8 +3964,10 @@ def admin_list_services():
         # Aplicăm unidecode doar pe input, nu pe coloane SQL
         search_input = unidecode(search_student_name.lower())
         search_pattern = f"%{search_input}%"
-        query = queryudent.nume)).like(search_pattern),
-                func.lower(unidecode(Student.prenume)).like(search_pattern),
+        query = query.join(ServiceAssignment.student).filter(
+            or_(
+                func.lower(Student.nume).like(search_pattern),
+                func.lower(Student.prenume).like(search_pattern),
             )
         )
 
@@ -13793,8 +13795,8 @@ def view_scoped_permissions():
         search_pattern = f"%{unidecode(search_student_name.lower())}%"
         query = query.join(Permission.student).filter(
             or_(
-                func.lower(unidecode(Student.nume)).like(search_pattern),
-                func.lower(unidecode(Student.prenume)).like(search_pattern),
+                func.lower(Student.nume).like(search_pattern),
+                func.lower(Student.prenume).like(search_pattern),
             )
         )
     if filter_status:
@@ -13904,8 +13906,8 @@ def view_scoped_daily_leaves():
         search_pattern = f"%{unidecode(search_student_name.lower())}%"
         query = query.join(DailyLeave.student).filter(
             or_(
-                func.lower(unidecode(Student.nume)).like(search_pattern),
-                func.lower(unidecode(Student.prenume)).like(search_pattern),
+                func.lower(Student.nume).like(search_pattern),
+                func.lower(Student.prenume).like(search_pattern),
             )
         )
     if filter_status:
@@ -14001,8 +14003,8 @@ def view_scoped_weekend_leaves():
         search_pattern = f"%{unidecode(search_student_name.lower())}%"
         query = query.join(WeekendLeave.student).filter(
             or_(
-                func.lower(unidecode(Student.nume)).like(search_pattern),
-                func.lower(unidecode(Student.prenume)).like(search_pattern),
+                func.lower(Student.nume).like(search_pattern),
+                func.lower(Student.prenume).like(search_pattern),
             )
         )
     if filter_status:
@@ -14101,8 +14103,8 @@ def view_scoped_services():
         search_pattern = f"%{unidecode(search_student_name.lower())}%"
         query = query.join(ServiceAssignment.student).filter(
             or_(
-                func.lower(unidecode(Student.nume)).like(search_pattern),
-                func.lower(unidecode(Student.prenume)).like(search_pattern),
+                func.lower(Student.nume).like(search_pattern),
+                func.lower(Student.prenume).like(search_pattern),
             )
         )
     if filter_service_type:
