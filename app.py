@@ -3753,12 +3753,13 @@ def admin_list_permissions():
     # TODO: Add date range filters if needed
 
     if search_student_name:
-        # Search in student's nume or prenume
-        search_pattern = f"%{unidecode(search_student_name.lower())}%"
+        # Search in student's nume sau prenume; aplicăm unidecode doar pe input, nu pe coloane SQL
+        search_input = unidecode(search_student_name.lower())
+        search_pattern = f"%{search_input}%"
         query = query.join(Permission.student).filter(
             or_(
-                func.lower(unidecode(Student.nume)).like(search_pattern),
-                func.lower(unidecode(Student.prenume)).like(search_pattern),
+                func.lower(Student.nume).like(search_pattern),
+                func.lower(Student.prenume).like(search_pattern),
             )
         )
 
@@ -3813,11 +3814,13 @@ def admin_list_daily_leaves():
     filter_date = request.args.get("filter_date", "").strip()
 
     if search_student_name:
-        search_pattern = f"%{unidecode(search_student_name.lower())}%"
+        # Aplicăm unidecode doar pe input, nu pe coloane SQL
+        search_input = unidecode(search_student_name.lower())
+        search_pattern = f"%{search_input}%"
         query = query.join(DailyLeave.student).filter(
             or_(
-                func.lower(unidecode(Student.nume)).like(search_pattern),
-                func.lower(unidecode(Student.prenume)).like(search_pattern),
+                func.lower(Student.nume).like(search_pattern),
+                func.lower(Student.prenume).like(search_pattern),
             )
         )
 
@@ -3884,11 +3887,13 @@ def admin_list_weekend_leaves():
     ).strip()  # This is the Friday
 
     if search_student_name:
-        search_pattern = f"%{unidecode(search_student_name.lower())}%"
+        # Aplicăm unidecode doar pe input, nu pe coloane SQL
+        search_input = unidecode(search_student_name.lower())
+        search_pattern = f"%{search_input}%"
         query = query.join(WeekendLeave.student).filter(
             or_(
-                func.lower(unidecode(Student.nume)).like(search_pattern),
-                func.lower(unidecode(Student.prenume)).like(search_pattern),
+                func.lower(Student.nume).like(search_pattern),
+                func.lower(Student.prenume).like(search_pattern),
             )
         )
 
@@ -3956,10 +3961,10 @@ def admin_list_services():
     filter_service_date = request.args.get("filter_service_date", "").strip()
 
     if search_student_name:
-        search_pattern = f"%{unidecode(search_student_name.lower())}%"
-        query = query.join(ServiceAssignment.student).filter(
-            or_(
-                func.lower(unidecode(Student.nume)).like(search_pattern),
+        # Aplicăm unidecode doar pe input, nu pe coloane SQL
+        search_input = unidecode(search_student_name.lower())
+        search_pattern = f"%{search_input}%"
+        query = queryudent.nume)).like(search_pattern),
                 func.lower(unidecode(Student.prenume)).like(search_pattern),
             )
         )
