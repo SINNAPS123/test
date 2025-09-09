@@ -118,6 +118,9 @@
                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarRoleSpecificLinks">
                                 {% if current_user.role == 'gradat' %}
                                     <li><a class="dropdown-item" href="{{ url_for('calendar_view') }}"><i class="fas fa-calendar-alt fa-fw me-2"></i>Calendar Evenimente</a></li>
+                                    {% if not current_user.parent_user_id %}
+                                    <li><a class="dropdown-item" href="{{ url_for('gradat_manage_subusers') }}"><i class="fas fa-users-cog fa-fw me-2"></i>Subutilizatori</a></li>
+                                    {% endif %}
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="{{ url_for('list_students') }}">Studenți</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('list_permissions') }}">Permisii</a></li>

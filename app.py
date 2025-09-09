@@ -46,6 +46,7 @@ from unidecode import unidecode
 import json
 import pytz  # Adăugat pentru fusuri orare
 from functools import wraps
+from urllib.parse import urlparse
 
 # Inițializare aplicație Flask
 app = Flask(__name__)
@@ -145,6 +146,10 @@ app.config["SESSION_COOKIE_SECURE"] = os.environ.get(
 # Keep users logged in unless they explicitly logout
 app.config["REMEMBER_COOKIE_DURATION"] = timedelta(days=30)
 app.config["REMEMBER_COOKIE_REFRESH_EACH_REQUEST"] = True
+# Optional: list of extra trusted origins/hosts for CSRF Origin/Referer checks (comma-separated)
+app.config["CSRF_TRUSTED_ORIGINS"] = [
+    o.strip() for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
+]
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)  # Initialize Flask-Migrate
@@ -2566,11 +2571,34 @@ def _enforce_same_origin_for_state_changes():
             if current_user.is_authenticated or "scoped_access" in session or "public_view_access" in session:
                 origin = request.headers.get("Origin") or ""
                 referer = request.headers.get("Referer") or ""
-                host = request.host_url.rstrip("/")
-                # Accept if Origin/Referer is same-origin or absent (some clients omit Origin on same-site)
-                if origin and not origin.startswith(host):
+
+                # Build set of allowed hosts, considering proxies and trusted origins
+                host = request.headers.get("X-Forwarded-Host") or request.host
+                allowed_hosts = {host}
+                # Normalize common www/no-www variants to reduce false negatives
+                if host.startswith("www."):
+                    allowed_hosts.add(host[4:])
+                else:
+                    allowed_hosts.add(f"www.{host}")
+
+                # Extend with CSRF_TRUSTED_ORIGINS if provided (entries may be full URLs or bare hosts)
+                for item in app.config.get("CSRF_TRUSTED_ORIGINS", []):
+                    parsed = urlparse(item if "://" in item else f"https://{item}")
+                    if parsed.netloc:
+                        allowed_hosts.add(parsed.netloc)
+
+                def host_ok(url_str: str) -> bool:
+                    if not url_str:
+                        return True  # Some browsers omit Origin on same-site navigation
+                    try:
+                        parsed = urlparse(url_str)
+                        return parsed.netloc in allowed_hosts
+                    except Exception:
+                        return False
+
+                if not host_ok(origin):
                     return "CSRF check failed (invalid Origin).", 400
-                if referer and not referer.startswith(host):
+                if not host_ok(referer):
                     return "CSRF check failed (invalid Referer).", 400
     except Exception:
         # Do not block requests on unexpected errors
@@ -2882,6 +2910,164 @@ def dashboard():
 
     return render_template("dashboard.html", name=current_user.username)
 
+
+# --- Subuser Management (Gradat) ---
+@app.route("/gradat/subusers", methods=["GET", "POST"], endpoint="gradat_manage_subusers")
+@login_required
+def gradat_manage_subusers():
+    if current_user.role != "gradat" or current_user.parent_user_id:
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        action = request.form.get("action")
+
+        if action == "create":
+            username = (request.form.get("username") or "").strip()
+            assigned_platoon = (request.form.get("assigned_platoon") or "").strip() or None
+            allowed_modules = request.form.getlist("allowed_modules")
+
+            if not username:
+                flash("Numele de utilizator este obligatoriu.", "warning")
+                return redirect(url_for("gradat_manage_subusers"))
+            if User.query.filter_by(username=username).first():
+                flash(f'Numele de utilizator "{username}" există deja.', "warning")
+                return redirect(url_for("gradat_manage_subusers"))
+
+            unique_code = secrets.token_hex(8)
+            while User.query.filter_by(unique_code=unique_code).first():
+                unique_code = secrets.token_hex(8)
+
+            subuser = User(
+                username=username,
+                role="gradat",
+                unique_code=unique_code,
+                is_first_login=True,
+                parent_user_id=current_user.id,
+                assigned_platoon=assigned_platoon,
+                allowed_modules=json.dumps(allowed_modules, ensure_ascii=False),
+            )
+            db.session.add(subuser)
+            try:
+                db.session.flush()
+                log_action(
+                    "GRADAT_CREATE_SUBUSER_SUCCESS",
+                    target_model_name="User",
+                    target_id=subuser.id,
+                    details_after_dict=model_to_dict(subuser),
+                    description=f"Gradat {current_user.username} created subuser {username}. Unique code: {unique_code}. IP: {request.remote_addr}",
+                )
+                db.session.commit()
+                flash(
+                    f'Subutilizatorul "{username}" a fost creat. Cod unic pentru prima autentificare: {unique_code}',
+                    "success",
+                )
+            except Exception as e:
+                db.session.rollback()
+                log_action(
+                    "GRADAT_CREATE_SUBUSER_FAIL",
+                    description=f"Gradat {current_user.username} failed to create subuser {username}. Error: {str(e)}. IP: {request.remote_addr}",
+                )
+                db.session.commit()
+                flash("Eroare la crearea subutilizatorului.", "danger")
+            return redirect(url_for("gradat_manage_subusers"))
+
+        elif action in {"update", "reset_code", "delete"}:
+            subuser_id = request.form.get("subuser_id", type=int)
+            sub = db.session.get(User, subuser_id) if subuser_id else None
+            if not sub or sub.parent_user_id != current_user.id:
+                flash("Subutilizator invalid.", "danger")
+                return redirect(url_for("gradat_manage_subusers"))
+
+            if action == "update":
+                assigned_platoon = (request.form.get("assigned_platoon") or "").strip() or None
+                allowed_modules = request.form.getlist("allowed_modules")
+                sub.assigned_platoon = assigned_platoon
+                sub.allowed_modules = json.dumps(allowed_modules, ensure_ascii=False)
+                try:
+                    details_after = model_to_dict(sub)
+                    log_action(
+                        "GRADAT_UPDATE_SUBUSER_SUCCESS",
+                        target_model_name="User",
+                        target_id=sub.id,
+                        details_after_dict=details_after,
+                        description=f"Gradat {current_user.username} updated subuser {sub.username}.",
+                    )
+                    db.session.commit()
+                    flash("Subutilizator actualizat.", "success")
+                except Exception as e:
+                    db.session.rollback()
+                    log_action(
+                        "GRADAT_UPDATE_SUBUSER_FAIL",
+                        target_model_name="User",
+                        target_id=sub.id,
+                        description=f"Update failed for subuser {sub.username}: {str(e)}",
+                    )
+                    db.session.commit()
+                    flash("Eroare la actualizare.", "danger")
+
+            elif action == "reset_code":
+                old_code = sub.unique_code
+                new_code = secrets.token_hex(8)
+                while User.query.filter_by(unique_code=new_code).first():
+                    new_code = secrets.token_hex(8)
+                sub.unique_code = new_code
+                sub.is_first_login = True
+                sub.password_hash = None
+                sub.personal_code_hash = None
+                try:
+                    log_action(
+                        "GRADAT_RESET_SUBUSER_CODE_SUCCESS",
+                        target_model_name="User",
+                        target_id=sub.id,
+                        description=f"Reset subuser code from {old_code} to {new_code} for {sub.username}.",
+                    )
+                    db.session.commit()
+                    flash(f'Codul pentru "{sub.username}" a fost resetat: {new_code}', "success")
+                except Exception as e:
+                    db.session.rollback()
+                    log_action(
+                        "GRADAT_RESET_SUBUSER_CODE_FAIL",
+                        target_model_name="User",
+                        target_id=sub.id,
+                        description=f"Reset subuser code failed for {sub.username}: {str(e)}",
+                    )
+                    db.session.commit()
+                    flash("Eroare la resetarea codului.", "danger")
+
+            elif action == "delete":
+                try:
+                    username = sub.username
+                    details_before = model_to_dict(sub)
+                    db.session.delete(sub)
+                    log_action(
+                        "GRADAT_DELETE_SUBUSER_SUCCESS",
+                        target_model_name="User",
+                        target_id=subuser_id,
+                        details_before_dict=details_before,
+                        description=f"Deleted subuser {username}.",
+                    )
+                    db.session.commit()
+                    flash(f'Subutilizatorul "{username}" a fost șters.', "success")
+                except Exception as e:
+                    db.session.rollback()
+                    log_action(
+                        "GRADAT_DELETE_SUBUSER_FAIL",
+                        target_model_name="User",
+                        target_id=subuser_id,
+                        description=f"Delete subuser failed: {str(e)}",
+                    )
+                    db.session.commit()
+                    flash("Eroare la ștergere.", "danger")
+            return redirect(url_for("gradat_manage_subusers"))
+
+    # GET
+    subusers = current_user.subusers.order_by(User.username.asc()).all()
+    return render_template(
+        "gradat_subusers.html",
+        subusers=subusers,
+        module_choices=SUBUSER_MODULE_CHOICES,
+    )
 
 # --- Admin User Management ---
 @app.route(
