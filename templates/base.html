@@ -201,9 +201,11 @@
                         </ul>
                     </li>
                     {% if not current_user.is_authenticated %}
+                        {% if not maintenance_mode %}
                         <li class="nav-item ms-2"> <!-- Adăugat ms-2 pentru spațiere dacă e vizibil -->
-                        <a class="nav-link" href="{{ url_for('user_login') }}">Autentificare Utilizator</a>
+                            <a class="nav-link" href="{{ url_for('user_login') }}">Autentificare Utilizator</a>
                         </li>
+                        {% endif %}
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('admin_login') }}">Autentificare Admin</a>
                         </li>
@@ -212,6 +214,21 @@
             </div>
         </div>
     </nav>
+
+    {% if maintenance_mode %}
+    <div class="container-fluid p-0">
+        <div class="alert alert-warning text-center mb-0 rounded-0">
+            <i class="fas fa-tools me-2"></i>
+            Sistemul este în mentenanță. {{ maintenance_message or 'Facem puțină mentenanță. Revenim mai sprinteni decât cafeaua de dimineață.' }}
+            {% if not current_user.is_authenticated %}
+                <a href="{{ url_for('admin_login') }}" class="btn btn-sm btn-dark ms-3">Autentificare Admin</a>
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.role != 'admin' %}
+                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-dark ms-3">Deconectare</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 
     {% if current_user.is_authenticated and current_user.role == 'admin' %}
     <div id="admin-debug-bar" class="container-fluid py-1">

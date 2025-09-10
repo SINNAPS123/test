@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Mentenanță în desfășurare{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-center" style="min-height: 50vh;">
+    <div class="text-center">
+        <div class="mb-3">
+            <i class="fas fa-tools fa-3x text-warning"></i>
+        </div>
+        <h1 class="h3 mb-3">Mentenanță în desfășurare</h1>
+        <p class="lead">
+            {{ maintenance_message or 'Facem puțină mentenanță. Revenim mai sprinteni decât cafeaua de dimineață.' }}
+        </p>
+        <p class="text-muted">
+            Între timp, aplicația își face flotările. Vă mulțumim pentru răbdare!
+        </p>
+        <div class="mt-3">
+            <a href="{{ url_for('admin_login') }}" class="btn btn-dark">
+                <i class="fas fa-user-shield me-2"></i>Autentificare Admin
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
