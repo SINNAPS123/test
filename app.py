@@ -2287,23 +2287,16 @@ def home():
 
     # Fetch homepage settings
     default_title = "UNAP User Panel"
-    default_badge_text = "Beta v2.5"  # Original badge text
+    default_badge_text = "Beta v2.5"
+    default_badge_color = "primary"
 
     title_setting = SiteSetting.query.filter_by(key="home_page_title").first()
-    badge_setting = SiteSetting.query.filter_by(
-        key="home_page_badge_text"
-    ).first()
+    badge_text_setting = SiteSetting.query.filter_by(key="home_page_badge_text").first()
+    badge_color_setting = SiteSetting.query.filter_by(key="home_page_badge_color").first()
 
-    display_title = (
-        title_setting.value
-        if title_setting and title_setting.value
-        else default_title
-    )
-    display_badge_text = (
-        badge_setting.value
-        if badge_setting and badge_setting.value
-        else default_badge_text
-    )
+    display_title = title_setting.value if title_setting and title_setting.value else default_title
+    display_badge_text = badge_text_setting.value if badge_text_setting and badge_text_setting.value else default_badge_text
+    display_badge_color = badge_color_setting.value if badge_color_setting and badge_color_setting.value else default_badge_color
 
     # If badge text is explicitly set to "None" or empty string by admin, don't show badge.
     # The template will handle the logic of not rendering the span if display_badge_text is empty.
@@ -2315,6 +2308,7 @@ def home():
         total_volunteer_activities=total_volunteer_activities,
         home_page_title=display_title,
         home_page_badge_text=display_badge_text,
+        home_page_badge_color=display_badge_color,
     )
 
 
@@ -5117,6 +5111,24 @@ def battalion_commander_dashboard():
                 students_in_company_loop, now_localized_b
             )  # Calculate for now
 
+    # New: Calculate presence data per platoon
+    platoons_data_roll_call = {}
+    platoons_data_now = {}
+    platoons_in_battalion = sorted(
+        list(set(s.pluton for s in students_in_battalion_all if s.pluton and s.pluton.strip() != '0'))
+    )
+
+    for platoon_id_str in platoons_in_battalion:
+        students_in_platoon = [s for s in students_in_battalion_all if s.pluton == platoon_id_str]
+        if students_in_platoon:
+            platoon_name = f"Plutonul {platoon_id_str}"
+            platoons_data_roll_call[platoon_name] = _calculate_presence_data(
+                students_in_platoon, roll_call_datetime
+            )
+            platoons_data_now[platoon_name] = _calculate_presence_data(
+                students_in_platoon, now_localized_b
+            )
+
     active_public_codes = (
         PublicViewCode.query.filter_by(
             created_by_user_id=current_user.id,
@@ -5166,6 +5178,9 @@ def battalion_commander_dashboard():
         services_last_7_days_count=services_last_7_days_count,
         services_today_breakdown=services_today_breakdown,
         todays_services=todays_services_battalion,
+        # New platoon data
+        platoons_data=platoons_data_roll_call,
+        platoons_data_now=platoons_data_now,
     )
 
 
@@ -7414,44 +7429,51 @@ def list_permissions():
 
 
 @app.route("/gradat/permission/add", methods=["GET", "POST"])
-@app.route(
-    "/gradat/permission/edit/<int:permission_id>", methods=["GET", "POST"]
-)
+@app.route("/gradat/permission/edit/<int:permission_id>", methods=["GET", "POST"])
 @login_required
 def add_edit_permission(permission_id=None):
-    if current_user.role != "gradat":
+    if current_user.role not in ["gradat", "admin"]:
         flash("Acces neautorizat.", "danger")
         return redirect(url_for("dashboard"))
+
+    is_admin = current_user.role == "admin"
     form_title = "Adaugă Permisie Nouă"
     permission = None
     eff_user = get_current_user_or_scoped()
+
     if permission_id:
         permission = Permission.query.get_or_404(permission_id)
         student_of_permission = Student.query.get(permission.student_id)
-        allowed = bool(
-            student_of_permission
-            and student_of_permission.created_by_user_id == eff_user.id
-        )
+        if not is_admin:
+            allowed = bool(
+                student_of_permission
+                and student_of_permission.created_by_user_id == eff_user.id
+            )
+            try:
+                if allowed and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                    allowed = str(student_of_permission.pluton).strip() == str(g.subuser_platoon)
+            except Exception:
+                pass
+            if not allowed:
+                flash("Acces neautorizat la această permisie.", "danger")
+                return redirect(url_for("list_permissions"))
+        form_title = f"Editare Permisie: {student_of_permission.grad_militar} {student_of_permission.nume} {student_of_permission.prenume}"
+
+    if is_admin:
+        students_managed = Student.query.order_by(Student.nume).all()
+    else:
+        students_managed_q = Student.query.filter_by(created_by_user_id=eff_user.id)
         try:
-            if allowed and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
-                allowed = str(student_of_permission.pluton).strip() == str(g.subuser_platoon)
+            if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                students_managed_q = students_managed_q.filter(Student.pluton == str(g.subuser_platoon))
         except Exception:
             pass
-        if not allowed:
-            flash("Acces neautorizat la această permisie.", "danger")
-            return redirect(url_for("list_permissions"))
-        form_title = f"Editare Permisie: {student_of_permission.grad_militar} {student_of_permission.nume} {student_of_permission.prenume}"
-    students_managed_q = Student.query.filter_by(created_by_user_id=eff_user.id)
-    try:
-        if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
-            students_managed_q = students_managed_q.filter(Student.pluton == str(g.subuser_platoon))
-    except Exception:
-        pass
-    students_managed = (
-        students_managed_q
-        .order_by(Student.nume)
-        .all()
-    )
+        students_managed = (
+            students_managed_q
+            .order_by(Student.nume)
+            .all()
+        )
+
     if request.method == "POST":
         student_id = request.form.get("student_id")
         start_datetime_str = request.form.get("start_datetime")
@@ -7460,69 +7482,39 @@ def add_edit_permission(permission_id=None):
         transport_mode = request.form.get("transport_mode", "").strip()
         reason = request.form.get("reason", "").strip()
 
-        current_form_data_post = request.form  # For repopulating form on error
+        current_form_data_post = request.form
 
         if not student_id or not start_datetime_str or not end_datetime_str:
-            flash(
-                "Studentul, data de început și data de sfârșit sunt obligatorii.",
-                "warning",
-            )
-            return render_template(
-                "add_edit_permission.html",
-                form_title=form_title,
-                permission=permission,
-                students=students_managed,
-                form_data=current_form_data_post,
-            )
+            flash("Studentul, data de început și data de sfârșit sunt obligatorii.", "warning")
+            return render_template("add_edit_permission.html", form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post, is_admin=is_admin)
+
         try:
             start_dt = datetime.strptime(start_datetime_str, "%Y-%m-%dT%H:%M")
             end_dt = datetime.strptime(end_datetime_str, "%Y-%m-%dT%H:%M")
         except ValueError:
             flash("Format dată/oră invalid.", "danger")
-            return render_template(
-                "add_edit_permission.html",
-                form_title=form_title,
-                permission=permission,
-                students=students_managed,
-                form_data=current_form_data_post,
-            )
+            return render_template("add_edit_permission.html", form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post, is_admin=is_admin)
 
         if end_dt <= start_dt:
-            flash(
-                "Data de sfârșit trebuie să fie după data de început.",
-                "warning",
-            )
-            return render_template(
-                "add_edit_permission.html",
-                form_title=form_title,
-                permission=permission,
-                students=students_managed,
-                form_data=current_form_data_post,
-            )
+            flash("Data de sfârșit trebuie să fie după data de început.", "warning")
+            return render_template("add_edit_permission.html", form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post, is_admin=is_admin)
 
-        student_to_check = db.session.get(
-            Student, int(student_id)
-        )  # Use db.session.get for clarity
-        eff_user = get_current_user_or_scoped()
-        allowed_student = bool(
-            student_to_check and student_to_check.created_by_user_id == eff_user.id
-        )
-        try:
-            if allowed_student and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
-                allowed_student = str(student_to_check.pluton).strip() == str(g.subuser_platoon)
-        except Exception:
-            pass
-        if not allowed_student:
-            flash("Student invalid sau nu vă aparține.", "danger")
-            return render_template(
-                "add_edit_permission.html",
-                form_title=form_title,
-                permission=None,
-                students=students_managed,
-                form_data=current_form_data_post,
-            )
+        student_to_check = db.session.get(Student, int(student_id))
+        if not student_to_check:
+             flash("Studentul selectat nu a fost găsit.", "danger")
+             return render_template("add_edit_permission.html", form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post, is_admin=is_admin)
 
-        # Conflict checking (remains largely the same)
+        if not is_admin:
+            allowed_student = bool(student_to_check.created_by_user_id == eff_user.id)
+            try:
+                if allowed_student and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                    allowed_student = str(student_to_check.pluton).strip() == str(g.subuser_platoon)
+            except Exception:
+                pass
+            if not allowed_student:
+                flash("Student invalid sau nu vă aparține.", "danger")
+                return render_template("add_edit_permission.html", form_title=form_title, permission=None, students=students_managed, form_data=current_form_data_post, is_admin=is_admin)
+
         conflicting_service = ServiceAssignment.query.filter(
             ServiceAssignment.student_id == student_id,
             ServiceAssignment.service_type == "Intervenție",
@@ -7530,45 +7522,19 @@ def add_edit_permission(permission_id=None):
             ServiceAssignment.end_datetime > start_dt,
         ).first()
         if conflicting_service:
-            flash(
-                f'Studentul {student_to_check.nume} {student_to_check.prenume} este în serviciu de "Intervenție" și nu poate primi permisie.',
-                "danger",
-            )
-            return render_template(
-                "add_edit_permission.html",
-                form_title=form_title,
-                permission=permission,
-                students=students_managed,
-                form_data=current_form_data_post,
-            )
+            flash(f'Studentul {student_to_check.nume} {student_to_check.prenume} este în serviciu de "Intervenție" și nu poate primi permisie.', "danger")
+            return render_template("add_edit_permission.html", form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post, is_admin=is_admin)
 
-        general_conflict_msg = check_leave_conflict(
-            student_id,
-            start_dt,
-            end_dt,
-            "permission",
-            permission.id if permission else None,
-        )
+        general_conflict_msg = check_leave_conflict(student_id, start_dt, end_dt, "permission", permission.id if permission else None)
         if general_conflict_msg:
-            flash(
-                f"Conflict detectat: Studentul are deja {general_conflict_msg}.",
-                "danger",
-            )
-            return render_template(
-                "add_edit_permission.html",
-                form_title=form_title,
-                permission=permission,
-                students=students_managed,
-                form_data=current_form_data_post,
-            )
+            flash(f"Conflict detectat: Studentul are deja {general_conflict_msg}.", "danger")
+            return render_template("add_edit_permission.html", form_title=form_title, permission=permission, students=students_managed, form_data=current_form_data_post, is_admin=is_admin)
 
         action_description_prefix = f"User {current_user.username}"
         log_details_before = None
-        original_student_name_for_log = (
-            student_to_check.nume + " " + student_to_check.prenume
-        )
+        original_student_name_for_log = student_to_check.nume + " " + student_to_check.prenume
 
-        if permission:  # Editing existing permission
+        if permission:
             log_details_before = model_to_dict(permission)
             permission.student_id = int(student_id)
             permission.start_datetime = start_dt
@@ -7579,12 +7545,8 @@ def add_edit_permission(permission_id=None):
             action_type = "UPDATE_PERMISSION_SUCCESS"
             flash_msg_text = "Permisie actualizată cu succes!"
             log_description = f"{action_description_prefix} updated permission for {original_student_name_for_log}."
-            log_student_action(
-                permission.student_id,
-                "PERMISSION_UPDATED",
-                f"Permisie actualizată: {start_dt.strftime('%d.%m %H:%M')} - {end_dt.strftime('%d.%m %H:%M')}. Motiv: {reason or 'N/A'}",
-            )
-        else:  # Adding new permission
+            log_student_action(permission.student_id, "PERMISSION_UPDATED", f"Permisie actualizată: {start_dt.strftime('%d.%m %H:%M')} - {end_dt.strftime('%d.%m %H:%M')}. Motiv: {reason or 'N/A'}")
+        else:
             permission = Permission(
                 student_id=int(student_id),
                 start_datetime=start_dt,
@@ -7599,23 +7561,12 @@ def add_edit_permission(permission_id=None):
             action_type = "CREATE_PERMISSION_SUCCESS"
             flash_msg_text = "Permisie adăugată cu succes!"
             log_description = f"{action_description_prefix} created permission for {original_student_name_for_log}."
-            log_student_action(
-                permission.student_id,
-                "PERMISSION_CREATED",
-                f"Permisie adăugată: {start_dt.strftime('%d.%m %H:%M')} - {end_dt.strftime('%d.%m %H:%M')}. Motiv: {reason or 'N/A'}",
-            )
+            log_student_action(permission.student_id, "PERMISSION_CREATED", f"Permisie adăugată: {start_dt.strftime('%d.%m %H:%M')} - {end_dt.strftime('%d.%m %H:%M')}. Motiv: {reason or 'N/A'}")
 
         try:
-            db.session.flush()  # Ensure permission object has ID if new, and updates are in session
+            db.session.flush()
             log_details_after = model_to_dict(permission)
-            log_action(
-                action_type,
-                target_model_name="Permission",
-                target_id=permission.id,
-                details_before_dict=log_details_before,
-                details_after_dict=log_details_after,
-                description=log_description,
-            )
+            log_action(action_type, target_model_name="Permission", target_id=permission.id, details_before_dict=log_details_before, details_after_dict=log_details_after, description=log_description)
             db.session.commit()
             flash(flash_msg_text, "success")
         except Exception as e:
@@ -7623,74 +7574,30 @@ def add_edit_permission(permission_id=None):
             flash_msg_fail = f"Eroare la salvarea permisiei: {str(e)}"
             flash(flash_msg_fail, "danger")
             try:
-                fail_action_type = (
-                    "UPDATE_PERMISSION_FAIL"
-                    if permission_id
-                    else "CREATE_PERMISSION_FAIL"
-                )
-                # For create fail, permission object might not have an ID yet if flush failed.
-                # If it was an edit, permission.id is valid.
-                target_id_for_fail_log = (
-                    permission.id if permission and permission.id else None
-                )
-                # Log attempted data for create fail
-                attempted_data_on_fail = (
-                    model_to_dict(permission)
-                    if permission
-                    else current_form_data_post
-                )
-
-                log_action(
-                    fail_action_type,
-                    target_model_name="Permission",
-                    target_id=target_id_for_fail_log,
-                    details_before_dict=(
-                        log_details_before if permission_id else None
-                    ),
-                    details_after_dict=(
-                        attempted_data_on_fail
-                        if not permission_id
-                        else model_to_dict(permission)
-                    ),  # Log current state of 'permission' on edit fail
-                    description=f"{action_description_prefix} failed to {action_type.split('_')[0].lower()} permission for {original_student_name_for_log}. Error: {str(e)}",
-                )
+                fail_action_type = "UPDATE_PERMISSION_FAIL" if permission_id else "CREATE_PERMISSION_FAIL"
+                target_id_for_fail_log = permission.id if permission and permission.id else None
+                attempted_data_on_fail = model_to_dict(permission) if permission else current_form_data_post
+                log_action(fail_action_type, target_model_name="Permission", target_id=target_id_for_fail_log, details_before_dict=(log_details_before if permission_id else None), details_after_dict=(attempted_data_on_fail if not permission_id else model_to_dict(permission)), description=f"{action_description_prefix} failed to {action_type.split('_')[0].lower()} permission for {original_student_name_for_log}. Error: {str(e)}")
                 db.session.commit()
             except Exception as log_e:
-                app.logger.error(
-                    f"CRITICAL: Failed to commit failure log for {fail_action_type}: {str(log_e)}"
-                )
-            return render_template(
-                "add_edit_permission.html",
-                form_title=form_title,
-                permission=permission if permission_id else None,
-                students=students_managed,
-                form_data=current_form_data_post,
-            )
+                app.logger.error(f"CRITICAL: Failed to commit failure log for {fail_action_type}: {str(log_e)}")
+            return render_template("add_edit_permission.html", form_title=form_title, permission=permission if permission_id else None, students=students_managed, form_data=current_form_data_post, is_admin=is_admin)
+
+        if is_admin:
+            return redirect(url_for("admin_list_permissions"))
         return redirect(url_for("list_permissions"))
 
-    # GET request handling
-    form_data_on_get = (
-        {}
-    )  # Renamed from data_to_populate_form_with for clarity
-    if permission:  # Editing existing permission
+    form_data_on_get = {}
+    if permission:
         form_data_on_get = {
             "student_id": str(permission.student_id),
-            "start_datetime": (
-                permission.start_datetime.strftime("%Y-%m-%dT%H:%M")
-                if permission.start_datetime
-                else ""
-            ),
-            "end_datetime": (
-                permission.end_datetime.strftime("%Y-%m-%dT%H:%M")
-                if permission.end_datetime
-                else ""
-            ),
+            "start_datetime": (permission.start_datetime.strftime("%Y-%m-%dT%H:%M") if permission.start_datetime else ""),
+            "end_datetime": (permission.end_datetime.strftime("%Y-%m-%dT%H:%M") if permission.end_datetime else ""),
             "destination": permission.destination or "",
             "transport_mode": permission.transport_mode or "",
             "reason": permission.reason or "",
         }
     else:
-        # Pre-fill from query parameters to allow quick \"alte scutiri\" creation from student management
         prefill_student_id = request.args.get("student_id", type=int)
         prefill_reason = request.args.get("prefill_reason", type=str)
         if prefill_student_id:
@@ -7698,19 +7605,13 @@ def add_edit_permission(permission_id=None):
         if prefill_reason:
             form_data_on_get["reason"] = prefill_reason
 
-    # If it's a POST request that failed validation and re-rendered, current_form_data_post (passed as form_data) will be used by template.
-    # If it's a fresh GET for 'add', form_data_on_get may contain prefilled values from query params.
-
     return render_template(
         "add_edit_permission.html",
         form_title=form_title,
-        permission=permission,  # Pass the permission object itself for the template
+        permission=permission,
         students=students_managed,
-        form_data=(
-            form_data_on_get
-            if request.method == "GET"
-            else request.form if request.method == "POST" else {}
-        ),
+        form_data=(form_data_on_get if request.method == "GET" else request.form),
+        is_admin=is_admin
     )
 
 
@@ -8484,39 +8385,44 @@ def list_daily_leaves():
 @app.route("/gradat/daily_leave/edit/<int:leave_id>", methods=["GET", "POST"])
 @login_required
 def add_edit_daily_leave(leave_id=None):
-    if current_user.role != "gradat":
+    if current_user.role not in ["gradat", "admin"]:
         flash("Acces neautorizat.", "danger")
         return redirect(url_for("dashboard"))
+
+    is_admin = current_user.role == "admin"
     form_title = "Adaugă Învoire Zilnică"
     daily_leave = None
-    today_string = (
-        get_localized_now().date().strftime("%Y-%m-%d")
-    )  # Folosim data localizată
+    today_string = get_localized_now().date().strftime("%Y-%m-%d")
     eff_user = get_current_user_or_scoped()
+
     if leave_id:
         daily_leave = DailyLeave.query.get_or_404(leave_id)
         student_of_leave = Student.query.get(daily_leave.student_id)
-        allowed = bool(
-            student_of_leave
-            and student_of_leave.created_by_user_id == eff_user.id
-        )
-        try:
-            if allowed and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
-                allowed = str(student_of_leave.pluton).strip() == str(g.subuser_platoon)
-        except Exception:
-            pass
-        if not allowed:
-            flash("Acces neautorizat la această învoire.", "danger")
-            return redirect(url_for("list_daily_leaves"))
+        if not is_admin:
+            allowed = bool(
+                student_of_leave
+                and student_of_leave.created_by_user_id == eff_user.id
+            )
+            try:
+                if allowed and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                    allowed = str(student_of_leave.pluton).strip() == str(g.subuser_platoon)
+            except Exception:
+                pass
+            if not allowed:
+                flash("Acces neautorizat la această învoire.", "danger")
+                return redirect(url_for("list_daily_leaves"))
         form_title = f"Editare Învoire Zilnică: {student_of_leave.grad_militar} {student_of_leave.nume} {student_of_leave.prenume}"
 
-    students_managed_q = Student.query.filter_by(created_by_user_id=eff_user.id)
-    try:
-        if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
-            students_managed_q = students_managed_q.filter(Student.pluton == str(g.subuser_platoon))
-    except Exception:
-        pass
-    students_managed = students_managed_q.order_by(Student.nume).all()
+    if is_admin:
+        students_managed = Student.query.order_by(Student.nume).all()
+    else:
+        students_managed_q = Student.query.filter_by(created_by_user_id=eff_user.id)
+        try:
+            if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                students_managed_q = students_managed_q.filter(Student.pluton == str(g.subuser_platoon))
+        except Exception:
+            pass
+        students_managed = students_managed_q.order_by(Student.nume).all()
 
     if request.method == "POST":
         student_id = request.form.get("student_id")
@@ -8525,137 +8431,56 @@ def add_edit_daily_leave(leave_id=None):
         end_time_str = request.form.get("end_time")
         reason = request.form.get("reason", "").strip()
         current_form_data_post = request.form
+
         if not all([student_id, leave_date_str, start_time_str, end_time_str]):
-            flash(
-                "Toate câmpurile (student, dată, oră început, oră sfârșit) sunt obligatorii.",
-                "warning",
-            )
-            return render_template(
-                "add_edit_daily_leave.html",
-                form_title=form_title,
-                daily_leave=daily_leave,
-                students=students_managed,
-                today_str=today_string,
-                form_data=current_form_data_post,
-            )
+            flash("Toate câmpurile (student, dată, oră început, oră sfârșit) sunt obligatorii.", "warning")
+            return render_template("add_edit_daily_leave.html", form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post, is_admin=is_admin)
+
         try:
-            leave_date_obj = datetime.strptime(
-                leave_date_str, "%Y-%m-%d"
-            ).date()
+            leave_date_obj = datetime.strptime(leave_date_str, "%Y-%m-%d").date()
             start_time_obj = datetime.strptime(start_time_str, "%H:%M").time()
             end_time_obj = datetime.strptime(end_time_str, "%H:%M").time()
         except ValueError:
             flash("Format dată sau oră invalid.", "danger")
-            return render_template(
-                "add_edit_daily_leave.html",
-                form_title=form_title,
-                daily_leave=daily_leave,
-                students=students_managed,
-                today_str=today_string,
-                form_data=current_form_data_post,
-            )
-        is_valid_day, day_message = validate_daily_leave_times(
-            start_time_obj, end_time_obj, leave_date_obj
-        )
+            return render_template("add_edit_daily_leave.html", form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post, is_admin=is_admin)
+
+        is_valid_day, day_message = validate_daily_leave_times(start_time_obj, end_time_obj, leave_date_obj)
         if not is_valid_day:
             flash(day_message, "danger")
-            return render_template(
-                "add_edit_daily_leave.html",
-                form_title=form_title,
-                daily_leave=daily_leave,
-                students=students_managed,
-                today_str=today_string,
-                form_data=current_form_data_post,
-            )
-
-        # Removed the restrictive is_in_program and is_out_program checks.
-        # The primary validation will be that end_datetime is after start_datetime.
+            return render_template("add_edit_daily_leave.html", form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post, is_admin=is_admin)
 
         start_dt = datetime.combine(leave_date_obj, start_time_obj)
         effective_end_date = leave_date_obj
-        # Determine if end_time implies the next day
-        if (
-            end_time_obj < start_time_obj
-        ):  # This condition means it spans midnight
+        if end_time_obj < start_time_obj:
             effective_end_date += timedelta(days=1)
         end_dt = datetime.combine(effective_end_date, end_time_obj)
 
         if end_dt <= start_dt:
-            flash(
-                "Data/ora de sfârșit trebuie să fie după data/ora de început, chiar și când trece în ziua următoare.",
-                "warning",
-            )
-            return render_template(
-                "add_edit_daily_leave.html",
-                form_title=form_title,
-                daily_leave=daily_leave,
-                students=students_managed,
-                today_str=today_string,
-                form_data=current_form_data_post,
-            )
+            flash("Data/ora de sfârșit trebuie să fie după data/ora de început, chiar și când trece în ziua următoare.", "warning")
+            return render_template("add_edit_daily_leave.html", form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post, is_admin=is_admin)
 
         student_to_check = db.session.get(Student, int(student_id))
-        allowed_student = bool(
-            student_to_check and student_to_check.created_by_user_id == eff_user.id
-        )
-        try:
-            if allowed_student and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
-                allowed_student = str(student_to_check.pluton).strip() == str(g.subuser_platoon)
-        except Exception:
-            pass
-
-        if not allowed_student:
-            flash("Student invalid sau nu vă aparține.", "danger")
-            return render_template(
-                "add_edit_daily_leave.html",
-                form_title=form_title,
-                daily_leave=daily_leave,
-                students=students_managed,
-                today_str=today_string,
-                form_data=current_form_data_post,
-            )
+        if not is_admin:
+            allowed_student = bool(student_to_check and student_to_check.created_by_user_id == eff_user.id)
+            try:
+                if allowed_student and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                    allowed_student = str(student_to_check.pluton).strip() == str(g.subuser_platoon)
+            except Exception:
+                pass
+            if not allowed_student:
+                flash("Student invalid sau nu vă aparține.", "danger")
+                return render_template("add_edit_daily_leave.html", form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post, is_admin=is_admin)
 
         if student_to_check:
-            conflict_msg_intervention = check_leave_conflict(
-                student_id, start_dt, end_dt, "daily_leave", leave_id
-            )
-            if (
-                conflict_msg_intervention
-                and "serviciu (Intervenție)" in conflict_msg_intervention
-            ):
-                flash(
-                    f'Studentul {student_to_check.nume} {student_to_check.prenume} este în serviciu de "Intervenție" și nu poate primi învoire zilnică în acest interval.',
-                    "danger",
-                )
-                return render_template(
-                    "add_edit_daily_leave.html",
-                    form_title=form_title,
-                    daily_leave=daily_leave,
-                    students=students_managed,
-                    today_str=today_string,
-                    form_data=current_form_data_post,
-                )
+            conflict_msg_intervention = check_leave_conflict(student_id, start_dt, end_dt, "daily_leave", leave_id)
+            if conflict_msg_intervention and "serviciu (Intervenție)" in conflict_msg_intervention:
+                flash(f'Studentul {student_to_check.nume} {student_to_check.prenume} este în serviciu de "Intervenție" și nu poate primi învoire zilnică în acest interval.', "danger")
+                return render_template("add_edit_daily_leave.html", form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post, is_admin=is_admin)
 
-        general_conflict_msg = check_leave_conflict(
-            student_id,
-            start_dt,
-            end_dt,
-            "daily_leave",
-            leave_id if daily_leave else None,
-        )
+        general_conflict_msg = check_leave_conflict(student_id, start_dt, end_dt, "daily_leave", leave_id if daily_leave else None)
         if general_conflict_msg:
-            flash(
-                f"Conflict detectat: Studentul are deja {general_conflict_msg}.",
-                "danger",
-            )
-            return render_template(
-                "add_edit_daily_leave.html",
-                form_title=form_title,
-                daily_leave=daily_leave,
-                students=students_managed,
-                today_str=today_string,
-                form_data=current_form_data_post,
-            )
+            flash(f"Conflict detectat: Studentul are deja {general_conflict_msg}.", "danger")
+            return render_template("add_edit_daily_leave.html", form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post, is_admin=is_admin)
 
         if daily_leave:
             daily_leave.student_id = int(student_id)
@@ -8663,11 +8488,7 @@ def add_edit_daily_leave(leave_id=None):
             daily_leave.start_time = start_time_obj
             daily_leave.end_time = end_time_obj
             daily_leave.reason = reason
-            log_student_action(
-                daily_leave.student_id,
-                "DAILY_LEAVE_UPDATED",
-                f"Învoire zilnică actualizată: {leave_date_obj.strftime('%d.%m.%Y')} de la {start_time_str} la {end_time_str}.",
-            )
+            log_student_action(daily_leave.student_id, "DAILY_LEAVE_UPDATED", f"Învoire zilnică actualizată: {leave_date_obj.strftime('%d.%m.%Y')} de la {start_time_str} la {end_time_str}.")
             flash("Învoire zilnică actualizată!", "success")
         else:
             new_leave = DailyLeave(
@@ -8679,11 +8500,7 @@ def add_edit_daily_leave(leave_id=None):
                 status="Aprobată",
                 created_by_user_id=current_user.id,
             )
-            log_student_action(
-                new_leave.student_id,
-                "DAILY_LEAVE_CREATED",
-                f"Învoire zilnică adăugată: {leave_date_obj.strftime('%d.%m.%Y')} de la {start_time_str} la {end_time_str}.",
-            )
+            log_student_action(new_leave.student_id, "DAILY_LEAVE_CREATED", f"Învoire zilnică adăugată: {leave_date_obj.strftime('%d.%m.%Y')} de la {start_time_str} la {end_time_str}.")
             db.session.add(new_leave)
             flash("Învoire zilnică adăugată!", "success")
         try:
@@ -8691,14 +8508,10 @@ def add_edit_daily_leave(leave_id=None):
         except Exception as e:
             db.session.rollback()
             flash(f"Eroare la salvarea învoirii: {str(e)}", "danger")
-            return render_template(
-                "add_edit_daily_leave.html",
-                form_title=form_title,
-                daily_leave=daily_leave,
-                students=students_managed,
-                today_str=today_string,
-                form_data=current_form_data_post,
-            )
+            return render_template("add_edit_daily_leave.html", form_title=form_title, daily_leave=daily_leave, students=students_managed, today_str=today_string, form_data=current_form_data_post, is_admin=is_admin)
+
+        if is_admin:
+            return redirect(url_for("admin_list_daily_leaves"))
         return redirect(url_for("list_daily_leaves"))
 
     data_to_populate_form_with = {}
@@ -8719,6 +8532,7 @@ def add_edit_daily_leave(leave_id=None):
         students=students_managed,
         today_str=today_string,
         form_data=data_to_populate_form_with,
+        is_admin=is_admin
     )
 
 
@@ -9303,385 +9117,185 @@ def list_weekend_leaves():
 
 
 @app.route("/gradat/weekend_leave/add", methods=["GET", "POST"])
-@app.route(
-    "/gradat/weekend_leave/edit/<int:leave_id>", methods=["GET", "POST"]
-)
+@app.route("/gradat/weekend_leave/edit/<int:leave_id>", methods=["GET", "POST"])
 @login_required
 def add_edit_weekend_leave(leave_id=None):
-    if current_user.role != "gradat":
+    if current_user.role not in ["gradat", "admin"]:
         flash("Acces neautorizat.", "danger")
         return redirect(url_for("dashboard"))
+
+    is_admin = current_user.role == "admin"
     form_title = "Adaugă Învoire Weekend"
     weekend_leave = None
     form_data_on_get = {}
     eff_user = get_current_user_or_scoped()
+
     if leave_id:
         weekend_leave = WeekendLeave.query.get_or_404(leave_id)
         student_of_leave = Student.query.get(weekend_leave.student_id)
-        allowed = bool(
-            student_of_leave
-            and student_of_leave.created_by_user_id == eff_user.id
-        )
-        try:
-            if allowed and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
-                allowed = str(student_of_leave.pluton).strip() == str(g.subuser_platoon)
-        except Exception:
-            pass
-        if not allowed:
-            flash("Acces neautorizat la această învoire de weekend.", "danger")
-            return redirect(url_for("list_weekend_leaves"))
+        if not is_admin:
+            allowed = bool(
+                student_of_leave
+                and student_of_leave.created_by_user_id == eff_user.id
+            )
+            try:
+                if allowed and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                    allowed = str(student_of_leave.pluton).strip() == str(g.subuser_platoon)
+            except Exception:
+                pass
+            if not allowed:
+                flash("Acces neautorizat la această învoire de weekend.", "danger")
+                return redirect(url_for("list_weekend_leaves"))
         form_title = f"Editare Învoire Weekend: {student_of_leave.grad_militar} {student_of_leave.nume} {student_of_leave.prenume}"
         form_data_on_get["student_id"] = str(weekend_leave.student_id)
-        form_data_on_get["weekend_start_date"] = (
-            weekend_leave.weekend_start_date.strftime("%Y-%m-%d")
-        )
+        form_data_on_get["weekend_start_date"] = weekend_leave.weekend_start_date.strftime("%Y-%m-%d")
         form_data_on_get["reason"] = weekend_leave.reason
-        form_data_on_get["duminica_biserica"] = (
-            weekend_leave.duminica_biserica
-        )  # Populate church checkbox state
+        form_data_on_get["duminica_biserica"] = weekend_leave.duminica_biserica
         selected_days_from_db = []
-        # Helper to populate form_data_on_get for existing leave days
         day_fields_map = {
-            "day1": (
-                weekend_leave.day1_date,
-                weekend_leave.day1_start_time,
-                weekend_leave.day1_end_time,
-                weekend_leave.day1_selected,
-            ),
-            "day2": (
-                weekend_leave.day2_date,
-                weekend_leave.day2_start_time,
-                weekend_leave.day2_end_time,
-                weekend_leave.day2_selected,
-            ),
-            "day3": (
-                weekend_leave.day3_date,
-                weekend_leave.day3_start_time,
-                weekend_leave.day3_end_time,
-                weekend_leave.day3_selected,
-            ),
+            "day1": (weekend_leave.day1_date, weekend_leave.day1_start_time, weekend_leave.day1_end_time, weekend_leave.day1_selected),
+            "day2": (weekend_leave.day2_date, weekend_leave.day2_start_time, weekend_leave.day2_end_time, weekend_leave.day2_selected),
+            "day3": (weekend_leave.day3_date, weekend_leave.day3_start_time, weekend_leave.day3_end_time, weekend_leave.day3_selected),
         }
-        day_names_ro_map = {
-            0: "Luni",
-            1: "Marti",
-            2: "Miercuri",
-            3: "Joi",
-            4: "Vineri",
-            5: "Sambata",
-            6: "Duminica",
-        }
+        for _field_prefix, (d_date, s_time, e_time, d_name_selected) in day_fields_map.items():
+            if d_date and d_name_selected:
+                day_name_template_key = d_name_selected.lower()
+                if day_name_template_key not in selected_days_from_db:
+                    selected_days_from_db.append(d_name_selected)
+                form_data_on_get[f"{day_name_template_key}_start_time"] = s_time.strftime("%H:%M") if s_time else ""
+                form_data_on_get[f"{day_name_template_key}_end_time"] = e_time.strftime("%H:%M") if e_time else ""
+        form_data_on_get["selected_days[]"] = selected_days_from_db
 
-        for _field_prefix, (
-            d_date,
-            s_time,
-            e_time,
-            d_name_selected,
-        ) in day_fields_map.items():
-            if (
-                d_date and d_name_selected
-            ):  # d_name_selected is the actual day name like "Vineri"
-                # day_name_template_key = day_names_ro_map.get(d_date.weekday(), "Nespecificat").lower() # This was problematic if d_name_selected is the source of truth
-                day_name_template_key = (
-                    d_name_selected.lower()
-                )  # Use the stored day name directly
-                if (
-                    day_name_template_key not in selected_days_from_db
-                ):  # Ensure unique day names for selection
-                    selected_days_from_db.append(
-                        d_name_selected
-                    )  # Use original casing for selected_days[] list
+    if is_admin:
+        students_managed = Student.query.order_by(Student.nume).all()
+    else:
+        students_managed_q = Student.query.filter_by(created_by_user_id=eff_user.id)
+        try:
+            if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                students_managed_q = students_managed_q.filter(Student.pluton == str(g.subuser_platoon))
+        except Exception:
+            pass
+        students_managed = students_managed_q.order_by(Student.nume).all()
 
-                form_data_on_get[f"{day_name_template_key}_start_time"] = (
-                    s_time.strftime("%H:%M") if s_time else ""
-                )
-                form_data_on_get[f"{day_name_template_key}_end_time"] = (
-                    e_time.strftime("%H:%M") if e_time else ""
-                )
-
-        form_data_on_get["selected_days[]"] = (
-            selected_days_from_db  # This will be used by template to check checkboxes
-        )
-
-    students_managed_q = Student.query.filter_by(created_by_user_id=eff_user.id)
-    try:
-        if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
-            students_managed_q = students_managed_q.filter(Student.pluton == str(g.subuser_platoon))
-    except Exception:
-        pass
-    students_managed = students_managed_q.order_by(Student.nume).all()
     upcoming_fridays_list = get_upcoming_fridays()
+
     if request.method == "POST":
         student_id = request.form.get("student_id")
         weekend_start_date_str = request.form.get("weekend_start_date")
         selected_days = request.form.getlist("selected_days[]")
         reason = request.form.get("reason", "").strip()
-        current_form_data_post = (
-            request.form
-        )  # Used to repopulate form on error
+        current_form_data_post = request.form
+
         if not student_id or not weekend_start_date_str:
-            flash(
-                "Studentul și data de început a weekendului (Vineri) sunt obligatorii.",
-                "warning",
-            )
-            return render_template(
-                "add_edit_weekend_leave.html",
-                form_title=form_title,
-                weekend_leave=weekend_leave,
-                students=students_managed,
-                upcoming_weekends=upcoming_fridays_list,
-                form_data=current_form_data_post,
-            )
-        if (
-            not selected_days
-            or len(selected_days) == 0
-            or len(selected_days) > 3
-        ):  # Allow 1 to 3 days
-            flash(
-                "Trebuie să selectați între 1 și 3 zile din weekend.",
-                "warning",
-            )
-            return render_template(
-                "add_edit_weekend_leave.html",
-                form_title=form_title,
-                weekend_leave=weekend_leave,
-                students=students_managed,
-                upcoming_weekends=upcoming_fridays_list,
-                form_data=current_form_data_post,
-            )
+            flash("Studentul și data de început a weekendului (Vineri) sunt obligatorii.", "warning")
+            return render_template("add_edit_weekend_leave.html", form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post, is_admin=is_admin)
+
+        if not selected_days or len(selected_days) == 0 or len(selected_days) > 3:
+            flash("Trebuie să selectați între 1 și 3 zile din weekend.", "warning")
+            return render_template("add_edit_weekend_leave.html", form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post, is_admin=is_admin)
+
         try:
-            friday_date_obj = datetime.strptime(
-                weekend_start_date_str, "%Y-%m-%d"
-            ).date()
+            friday_date_obj = datetime.strptime(weekend_start_date_str, "%Y-%m-%d").date()
         except ValueError:
             flash("Format dată weekend invalid.", "danger")
-            return render_template(
-                "add_edit_weekend_leave.html",
-                form_title=form_title,
-                weekend_leave=weekend_leave,
-                students=students_managed,
-                upcoming_weekends=upcoming_fridays_list,
-                form_data=current_form_data_post,
-            )
+            return render_template("add_edit_weekend_leave.html", form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post, is_admin=is_admin)
 
-        day_data = []  # To store processed day information before saving
+        day_data = []
         for day_name_selected in selected_days:
-            start_time_str = request.form.get(
-                f"{day_name_selected.lower()}_start_time"
-            )
-            end_time_str = request.form.get(
-                f"{day_name_selected.lower()}_end_time"
-            )
+            start_time_str = request.form.get(f"{day_name_selected.lower()}_start_time")
+            end_time_str = request.form.get(f"{day_name_selected.lower()}_end_time")
             if not start_time_str or not end_time_str:
-                flash(
-                    f"Orele de început și sfârșit sunt obligatorii pentru {day_name_selected}.",
-                    "warning",
-                )
-                return render_template(
-                    "add_edit_weekend_leave.html",
-                    form_title=form_title,
-                    weekend_leave=weekend_leave,
-                    students=students_managed,
-                    upcoming_weekends=upcoming_fridays_list,
-                    form_data=current_form_data_post,
-                )
+                flash(f"Orele de început și sfârșit sunt obligatorii pentru {day_name_selected}.", "warning")
+                return render_template("add_edit_weekend_leave.html", form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post, is_admin=is_admin)
             try:
-                start_time_obj = datetime.strptime(
-                    start_time_str, "%H:%M"
-                ).time()
+                start_time_obj = datetime.strptime(start_time_str, "%H:%M").time()
                 end_time_obj = datetime.strptime(end_time_str, "%H:%M").time()
             except ValueError:
-                flash(
-                    f"Format oră invalid pentru {day_name_selected}.", "danger"
-                )
-                return render_template(
-                    "add_edit_weekend_leave.html",
-                    form_title=form_title,
-                    weekend_leave=weekend_leave,
-                    students=students_managed,
-                    upcoming_weekends=upcoming_fridays_list,
-                    form_data=current_form_data_post,
-                )
+                flash(f"Format oră invalid pentru {day_name_selected}.", "danger")
+                return render_template("add_edit_weekend_leave.html", form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post, is_admin=is_admin)
             if end_time_obj == start_time_obj:
-                flash(
-                    f"Ora de început și sfârșit nu pot fi identice pentru {day_name_selected}.",
-                    "warning",
-                )
-                return render_template(
-                    "add_edit_weekend_leave.html",
-                    form_title=form_title,
-                    weekend_leave=weekend_leave,
-                    students=students_managed,
-                    upcoming_weekends=upcoming_fridays_list,
-                    form_data=current_form_data_post,
-                )
+                flash(f"Ora de început și sfârșit nu pot fi identice pentru {day_name_selected}.", "warning")
+                return render_template("add_edit_weekend_leave.html", form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post, is_admin=is_admin)
+
             day_offset_map = {"Vineri": 0, "Sambata": 1, "Duminica": 2}
             day_offset = day_offset_map.get(day_name_selected)
             if day_offset is None:
                 flash(f"Nume zi invalid: {day_name_selected}", "danger")
-                return render_template(
-                    "add_edit_weekend_leave.html",
-                    form_title=form_title,
-                    weekend_leave=weekend_leave,
-                    students=students_managed,
-                    upcoming_weekends=upcoming_fridays_list,
-                    form_data=current_form_data_post,
-                )
+                return render_template("add_edit_weekend_leave.html", form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post, is_admin=is_admin)
+
             actual_date_obj = friday_date_obj + timedelta(days=day_offset)
-            current_interval_start_dt = datetime.combine(
-                actual_date_obj, start_time_obj
-            )
+            current_interval_start_dt = datetime.combine(actual_date_obj, start_time_obj)
             effective_end_date_for_interval = actual_date_obj
             if end_time_obj < start_time_obj:
                 effective_end_date_for_interval += timedelta(days=1)
-            current_interval_end_dt = datetime.combine(
-                effective_end_date_for_interval, end_time_obj
-            )
+            current_interval_end_dt = datetime.combine(effective_end_date_for_interval, end_time_obj)
+
             if current_interval_end_dt <= current_interval_start_dt:
-                flash(
-                    f"Interval orar invalid pentru {day_name_selected}.",
-                    "warning",
-                )
-                return render_template(
-                    "add_edit_weekend_leave.html",
-                    form_title=form_title,
-                    weekend_leave=weekend_leave,
-                    students=students_managed,
-                    upcoming_weekends=upcoming_fridays_list,
-                    form_data=current_form_data_post,
-                )
-            day_data.append(
-                {
-                    "name": day_name_selected,
-                    "date": actual_date_obj,
-                    "start": start_time_obj,
-                    "end": end_time_obj,
-                    "start_dt": current_interval_start_dt,
-                    "end_dt": current_interval_end_dt,
-                }
-            )
+                flash(f"Interval orar invalid pentru {day_name_selected}.", "warning")
+                return render_template("add_edit_weekend_leave.html", form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post, is_admin=is_admin)
+
+            day_data.append({"name": day_name_selected, "date": actual_date_obj, "start": start_time_obj, "end": end_time_obj, "start_dt": current_interval_start_dt, "end_dt": current_interval_end_dt})
+
         day_data.sort(key=lambda x: x["start_dt"])
         student_to_check = db.session.get(Student, int(student_id))
-        allowed_student = bool(
-            student_to_check and student_to_check.created_by_user_id == eff_user.id
-        )
-        try:
-            if allowed_student and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
-                allowed_student = str(student_to_check.pluton).strip() == str(g.subuser_platoon)
-        except Exception:
-            pass
-        if not allowed_student:
-            flash("Student invalid sau nu vă aparține.", "danger")
-            return render_template(
-                "add_edit_weekend_leave.html",
-                form_title=form_title,
-                weekend_leave=weekend_leave,
-                students=students_managed,
-                upcoming_weekends=upcoming_fridays_list,
-                form_data=current_form_data_post,
-            )
+
+        if not is_admin:
+            allowed_student = bool(student_to_check and student_to_check.created_by_user_id == eff_user.id)
+            try:
+                if allowed_student and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                    allowed_student = str(student_to_check.pluton).strip() == str(g.subuser_platoon)
+            except Exception:
+                pass
+            if not allowed_student:
+                flash("Student invalid sau nu vă aparține.", "danger")
+                return render_template("add_edit_weekend_leave.html", form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post, is_admin=is_admin)
 
         if student_to_check:
             for interval_data in day_data:
-                active_intervention_service = ServiceAssignment.query.filter(
-                    ServiceAssignment.student_id == student_id,
-                    ServiceAssignment.service_type == "Intervenție",
-                    ServiceAssignment.start_datetime < interval_data["end_dt"],
-                    ServiceAssignment.end_datetime > interval_data["start_dt"],
-                ).first()
+                active_intervention_service = ServiceAssignment.query.filter(ServiceAssignment.student_id == student_id, ServiceAssignment.service_type == "Intervenție", ServiceAssignment.start_datetime < interval_data["end_dt"], ServiceAssignment.end_datetime > interval_data["start_dt"]).first()
                 if active_intervention_service:
-                    flash(
-                        f'Studentul {student_to_check.nume} este în "Intervenție" pe {interval_data["name"]} și nu poate primi învoire.',
-                        "danger",
-                    )
-                    return render_template(
-                        "add_edit_weekend_leave.html",
-                        form_title=form_title,
-                        weekend_leave=weekend_leave,
-                        students=students_managed,
-                        upcoming_weekends=upcoming_fridays_list,
-                        form_data=current_form_data_post,
-                    )
+                    flash(f'Studentul {student_to_check.nume} este în "Intervenție" pe {interval_data["name"]} și nu poate primi învoire.', "danger")
+                    return render_template("add_edit_weekend_leave.html", form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post, is_admin=is_admin)
 
-        # Clear previous day data before setting new, especially for edits
         if weekend_leave:
             target_leave = weekend_leave
-            target_leave.day1_selected = None
-            target_leave.day1_date = None
-            target_leave.day1_start_time = None
-            target_leave.day1_end_time = None
-            target_leave.day2_selected = None
-            target_leave.day2_date = None
-            target_leave.day2_start_time = None
-            target_leave.day2_end_time = None
-            target_leave.day3_selected = None
-            target_leave.day3_date = None
-            target_leave.day3_start_time = None
-            target_leave.day3_end_time = None
+            target_leave.day1_selected = None; target_leave.day1_date = None; target_leave.day1_start_time = None; target_leave.day1_end_time = None
+            target_leave.day2_selected = None; target_leave.day2_date = None; target_leave.day2_start_time = None; target_leave.day2_end_time = None
+            target_leave.day3_selected = None; target_leave.day3_date = None; target_leave.day3_start_time = None; target_leave.day3_end_time = None
             flash_msg = "Învoire Weekend actualizată!"
         else:
-            target_leave = WeekendLeave(
-                created_by_user_id=current_user.id, status="Aprobată"
-            )
+            target_leave = WeekendLeave(created_by_user_id=current_user.id, status="Aprobată")
             flash_msg = "Învoire Weekend adăugată!"
 
         target_leave.student_id = int(student_id)
         target_leave.weekend_start_date = friday_date_obj
         target_leave.reason = reason
-        target_leave.duminica_biserica = (
-            request.form.get("duminica_biserica") == "true"
-        )
+        target_leave.duminica_biserica = request.form.get("duminica_biserica") == "true"
 
-        # Assign processed day_data to the model fields
         if len(day_data) >= 1:
-            target_leave.day1_selected = day_data[0]["name"]
-            target_leave.day1_date = day_data[0]["date"]
-            target_leave.day1_start_time = day_data[0]["start"]
-            target_leave.day1_end_time = day_data[0]["end"]
+            target_leave.day1_selected = day_data[0]["name"]; target_leave.day1_date = day_data[0]["date"]; target_leave.day1_start_time = day_data[0]["start"]; target_leave.day1_end_time = day_data[0]["end"]
         if len(day_data) >= 2:
-            target_leave.day2_selected = day_data[1]["name"]
-            target_leave.day2_date = day_data[1]["date"]
-            target_leave.day2_start_time = day_data[1]["start"]
-            target_leave.day2_end_time = day_data[1]["end"]
-        if len(day_data) >= 3:  # Assign third day if present
-            target_leave.day3_selected = day_data[2]["name"]
-            target_leave.day3_date = day_data[2]["date"]
-            target_leave.day3_start_time = day_data[2]["start"]
-            target_leave.day3_end_time = day_data[2]["end"]
+            target_leave.day2_selected = day_data[1]["name"]; target_leave.day2_date = day_data[1]["date"]; target_leave.day2_start_time = day_data[1]["start"]; target_leave.day2_end_time = day_data[1]["end"]
+        if len(day_data) >= 3:
+            target_leave.day3_selected = day_data[2]["name"]; target_leave.day3_date = day_data[2]["date"]; target_leave.day3_start_time = day_data[2]["start"]; target_leave.day3_end_time = day_data[2]["end"]
 
-        if not weekend_leave:  # If it's a new leave, add to session
+        if not weekend_leave:
             db.session.add(target_leave)
 
         try:
-            log_student_action(
-                target_leave.student_id,
-                (
-                    "WEEKEND_LEAVE_CREATED"
-                    if not weekend_leave
-                    else "WEEKEND_LEAVE_UPDATED"
-                ),
-                f"Învoire weekend salvată pentru {friday_date_obj.strftime('%d.%m')}. Zile: {', '.join(selected_days)}.",
-            )
+            log_student_action(target_leave.student_id, "WEEKEND_LEAVE_CREATED" if not weekend_leave else "WEEKEND_LEAVE_UPDATED", f"Învoire weekend salvată pentru {friday_date_obj.strftime('%d.%m')}. Zile: {', '.join(selected_days)}.")
             db.session.commit()
             if len(selected_days) == 3:
-                flash(
-                    flash_msg + " Ați selectat 3 zile pentru învoire.",
-                    "success",
-                )  # Add warning if 3 days selected
+                flash(flash_msg + " Ați selectat 3 zile pentru învoire.", "success")
             else:
                 flash(flash_msg, "success")
         except Exception as e:
             db.session.rollback()
-            flash(
-                f"Eroare la salvarea învoirii de weekend: {str(e)}", "danger"
-            )
-            return render_template(
-                "add_edit_weekend_leave.html",
-                form_title=form_title,
-                weekend_leave=weekend_leave,
-                students=students_managed,
-                upcoming_weekends=upcoming_fridays_list,
-                form_data=current_form_data_post,
-            )
+            flash(f"Eroare la salvarea învoirii de weekend: {str(e)}", "danger")
+            return render_template("add_edit_weekend_leave.html", form_title=form_title, weekend_leave=weekend_leave, students=students_managed, upcoming_weekends=upcoming_fridays_list, form_data=current_form_data_post, is_admin=is_admin)
+
+        if is_admin:
+            return redirect(url_for("admin_list_weekend_leaves"))
         return redirect(url_for("list_weekend_leaves"))
 
     data_to_populate_form_with = {}
@@ -9697,6 +9311,7 @@ def add_edit_weekend_leave(leave_id=None):
         students=students_managed,
         upcoming_weekends=upcoming_fridays_list,
         form_data=data_to_populate_form_with,
+        is_admin=is_admin
     )
 
 
@@ -10406,15 +10021,14 @@ def list_services():
 
 
 @app.route("/gradat/services/assign", methods=["GET", "POST"])
-@app.route(
-    "/gradat/services/edit/<int:assignment_id>", methods=["GET", "POST"]
-)
+@app.route("/gradat/services/edit/<int:assignment_id>", methods=["GET", "POST"])
 @login_required
 def assign_service(assignment_id=None):
-    if current_user.role != "gradat":
+    if current_user.role not in ["gradat", "admin"]:
         flash("Acces neautorizat.", "danger")
         return redirect(url_for("dashboard"))
 
+    is_admin = current_user.role == "admin"
     form_title = "Asignează Serviciu Nou"
     service_assignment = None
     form_data_for_template = {}
@@ -10423,40 +10037,40 @@ def assign_service(assignment_id=None):
     if assignment_id:
         service_assignment = ServiceAssignment.query.get_or_404(assignment_id)
         student_of_service = Student.query.get(service_assignment.student_id)
-        allowed = bool(
-            student_of_service
-            and student_of_service.created_by_user_id == eff_user.id
-        )
-        try:
-            if allowed and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
-                allowed = str(student_of_service.pluton).strip() == str(g.subuser_platoon)
-        except Exception:
-            pass
-        if not allowed:
-            flash("Acces neautorizat la acest serviciu.", "danger")
-            return redirect(url_for("list_services"))
+        if not is_admin:
+            allowed = bool(
+                student_of_service
+                and student_of_service.created_by_user_id == eff_user.id
+            )
+            try:
+                if allowed and getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                    allowed = str(student_of_service.pluton).strip() == str(g.subuser_platoon)
+            except Exception:
+                pass
+            if not allowed:
+                flash("Acces neautorizat la acest serviciu.", "danger")
+                return redirect(url_for("list_services"))
         form_title = f"Editare Serviciu: {student_of_service.grad_militar} {student_of_service.nume} ({service_assignment.service_type})"
         form_data_for_template = {
             "student_id": str(service_assignment.student_id),
             "service_type": service_assignment.service_type,
-            "service_date": service_assignment.service_date.strftime(
-                "%Y-%m-%d"
-            ),
+            "service_date": service_assignment.service_date.strftime("%Y-%m-%d"),
             "start_time": service_assignment.start_datetime.strftime("%H:%M"),
             "end_time": service_assignment.end_datetime.strftime("%H:%M"),
-            "participates_in_roll_call": (
-                "true" if service_assignment.participates_in_roll_call else ""
-            ),
+            "participates_in_roll_call": "true" if service_assignment.participates_in_roll_call else "",
             "notes": service_assignment.notes or "",
         }
 
-    students_q = Student.query.filter_by(created_by_user_id=eff_user.id)
-    try:
-        if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
-            students_q = students_q.filter(Student.pluton == str(g.subuser_platoon))
-    except Exception:
-        pass
-    students = students_q.order_by(Student.nume).all()
+    if is_admin:
+        students = Student.query.order_by(Student.nume).all()
+    else:
+        students_q = Student.query.filter_by(created_by_user_id=eff_user.id)
+        try:
+            if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                students_q = students_q.filter(Student.pluton == str(g.subuser_platoon))
+        except Exception:
+            pass
+        students = students_q.order_by(Student.nume).all()
 
     if not students and not assignment_id:
         flash("Nu aveți studenți pentru a le asigna servicii.", "warning")
@@ -10859,24 +10473,20 @@ def assign_multiple_services():
 @app.route("/gradat/services/delete/<int:assignment_id>", methods=["POST"])
 @login_required
 def delete_service_assignment(assignment_id):
-    if current_user.role != "gradat":
+    if current_user.role not in ["gradat", "admin"]:
         flash("Acces neautorizat.", "danger")
         return redirect(url_for("dashboard"))
 
     assign_del = ServiceAssignment.query.get_or_404(assignment_id)
-    student_owner = Student.query.filter_by(
-        id=assign_del.student_id, created_by_user_id=current_user.id
-    ).first()
+    student_owner = Student.query.get(assign_del.student_id)
 
-    if not student_owner:
-        flash("Acces neautorizat la acest serviciu pentru ștergere.", "danger")
-        return redirect(url_for("list_services"))
+    if current_user.role == "gradat":
+        eff_user = get_current_user_or_scoped()
+        if not student_owner or student_owner.created_by_user_id != eff_user.id:
+            flash("Acces neautorizat la acest serviciu pentru ștergere.", "danger")
+            return redirect(url_for("list_services"))
 
-    student_name = (
-        assign_del.student.nume + " " + assign_del.student.prenume
-        if assign_del.student
-        else "N/A"
-    )
+    student_name = f"{student_owner.nume} {student_owner.prenume}" if student_owner else "N/A"
     service_type_deleted = assign_del.service_type
     student_id_for_log = assign_del.student_id
 
@@ -10884,18 +10494,17 @@ def delete_service_assignment(assignment_id):
         log_student_action(
             student_id_for_log,
             "SERVICE_DELETED",
-            f"Serviciul '{service_type_deleted}' din {assign_del.service_date.strftime('%d.%m.%Y')} a fost șters.",
+            f"Serviciul '{service_type_deleted}' din {assign_del.service_date.strftime('%d.%m.%Y')} a fost șters de {current_user.username}.",
         )
         db.session.delete(assign_del)
         db.session.commit()
-        flash(
-            f"Serviciul ({service_type_deleted}) pentru {student_name} a fost șters.",
-            "success",
-        )
+        flash(f"Serviciul ({service_type_deleted}) pentru {student_name} a fost șters.", "success")
     except Exception as e:
         db.session.rollback()
         flash(f"Eroare la ștergerea serviciului: {str(e)}", "danger")
 
+    if current_user.role == "admin":
+        return redirect(request.referrer or url_for('admin_list_services'))
     return redirect(url_for("list_services"))
 
 
@@ -15110,46 +14719,51 @@ def admin_homepage_settings():
         return redirect(url_for("dashboard"))
 
     default_title = "UNAP User Panel"
-    default_badge_text = "Beta v2.5"  # Original badge text
+    default_badge_text = "Beta v2.5"
+    default_badge_color = "primary"  # Default color
 
     if request.method == "POST":
         new_title = request.form.get("home_page_title", default_title).strip()
         new_badge_text = request.form.get(
             "home_page_badge_text", default_badge_text
         ).strip()
+        new_badge_color = request.form.get(
+            "home_page_badge_color", default_badge_color
+        )
 
-        title_setting = SiteSetting.query.filter_by(
-            key="home_page_title"
-        ).first()
+        # Update Title
+        title_setting = SiteSetting.query.filter_by(key="home_page_title").first()
         if not title_setting:
             title_setting = SiteSetting(key="home_page_title", value=new_title)
             db.session.add(title_setting)
         else:
             title_setting.value = new_title
 
-        badge_setting = SiteSetting.query.filter_by(
-            key="home_page_badge_text"
-        ).first()
-        if not badge_setting:
-            badge_setting = SiteSetting(
-                key="home_page_badge_text", value=new_badge_text
-            )
-            db.session.add(badge_setting)
+        # Update Badge Text
+        badge_text_setting = SiteSetting.query.filter_by(key="home_page_badge_text").first()
+        if not badge_text_setting:
+            badge_text_setting = SiteSetting(key="home_page_badge_text", value=new_badge_text)
+            db.session.add(badge_text_setting)
         else:
-            badge_setting.value = new_badge_text
+            badge_text_setting.value = new_badge_text
+
+        # Update Badge Color
+        badge_color_setting = SiteSetting.query.filter_by(key="home_page_badge_color").first()
+        if not badge_color_setting:
+            badge_color_setting = SiteSetting(key="home_page_badge_color", value=new_badge_color)
+            db.session.add(badge_color_setting)
+        else:
+            badge_color_setting.value = new_badge_color
 
         try:
             db.session.commit()
-            flash(
-                "Setările pentru pagina principală au fost actualizate.",
-                "success",
-            )
+            flash("Setările pentru pagina principală au fost actualizate.", "success")
             log_action(
                 "ADMIN_UPDATE_HOMEPAGE_SETTINGS",
                 target_model_name="SiteSetting",
-                description=f"Admin {current_user.username} updated homepage settings. Title: '{new_title}', Badge: '{new_badge_text}'.",
+                description=f"Admin {current_user.username} updated homepage settings. Title: '{new_title}', Badge Text: '{new_badge_text}', Badge Color: '{new_badge_color}'.",
             )
-            db.session.commit()  # Commit log
+            db.session.commit()
         except Exception as e:
             db.session.rollback()
             flash(f"Eroare la salvarea setărilor: {str(e)}", "danger")
@@ -15158,32 +14772,25 @@ def admin_homepage_settings():
                 target_model_name="SiteSetting",
                 description=f"Admin {current_user.username} failed to update homepage settings. Error: {str(e)}",
             )
-            db.session.commit()  # Commit log
+            db.session.commit()
 
         return redirect(url_for("admin_homepage_settings"))
 
     # GET request
-    current_title_setting = SiteSetting.query.filter_by(
-        key="home_page_title"
-    ).first()
-    current_badge_setting = SiteSetting.query.filter_by(
-        key="home_page_badge_text"
-    ).first()
+    current_title_setting = SiteSetting.query.filter_by(key="home_page_title").first()
+    current_badge_text_setting = SiteSetting.query.filter_by(key="home_page_badge_text").first()
+    current_badge_color_setting = SiteSetting.query.filter_by(key="home_page_badge_color").first()
 
-    current_title = (
-        current_title_setting.value if current_title_setting else default_title
-    )
-    current_badge_text = (
-        current_badge_setting.value
-        if current_badge_setting
-        else default_badge_text
-    )
+    current_title = current_title_setting.value if current_title_setting else default_title
+    current_badge_text = current_badge_text_setting.value if current_badge_text_setting else default_badge_text
+    current_badge_color = current_badge_color_setting.value if current_badge_color_setting else default_badge_color
 
     return render_template(
         "admin_homepage_settings.html",
         title="Setări Pagină Principală",
         current_title=current_title,
         current_badge_text=current_badge_text,
+        current_badge_color=current_badge_color,
     )
 
 

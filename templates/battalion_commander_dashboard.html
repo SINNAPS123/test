@@ -309,6 +309,48 @@ SITUAȚIE {{ company_name }}:
         <div class="alert alert-info">Nu există companii cu studenți în acest batalion sau datele nu au putut fi încărcate.</div>
     {% endif %}
 
+    <h3 class="mt-5 mb-3">Detalii Efective pe Plutoane:</h3>
+    <div class="accordion" id="platoonsAccordion">
+        {% if platoons_data %}
+            {% for platoon_name, data in platoons_data.items()|sort %}
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="heading-{{ loop.index }}">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ loop.index }}" aria-expanded="false" aria-controls="collapse-{{ loop.index }}">
+                        {{ platoon_name }} - Situație Apel (EC: {{ data.efectiv_control }}, Ep: {{ data.efectiv_prezent_total }}, Ea: {{ data.efectiv_absent_total }})
+                    </button>
+                </h2>
+                <div id="collapse-{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="heading-{{ loop.index }}" data-bs-parent="#platoonsAccordion">
+                    <div class="accordion-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Situație Apel ({{ roll_call_time_str }})</h6>
+                                <p>
+                                    EC: <span class="badge bg-dark">{{ data.efectiv_control }}</span> |
+                                    Ep: <span class="badge bg-success">{{ data.efectiv_prezent_total }}</span> |
+                                    Ea: <span class="badge bg-danger">{{ data.efectiv_absent_total }}</span>
+                                </p>
+                                {{ display_presence_details(data, "platoon-roll-call-" ~ loop.index) }}
+                            </div>
+                             <div class="col-md-6 border-start">
+                                <h6>Situație ACUM <span class="text-danger">({{ current_time_for_display|localdatetime('%H:%M') }})</span></h6>
+                                {% set data_now = platoons_data_now[platoon_name] %}
+                                <p>
+                                    EC: <span class="badge bg-dark">{{ data_now.efectiv_control }}</span> |
+                                    Ep: <span class="badge bg-success">{{ data_now.efectiv_prezent_total }}</span> |
+                                    Ea: <span class="badge bg-danger">{{ data_now.efectiv_absent_total }}</span>
+                                </p>
+                                {{ display_presence_details(data_now, "platoon-now-" ~ loop.index) }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="alert alert-info">Nu există plutoane cu studenți în acest batalion.</div>
+        {% endif %}
+    </div>
+
     <hr class="my-4">
     <!-- Secțiune Cod Public de Vizualizare -->
     <h4 class="mb-3">Acces Public (Doar Vizualizare)</h4>

@@ -21,6 +21,19 @@
                     <div class="form-text">Textul pentru badge-ul afișat lângă titlu (ex: "Beta v2.5", "Nou", etc.). Lăsați gol pentru a nu afișa badge.</div>
                 </div>
 
+                <div class="mb-3">
+                    <label for="home_page_badge_color" class="form-label">Culoare Badge:</label>
+                    <select class="form-select" id="home_page_badge_color" name="home_page_badge_color">
+                        {% set colors = ['primary', 'secondary', 'success', 'danger', 'warning', 'info', 'light', 'dark'] %}
+                        {% for color in colors %}
+                            <option value="{{ color }}" {% if color == current_badge_color %}selected{% endif %}>
+                                {{ color|capitalize }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Selectați o culoare de fundal pentru badge (corespunde claselor Bootstrap 'bg-*').</div>
+                </div>
+
                 <button type="submit" class="btn btn-primary">Salvează Setările</button>
                 <a href="{{ url_for('admin_dashboard_route') }}" class="btn btn-secondary">Anulează</a>
             </form>

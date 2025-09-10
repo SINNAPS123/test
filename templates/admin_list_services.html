@@ -79,12 +79,13 @@
                         {% endif %}
                     </td>
                     <td>
-                        {# Admin Edit - TODO: Create/adapt admin_edit_service route #}
-                        {# <a href="{{ url_for('admin_edit_service', assignment_id=sa.id) }}" class="btn btn-sm btn-info py-0 px-1 me-1" title="Editare Serviciu (Admin)"><i class="fas fa-edit"></i></a> #}
+                        <a href="{{ url_for('assign_service', assignment_id=sa.id) }}" class="btn btn-sm btn-info py-0 px-1 me-1" title="Editare Serviciu (Admin)"><i class="fas fa-edit"></i></a>
 
-                        {# Admin Delete - TODO: Create/adapt admin_delete_service route if gradat's delete is not sufficient #}
-                        {# For now, gradat's delete_service_assignment exists. Admin needs own or role check in existing. #}
-                        <small class="text-muted">N/A pt. Admin momentan</small>
+                        <form method="POST" action="{{ url_for('delete_service_assignment', assignment_id=sa.id) }}" class="d-inline" onsubmit="return confirm('ADMIN: Ești sigur că vrei să ȘTERGI PERMANENT acest serviciu (ID: {{sa.id}})?');">
+                            <button type="submit" class="btn btn-sm btn-danger py-0 px-1 ms-1" title="Șterge Serviciul (Admin)">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </form>
                     </td>
                 </tr>
                 {% else %}
