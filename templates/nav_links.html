@@ -8,6 +8,8 @@
         <li><a href="{{ url_for('list_daily_leaves') }}">Învoiri Zilnice</a></li>
         <li><a href="{{ url_for('list_weekend_leaves') }}">Învoiri Weekend</a></li>
         <li><a href="{{ url_for('list_services') }}">Servicii</a></li>
+        <li><a href="{{ url_for('calendar_page') }}">Calendar</a></li>
+        <li><a href="{{ url_for('calendar_links_manage') }}">Linkuri Calendar</a></li>
         <li><a href="{{ url_for('volunteer_home') }}">Voluntariat</a></li>
         <li><a href="{{ url_for('presence_report') }}">Raport Prezență</a></li>
     {% elif current_user.role == 'admin' %}
@@ -16,8 +18,10 @@
     {% elif current_user.role == 'comandant_companie' %}
         <li><a href="{{ url_for('company_commander_dashboard') }}">Panou Companie</a></li>
         <li><a href="{{ url_for('text_report_display_company') }}">Raport Text</a></li>
+        <li><a href="{{ url_for('calendar_page') }}">Calendar</a></li>
     {% elif current_user.role == 'comandant_batalion' %}
         <li><a href="{{ url_for('battalion_commander_dashboard') }}">Panou Batalion</a></li>
         <li><a href="{{ url_for('text_report_display_battalion') }}">Raport Text</a></li>
+        <li><a href="{{ url_for('calendar_page') }}">Calendar</a></li>
     {% endif %}
 {% endif %}
