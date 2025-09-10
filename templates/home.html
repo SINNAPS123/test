@@ -8,7 +8,7 @@
     <h2 class="fw-bold">
         {{ home_page_title | default("UNAP User Panel") }}
         {% if home_page_badge_text and home_page_badge_text.strip() and home_page_badge_text.lower() != 'none' %}
-            <span class="badge bg-info ms-2">{{ home_page_badge_text }}</span>
+            <span class="badge bg-{{ home_page_badge_color | default('primary') }} ms-2">{{ home_page_badge_text }}</span>
         {% endif %}
     </h2>
     {% if current_user.is_authenticated and current_user.role == 'admin' %}

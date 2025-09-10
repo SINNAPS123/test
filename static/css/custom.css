@@ -101,7 +101,7 @@ a:hover {
   border-bottom: 1px solid var(--border);
 }
 .navbar .navbar-brand img.logo-img {
-  max-height: 50px; /* Increased from 40px */
+  max-height: 75px; /* Increased from 50px */
 }
 
 /* Improve navbar usability on mobile */
@@ -121,7 +121,7 @@ a:hover {
 }
 
 .main-page-logo {
-    max-height: 150px; /* Increased from 120px */
+    max-height: 225px; /* Increased from 150px */
     width: auto;
     margin-bottom: 1rem;
 }
