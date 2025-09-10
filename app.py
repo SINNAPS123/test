@@ -156,6 +156,41 @@ app.config["CSRF_TRUSTED_ORIGINS"] = [
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)  # Initialize Flask-Migrate
+
+# Automatically apply database migrations on first request and ensure base seed data exists.
+# This prevents "no such column" errors when the codebase is ahead of the local SQLite schema.
+def _auto_apply_migrations_and_seed():
+    try:
+        # Apply Alembic migrations to the latest head
+        from flask_migrate import upgrade as _upgrade
+        _upgrade()
+    except Exception as e:
+        try:
+            app.logger.error(f"Database auto-migration failed: {e}")
+        except Exception:
+            pass
+    # Ensure an admin user exists (development convenience)
+    try:
+        # Access User dynamically from globals to avoid ordering issues at import time
+        UserModel = globals().get("User")
+        if UserModel is not None:
+            if not UserModel.query.filter_by(username="admin").first():
+                admin = UserModel(username="admin", role="admin", is_first_login=False)
+                # Set default development password
+                try:
+                    admin.set_password("admin123")
+                except Exception:
+                    pass
+                db.session.add(admin)
+                db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+@app.before_first_request
+def _bootstrap_db_on_first_request():
+    _auto_apply_migrations_and_seed()
+
 login_manager = LoginManager(app)
 login_manager.login_view = "user_login"
 login_manager.login_message_category = "info"
