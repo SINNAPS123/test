@@ -2140,6 +2140,16 @@ def check_service_conflict_for_student(
     service_type,
     current_service_id=None,
 ):
+    # If current_service_id is not explicitly provided (e.g., edit form didn't pass it here),
+    # try to infer it from the current request payload to avoid self-conflict on edit.
+    if current_service_id is None:
+        try:
+            inferred_id = request.form.get("current_service_id", type=int)
+            if inferred_id:
+                current_service_id = inferred_id
+        except Exception:
+            pass
+
     if service_type in ["Intervenție", "GSS"]:
         conflicting_permission = Permission.query.filter(
             Permission.student_id == student_id,
@@ -5310,6 +5320,418 @@ def scoped_logout():
     session.pop("scoped_access", None)
     flash("Ați fost deconectat din sesiunea de acces delegat.", "success")
     return redirect(url_for("scoped_login"))
+
+
+# --- Public Calendar (Scoped Access Code without login) ---
+
+def _generate_unique_scoped_code_str(length: int = 16) -> str:
+    """
+    Generate a unique code string of the given length (fits ScopedAccessCode.code).
+    Uses hex to match 16-char column length (token_hex(8) -> 16 chars).
+    """
+    # ensure even length for token_hex
+    nbytes = max(1, length // 2)
+    code = secrets.token_hex(nbytes)
+    # enforce exact length if odd requested
+    if len(code) != length:
+        code = code[:length]
+    # ensure uniqueness
+    while ScopedAccessCode.query.filter_by(code=code).first():
+        code = secrets.token_hex(nbytes)
+        if len(code) != length:
+            code = code[:length]
+    return code
+
+
+@app.route("/gradat/calendar/generate_public_code", methods=["POST"], endpoint="generate_public_calendar_code")
+@login_required
+def generate_public_calendar_code():
+    """
+    Generate or regenerate a public, read-only access code for the calendar.
+    Supports permanent (non-expiring) links and optional regeneration (revoking existing active links first).
+    Request JSON/form:
+      - permanent: bool (default False). If True, create a non-expiring link (effectively very long expiry).
+      - days: int (fallback if permanent is False). Clamped 1..365.
+      - regenerate: bool (default False). If True, revoke existing active calendar public codes before creating a new one.
+    """
+    if current_user.role != "gradat":
+        return jsonify({"error": "Acces neautorizat."}), 403
+
+    # Only for main gradat (not subuser)
+    if getattr(current_user, "parent_user_id", None):
+        return jsonify({"error": "Funcția nu este disponibilă pentru subutilizatori."}), 403
+
+    # Parse payload
+    payload = {}
+    try:
+        if request.is_json:
+            payload = request.get_json(silent=True) or {}
+        else:
+            payload = request.form.to_dict() if request.form else {}
+    except Exception:
+        payload = {}
+
+    permanent = False
+    try:
+        permanent = bool(
+            payload.get("permanent", False)
+        )
+    except Exception:
+        permanent = False
+
+    regenerate = False
+    try:
+        regenerate = bool(payload.get("regenerate", False))
+    except Exception:
+        regenerate = False
+
+    # Determine expiry
+    if permanent:
+        # Effectively "never" expires: 100 years from now
+        expires_at = datetime.utcnow() + timedelta(days=365 * 100)
+    else:
+        try:
+            days = int(payload.get("days", 90))
+        except Exception:
+            days = 90
+        days = max(1, min(days, 365))
+        expires_at = datetime.utcnow() + timedelta(days=days)
+
+    # Optionally revoke existing active calendar codes before creating a new one
+    if regenerate:
+        try:
+            existing_codes = ScopedAccessCode.query.filter_by(
+                created_by_user_id=current_user.id, is_active=True
+            ).all()
+            for c in existing_codes:
+                try:
+                    perms = c.get_permissions_list()
+                except Exception:
+                    perms = []
+                if "/calendar" in perms and "/api/events" in perms and c.expires_at > datetime.utcnow():
+                    c.is_active = False
+            db.session.flush()
+        except Exception:
+            db.session.rollback()
+            return jsonify({"error": "Eroare la regenerare cod (revocare coduri anterioare)."}), 500
+
+    permissions = json.dumps(["/calendar", "/api/events"], ensure_ascii=False)
+    code_str = _generate_unique_scoped_code_str(16)
+
+    sac = ScopedAccessCode(
+        code=code_str,
+        description="Calendar Public",
+        permissions=permissions,
+        expires_at=expires_at,
+        created_by_user_id=current_user.id,
+        is_active=True,
+    )
+    db.session.add(sac)
+    try:
+        db.session.flush()
+        # Log creation
+        log_action(
+            "GENERATE_PUBLIC_CALENDAR_CODE_SUCCESS",
+            target_model_name="ScopedAccessCode",
+            target_id=sac.id,
+            details_after_dict={
+                "code": sac.code,
+                "expires_at": sac.expires_at.isoformat(),
+                "permissions": json.loads(sac.permissions),
+                "permanent": permanent,
+                "regenerate": regenerate,
+            },
+            description=f"User {current_user.username} generated public calendar code.",
+        )
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        log_action(
+            "GENERATE_PUBLIC_CALENDAR_CODE_FAIL",
+            description=f"Failed to create public calendar code for user {current_user.username}: {str(e)}",
+        )
+        db.session.commit()
+        return jsonify({"error": "Eroare la generarea codului."}), 500
+
+    public_url = url_for("public_calendar_view", code=sac.code, _external=True)
+    return jsonify(
+        {
+            "code": sac.code,
+            "expires_at": sac.expires_at.isoformat(),
+            "public_url": public_url,
+            "never_expires": permanent,
+        }
+    ), 200
+
+
+@app.route("/gradat/calendar/list_public_codes", methods=["GET"], endpoint="list_public_calendar_codes")
+@login_required
+def list_public_calendar_codes():
+    if current_user.role != "gradat":
+        return jsonify({"error": "Acces neautorizat."}), 403
+    if getattr(current_user, "parent_user_id", None):
+        return jsonify({"error": "Funcția nu este disponibilă pentru subutilizatori."}), 403
+
+    now = datetime.utcnow()
+    codes = (
+        ScopedAccessCode.query.filter_by(
+            created_by_user_id=current_user.id, is_active=True
+        )
+        .all()
+    )
+    results = []
+    for c in codes:
+        try:
+            perms = c.get_permissions_list()
+        except Exception:
+            perms = []
+        if "/calendar" in perms and "/api/events" in perms and c.expires_at > now:
+            # Consider links with expiry > 20 years as "never_expires"
+            never_expires = (c.expires_at - now) > timedelta(days=365 * 20)
+            results.append(
+                {
+                    "code": c.code,
+                    "expires_at": c.expires_at.isoformat(),
+                    "public_url": url_for("public_calendar_view", code=c.code, _external=True),
+                    "never_expires": never_expires,
+                }
+            )
+    # sort by expiry descending (permanent will naturally float to the top)
+    results.sort(key=lambda x: x["expires_at"], reverse=True)
+    return jsonify({"codes": results})
+
+
+@app.route("/gradat/calendar/revoke_public_code", methods=["POST"], endpoint="revoke_public_calendar_code")
+@login_required
+def revoke_public_calendar_code():
+    if current_user.role != "gradat":
+        return jsonify({"error": "Acces neautorizat."}), 403
+    if getattr(current_user, "parent_user_id", None):
+        return jsonify({"error": "Funcția nu este disponibilă pentru subutilizatori."}), 403
+
+    code_to_revoke = None
+    try:
+        data = request.get_json(silent=True) or {}
+        code_to_revoke = (data.get("code") or "").strip()
+    except Exception:
+        pass
+    if not code_to_revoke:
+        code_to_revoke = (request.form.get("code") or "").strip() if request.form else ""
+
+    if not code_to_revoke:
+        return jsonify({"error": "Cod lipsă."}), 400
+
+    sac = ScopedAccessCode.query.filter_by(code=code_to_revoke, is_active=True).first()
+    if not sac or sac.created_by_user_id != current_user.id:
+        return jsonify({"error": "Cod invalid sau deja revocat."}), 404
+
+    details_before = {"code": sac.code, "expires_at": sac.expires_at.isoformat()}
+    sac.is_active = False
+    try:
+        log_action(
+            "REVOKE_PUBLIC_CALENDAR_CODE_SUCCESS",
+            target_model_name="ScopedAccessCode",
+            target_id=sac.id,
+            details_before_dict=details_before,
+            description=f"User {current_user.username} revoked public calendar code.",
+        )
+        db.session.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        db.session.rollback()
+        log_action(
+            "REVOKE_PUBLIC_CALENDAR_CODE_FAIL",
+            description=f"Failed to revoke public calendar code for user {current_user.username}: {str(e)}",
+        )
+        db.session.commit()
+        return jsonify({"error": "Eroare la revocare."}), 500
+
+
+@app.route("/calendar/public/<string:code>", methods=["GET"], endpoint="public_calendar_view")
+def public_calendar_view(code):
+    """
+    Public calendar page for a valid, non-expired scoped code.
+    """
+    now_utc = datetime.utcnow()
+    sac = ScopedAccessCode.query.filter_by(code=code, is_active=True).first()
+    if not sac or sac.expires_at <= now_utc:
+        return "Link invalid sau expirat.", 404
+
+    # Do not set a session; just render the view that will fetch events via public API.
+    events_url = url_for("api_events_public", code=code)
+    return render_template("calendar_view.html", events_url=events_url, is_public_view=True)
+
+
+def _build_calendar_events_for_user_id(user_id: int, range_start: datetime, range_end: datetime):
+    """
+    Build calendar events for all students managed by the given user_id,
+    within [range_start, range_end] (naive datetimes, server-local).
+    Returns a list of event dicts compatible with FullCalendar.
+    """
+    # Collect students
+    students = (
+        Student.query.filter_by(created_by_user_id=user_id)
+        .with_entities(Student.id, Student.grad_militar, Student.nume, Student.prenume)
+        .all()
+    )
+    if not students:
+        return []
+    student_ids = [sid for sid, *_ in students]
+    # Map for names
+    student_name = {
+        sid: f"{grad} {n} {p}".strip() for (sid, grad, n, p) in students
+    }
+
+    events = []
+
+    # Permissions
+    perms = (
+        Permission.query.options(joinedload(Permission.student))
+        .filter(
+            Permission.student_id.in_(student_ids),
+            Permission.status == "Aprobată",
+            Permission.start_datetime < range_end,
+            Permission.end_datetime > range_start,
+        )
+        .all()
+    )
+    for p in perms:
+        start_aware = EUROPE_BUCHAREST.localize(p.start_datetime) if p.start_datetime.tzinfo is None else p.start_datetime.astimezone(EUROPE_BUCHAREST)
+        end_aware = EUROPE_BUCHAREST.localize(p.end_datetime) if p.end_datetime.tzinfo is None else p.end_datetime.astimezone(EUROPE_BUCHAREST)
+        sname = student_name.get(p.student_id, getattr(p.student, "nume", "") + " " + getattr(p.student, "prenume", ""))
+        events.append(
+            {
+                "id": f"perm-{p.id}",
+                "title": sname or "Permisie",
+                "start": start_aware.isoformat(),
+                "end": end_aware.isoformat(),
+                "allDay": False,
+                "color": "#0ea5e9",  # sky-500
+                "extendedProps": {"student": sname, "type": "Permisie"},
+            }
+        )
+
+    # Daily Leaves
+    dls = (
+        DailyLeave.query.options(joinedload(DailyLeave.student))
+        .filter(
+            DailyLeave.student_id.in_(student_ids),
+            DailyLeave.status == "Aprobată",
+        )
+        .all()
+    )
+    for d in dls:
+        # Compute interval
+        s_dt = datetime.combine(d.leave_date, d.start_time)
+        e_dt = datetime.combine(d.leave_date, d.end_time)
+        if d.end_time < d.start_time:
+            e_dt += timedelta(days=1)
+        # Overlap with range
+        if s_dt < range_end and e_dt > range_start:
+            s_aware = EUROPE_BUCHAREST.localize(s_dt)
+            e_aware = EUROPE_BUCHAREST.localize(e_dt)
+            sname = student_name.get(d.student_id, getattr(d.student, "nume", "") + " " + getattr(d.student, "prenume", ""))
+            events.append(
+                {
+                    "id": f"dl-{d.id}",
+                    "title": sname or "Învoire Zilnică",
+                    "start": s_aware.isoformat(),
+                    "end": e_aware.isoformat(),
+                    "allDay": False,
+                    "color": "#22c55e",  # green-500
+                    "extendedProps": {"student": sname, "type": f"Învoire Zilnică ({d.leave_type_display})"},
+                }
+            )
+
+    # Weekend Leaves
+    wls = (
+        WeekendLeave.query.options(joinedload(WeekendLeave.student))
+        .filter(
+            WeekendLeave.student_id.in_(student_ids),
+            WeekendLeave.status == "Aprobată",
+        )
+        .all()
+    )
+    for w in wls:
+        sname = student_name.get(w.student_id, getattr(w.student, "nume", "") + " " + getattr(w.student, "prenume", ""))
+        for it in w.get_intervals():
+            s_aware = it["start"]
+            e_aware = it["end"]
+            if s_aware < EUROPE_BUCHAREST.localize(range_end) and e_aware > EUROPE_BUCHAREST.localize(range_start):
+                events.append(
+                    {
+                        "id": f"wl-{w.id}-{int(it['start'].timestamp())}",
+                        "title": sname or "Învoire Weekend",
+                        "start": s_aware.isoformat(),
+                        "end": e_aware.isoformat(),
+                        "allDay": False,
+                        "color": "#eab308",  # yellow-500
+                        "extendedProps": {"student": sname, "type": f"Învoire Weekend ({it['day_name']})"},
+                    }
+                )
+
+    # Services
+    servs = (
+        ServiceAssignment.query.options(joinedload(ServiceAssignment.student))
+        .filter(
+            ServiceAssignment.student_id.in_(student_ids),
+            ServiceAssignment.start_datetime < range_end,
+            ServiceAssignment.end_datetime > range_start,
+        )
+        .all()
+    )
+    for s in servs:
+        s_aware = EUROPE_BUCHAREST.localize(s.start_datetime) if s.start_datetime.tzinfo is None else s.start_datetime.astimezone(EUROPE_BUCHAREST)
+        e_aware = EUROPE_BUCHAREST.localize(s.end_datetime) if s.end_datetime.tzinfo is None else s.end_datetime.astimezone(EUROPE_BUCHAREST)
+        sname = student_name.get(s.student_id, getattr(s.student, "nume", "") + " " + getattr(s.student, "prenume", ""))
+        events.append(
+            {
+                "id": f"serv-{s.id}",
+                "title": sname or "Serviciu",
+                "start": s_aware.isoformat(),
+                "end": e_aware.isoformat(),
+                "allDay": False,
+                "color": "#f97316",  # orange-500
+                "extendedProps": {"student": sname, "type": f"Serviciu ({s.service_type})"},
+            }
+        )
+
+    return events
+
+
+@app.route("/api/events/public/<string:code>", methods=["GET"], endpoint="api_events_public")
+def api_events_public(code):
+    """
+    Public events feed for FullCalendar based on a valid scoped access code.
+    Accepts FullCalendar start/end query params (ISO strings) to limit data.
+    """
+    now_utc = datetime.utcnow()
+    sac = ScopedAccessCode.query.filter_by(code=code, is_active=True).first()
+    if not sac or sac.expires_at <= now_utc:
+        return jsonify([])
+
+    # Parse range from query params (FullCalendar sends ISO dates)
+    start_param = request.args.get("start")
+    end_param = request.args.get("end")
+    try:
+        range_start = datetime.fromisoformat(start_param) if start_param else (datetime.utcnow() - timedelta(days=30))
+    except Exception:
+        range_start = datetime.utcnow() - timedelta(days=30)
+    try:
+        range_end = datetime.fromisoformat(end_param) if end_param else (datetime.utcnow() + timedelta(days=60))
+    except Exception:
+        range_end = datetime.utcnow() + timedelta(days=60)
+
+    # Normalize to naive server-local for DB comparisons (models use naive)
+    # We treat parsed ISO as naive if tz-aware; strip tzinfo for DB comparisons
+    if range_start.tzinfo is not None:
+        range_start = range_start.replace(tzinfo=None)
+    if range_end.tzinfo is not None:
+        range_end = range_end.replace(tzinfo=None)
+
+    events = _build_calendar_events_for_user_id(sac.created_by_user_id, range_start, range_end)
+    # Return JSON array
+    return jsonify(events)
 
 
 # --- Volunteer Module ---

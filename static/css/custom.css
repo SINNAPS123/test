@@ -32,7 +32,8 @@
   --radius-lg: 1.25rem;
   --focus-ring: 0 0 0 3px rgba(37,99,235,0.2);
 
-  --navbar-height: 58px;
+  --navbar-height: 44px; /* smaller navbar */
+  --logo-height: 22px;   /* much smaller logo for compact navbar */
 
   /* mobile ergonomics */
   --tap-size: 44px;
@@ -99,9 +100,42 @@ a:hover {
   background: var(--card-bg) !important;
   transition: background 0.2s;
   border-bottom: 1px solid var(--border);
+  padding-top: .15rem;
+  padding-bottom: .15rem;
 }
 .navbar .navbar-brand img.logo-img {
-  max-height: 75px; /* Increased from 50px */
+  max-height: var(--logo-height);
+}
+.navbar .nav-link {
+  padding: .35rem .6rem;
+  border-radius: .5rem;
+}
+.navbar .nav-link i {
+  font-size: 1.05rem;
+}
+
+/* Icon-only navbar buttons */
+.navbar .nav-link.icon-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  margin-right: .25rem;
+  background: transparent;
+}
+.navbar .nav-link.icon-btn i {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+.navbar .nav-link.icon-btn:hover {
+  background: rgba(37,99,235,0.08);
+}
+[data-theme="dark"] .navbar .nav-link.icon-btn:hover,
+html.dark-mode-preload .navbar .nav-link.icon-btn:hover {
+  background: rgba(96,165,250,0.15);
 }
 
 /* Improve navbar usability on mobile */
@@ -159,10 +193,11 @@ a:hover {
 .navbar .nav-link {
   color: var(--text);
   transition: color 0.18s;
-  margin-right: 0.5rem;
+  margin-right: 0.25rem;
 }
 .navbar .nav-link:hover {
   color: var(--brand-primary);
+  background: rgba(37,99,235,0.08);
 }
 .navbar .navbar-toggler {
   border-radius: var(--radius-sm);
@@ -427,7 +462,7 @@ html.dark-mode-preload #loading-overlay {
 /* Responsive adjustments */
 @media (max-width: 992px) {
   .navbar {
-    min-height: 48px;
+    min-height: 44px;
   }
   .section-title {
     font-size: 1.1rem;
@@ -709,6 +744,63 @@ html.dark-mode-preload .list-group-item-dark {
     background-color: #0b1220 !important;
     color: #f1f5f9 !important;
 }
+
+/* Dark theme: force dark backgrounds for contextual table rows (text stays light) */
+[data-theme="dark"] .table-success,
+[data-theme="dark"] .table-success > td,
+[data-theme="dark"] .table-success > th,
+html.dark-mode-preload .table-success,
+html.dark-mode-preload .table-success > td,
+html.dark-mode-preload .table-success > th { background-color: #0f3b26 !important; }
+
+[data-theme="dark"] .table-danger,
+[data-theme="dark"] .table-danger > td,
+[data-theme="dark"] .table-danger > th,
+html.dark-mode-preload .table-danger,
+html.dark-mode-preload .table-danger > td,
+html.dark-mode-preload .table-danger > th { background-color: #3f1014 !important; }
+
+[data-theme="dark"] .table-warning,
+[data-theme="dark"] .table-warning > td,
+[data-theme="dark"] .table-warning > th,
+html.dark-mode-preload .table-warning,
+html.dark-mode-preload .table-warning > td,
+html.dark-mode-preload .table-warning > th { background-color: #3b2a03 !important; }
+
+[data-theme="dark"] .table-info,
+[data-theme="dark"] .table-info > td,
+[data-theme="dark"] .table-info > th,
+html.dark-mode-preload .table-info,
+html.dark-mode-preload .table-info > td,
+html.dark-mode-preload .table-info > th { background-color: #0a2a3a !important; }
+
+[data-theme="dark"] .table-primary,
+[data-theme="dark"] .table-primary > td,
+[data-theme="dark"] .table-primary > th,
+html.dark-mode-preload .table-primary,
+html.dark-mode-preload .table-primary > td,
+html.dark-mode-preload .table-primary > th { background-color: #12213f !important; }
+
+[data-theme="dark"] .table-secondary,
+[data-theme="dark"] .table-secondary > td,
+[data-theme="dark"] .table-secondary > th,
+html.dark-mode-preload .table-secondary,
+html.dark-mode-preload .table-secondary > td,
+html.dark-mode-preload .table-secondary > th { background-color: #1f2732 !important; }
+
+[data-theme="dark"] .table-light,
+[data-theme="dark"] .table-light > td,
+[data-theme="dark"] .table-light > th,
+html.dark-mode-preload .table-light,
+html.dark-mode-preload .table-light > td,
+html.dark-mode-preload .table-light > th { background-color: #cbd5e1 !important; }
+
+[data-theme="dark"] .table-dark,
+[data-theme="dark"] .table-dark > td,
+[data-theme="dark"] .table-dark > th,
+html.dark-mode-preload .table-dark,
+html.dark-mode-preload .table-dark > td,
+html.dark-mode-preload .table-dark > th { background-color: #0b1220 !important; }
 
 /* Improve contrast for contextual table rows across all variants */
 [data-theme="dark"] tr.table-success > *,

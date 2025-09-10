@@ -198,6 +198,7 @@
     const li = document.createElement('li');
     li.className = 'list-group-item d-flex justify-content-between align-items-center';
     li.setAttribute('draggable','true');
+    li.dataset.index = String(idx);
 
     li.innerHTML = `
       <div class="me-2 flex-grow-1">
@@ -438,6 +439,34 @@
     if (errors.length){ e.preventDefault(); e.stopPropagation(); alert('Verifică schema câmpurilor înainte de salvare:\n\n- ' + errors.join('\n- ')); return false; }
     return true;
   });
+
+  // Drag & Drop robust cu SortableJS (fallback pentru dispozitive unde DnD nativ nu merge bine)
+  // CDN lightweight
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js';
+  s.async = true;
+  s.onload = function(){
+    try{
+      const ul = document.getElementById('fields_list');
+      if (!ul) return;
+      new Sortable(ul, {
+        animation: 150,
+        handle: null,
+        ghostClass: 'opacity-50',
+        onEnd: function (evt) {
+          if (currentlyEditingIndex !== null) return;
+          const from = evt.oldIndex;
+          const to = evt.newIndex;
+          if (from === to || from == null || to == null) return;
+          const arr = readSchema();
+          const newArr = (function(a,f,t){ const c=a.slice(); const [it]=c.splice(f,1); c.splice(t,0,it); return c; })(arr, from, to);
+          writeSchema(newArr);
+          refreshList();
+        }
+      });
+    }catch(e){ console.warn('Sortable init error', e); }
+  };
+  document.body.appendChild(s);
 
 })();
 </script>

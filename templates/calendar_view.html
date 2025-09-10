@@ -4,15 +4,26 @@
 
 {% block content %}
 <div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
         <h2 class="mb-0">
             <i class="fas fa-calendar-alt me-2"></i> Calendar Evenimente
         </h2>
-        <div>
-            <!-- Buton sau link de întoarcere, dacă e necesar -->
-            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-2"></i>Înapoi la Panou
-            </a>
+        <div class="d-flex flex-wrap gap-2">
+            {% if (current_user.is_authenticated and current_user.role == 'gradat') and not is_public_view %}
+                <button id="generatePublicLinkBtn" class="btn btn-outline-primary">
+                    <i class="fas fa-link me-2"></i>Generează link permanent
+                </button>
+                <button id="regeneratePublicLinkBtn" class="btn btn-outline-warning">
+                    <i class="fas fa-sync-alt me-2"></i>Regenerare link permanent
+                </button>
+                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Înapoi la Panou
+                </a>
+            {% elif current_user.is_authenticated and not is_public_view %}
+                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Înapoi la Panou
+                </a>
+            {% endif %}
         </div>
     </div>
     <div class="card shadow-sm">
@@ -20,27 +31,6 @@
             <div id="calendar"></div>
         </div>
     </div>
-</div>
-
-<!-- Modal pentru afișarea detaliilor evenimentului -->
-<div class="modal fade" id="eventDetailModal" tabindex="-1" aria-labelledby="eventDetailModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="eventDetailModalLabel">Detalii Eveniment</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <p><strong>Tip:</strong> <span id="modalEventType"></span></p>
-        <p><strong>Student:</strong> <span id="modalStudentName"></span></p>
-        <p><strong>Perioadă:</strong> <span id="modalEventPeriod"></span></p>
-        <p><strong>Detalii:</strong> <span id="modalEventDetails"></span></p>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Închide</button>
-      </div>
-    </div>
-  </div>
 </div>
 {% endblock %}
 
@@ -50,17 +40,21 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    var calendarEl = document.getElementById('calendar');
-    var eventDetailModal = new bootstrap.Modal(document.getElementById('eventDetailModal'));
+    const calendarEl = document.getElementById('calendar');
 
-    var calendar = new FullCalendar.Calendar(calendarEl, {
+    const calendar = new FullCalendar.Calendar(calendarEl, {
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',
             right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
         },
         initialView: 'dayGridMonth',
-        locale: 'ro', // Setează limba română
+        height: 'auto',
+        expandRows: true,
+        stickyHeaderDates: true,
+        dayMaxEventRows: 3,
+        nowIndicator: true,
+        locale: 'ro',
         buttonText: {
             today: 'Astăzi',
             month: 'Lună',
@@ -68,43 +62,97 @@ document.addEventListener('DOMContentLoaded', function() {
             day: 'Zi',
             list: 'Listă'
         },
-        events: '{{ events_url }}', // URL-ul de unde se încarcă evenimentele
+        events: '{{ events_url }}',
         eventClick: function(info) {
-            // Previne comportamentul implicit al link-ului din eveniment pentru a evita blocarea interfeței
+            // Dezactivăm complet click-urile pe evenimente (cerință)
             if (info.jsEvent) {
                 info.jsEvent.preventDefault();
                 info.jsEvent.stopPropagation();
             }
-            // Afișează detalii într-un modal
-            document.getElementById('modalEventType').textContent = info.event.extendedProps.type || 'N/A';
-            document.getElementById('modalStudentName').textContent = info.event.extendedProps.student || 'N/A';
-
-            const startDate = info.event.start;
-            const endDate = info.event.end;
-            const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-
-            let periodStr = startDate ? startDate.toLocaleString('ro-RO', options) : '';
-            if (endDate) {
-                periodStr += ' - ' + endDate.toLocaleString('ro-RO', options);
-            }
-            document.getElementById('modalEventPeriod').textContent = periodStr || '—';
-
-            document.getElementById('modalEventDetails').textContent = info.event.extendedProps.details || 'Niciun detaliu.';
-
-            eventDetailModal.show();
+            return false;
+        },
+        eventDidMount: function(arg) {
+            // Tooltip nativ cu numele și tipul pentru lizibilitate rapidă
+            const student = (arg.event.extendedProps && arg.event.extendedProps.student) || '';
+            const type = (arg.event.extendedProps && arg.event.extendedProps.type) || '';
+            arg.el.setAttribute('title', (student ? student : arg.event.title) + (type ? ' — ' + type : ''));
+        },
+        eventContent: function(arg) {
+            // Afișare compactă: Nume pe primul rând, tip pe al doilea
+            const student = (arg.event.extendedProps && arg.event.extendedProps.student) || '';
+            const type = (arg.event.extendedProps && arg.event.extendedProps.type) || '';
+            const title = student || arg.event.title || '';
+            const inner = document.createElement('div');
+            inner.className = 'fc-event-custom';
+            inner.innerHTML = `
+                <div class="fw-semibold text-truncate">${title}</div>
+                ${type ? `<div class="small text-truncate opacity-75">${type}</div>` : ''}
+            `;
+            return { domNodes: [inner] };
         },
         loading: function(isLoading) {
-            // Afișează un indicator de încărcare dacă dorești
             const loadingOverlay = document.getElementById('loading-overlay');
-            if (isLoading) {
-                if(loadingOverlay) loadingOverlay.classList.add('show');
-            } else {
-                if(loadingOverlay) loadingOverlay.classList.remove('show');
+            if (loadingOverlay) {
+                loadingOverlay.classList.toggle('show', !!isLoading);
             }
         }
     });
 
     calendar.render();
+
+    // Generare link public calendar + copiere automată
+    const genBtn = document.getElementById('generatePublicLinkBtn');
+    const regenBtn = document.getElementById('regeneratePublicLinkBtn');
+
+    async function createOrRegenerate(permanent=true, regenerate=false, btnEl) {
+        try {
+            btnEl.disabled = true;
+            const original = btnEl.innerHTML;
+            btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Lucrez...';
+            const resp = await fetch('{{ url_for("generate_public_calendar_code") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ permanent, regenerate })
+            });
+            if (!resp.ok) {
+                const t = await resp.text();
+                throw new Error(t || ('Eroare (HTTP ' + resp.status + ')'));
+            }
+            const data = await resp.json();
+            const publicUrl = data.public_url || '';
+            if (publicUrl) {
+                await navigator.clipboard.writeText(publicUrl);
+                btnEl.innerHTML = '<i class="fas fa-check me-2"></i>Link permanent ' + (regenerate ? 'regenerat' : 'generat') + ' și copiat';
+            } else {
+                btnEl.innerHTML = '<i class="fas fa-check me-2"></i>Link permanent ' + (regenerate ? 'regenerat' : 'generat');
+            }
+            setTimeout(()=>btnEl.innerHTML = original, 1800);
+        } catch (e) {
+            alert('Nu am putut genera/regenera link-ul: ' + (e?.message || ''));
+        } finally {
+            btnEl.disabled = false;
+        }
+    }
+
+    genBtn?.addEventListener('click', () => createOrRegenerate(true, false, genBtn));
+    regenBtn?.addEventListener('click', () => createOrRegenerate(true, true, regenBtn));
 });
 </script>
+<style>
+/* Îmbunătățiri de lizibilitate pentru evenimente, inclusiv pe tema întunecată */
+.fc .fc-event, .fc .fc-event-main {
+  line-height: 1.2;
+}
+.fc .fc-event-custom .fw-semibold { font-weight: 600; }
+.fc .fc-daygrid-day-number { font-weight: 600; }
+[data-theme="dark"] .fc .fc-daygrid-day-number { color: var(--text); }
+[data-theme="dark"] .fc .fc-toolbar-title { color: var(--text); }
+[data-theme="dark"] .fc .fc-button { color: var(--text); }
+[data-theme="dark"] .fc .fc-daygrid-event, 
+html.dark-mode-preload .fc .fc-daygrid-event {
+  background-color: #0f172a !important;
+  border-color: #334155 !important;
+  color: #e6f0ff !important;
+}
+</style>
 {% endblock %}
