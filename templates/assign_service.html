@@ -11,7 +11,10 @@
         <div class="col-md-8 col-lg-7">
             <div class="card shadow-sm">
                 <div class="card-body">
-                    <form method="POST" action="{{ url_for('assign_service') }}" id="assignServiceForm">
+                    <form method="POST" action="{{ url_for('assign_service', assignment_id=service_assignment.id) if service_assignment else url_for('assign_service') }}" id="assignServiceForm">
+                        {% if service_assignment %}
+                        <input type="hidden" name="current_service_id" value="{{ service_assignment.id }}">
+                        {% endif %}
                         <div class="mb-3">
                             <label for="student_id" class="form-label">Student <span class="text-danger">*</span></label>
                             <select class="form-select" id="student_id" name="student_id" required>

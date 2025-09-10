@@ -2140,6 +2140,16 @@ def check_service_conflict_for_student(
     service_type,
     current_service_id=None,
 ):
+    # If current_service_id is not explicitly provided (e.g., edit form didn't pass it here),
+    # try to infer it from the current request payload to avoid self-conflict on edit.
+    if current_service_id is None:
+        try:
+            inferred_id = request.form.get("current_service_id", type=int)
+            if inferred_id:
+                current_service_id = inferred_id
+        except Exception:
+            pass
+
     if service_type in ["Intervenție", "GSS"]:
         conflicting_permission = Permission.query.filter(
             Permission.student_id == student_id,
@@ -5337,17 +5347,21 @@ def _generate_unique_scoped_code_str(length: int = 16) -> str:
 @login_required
 def generate_public_calendar_code():
     """
-    Generates (or regenerates) a scoped access code that grants public, read-only access
-    to /calendar (view) and /api/events (data) for the current gradat.
-    Returns JSON with the public URL and expiry.
+    Generate or regenerate a public, read-only access code for the calendar.
+    Supports permanent (non-expiring) links and optional regeneration (revoking existing active links first).
+    Request JSON/form:
+      - permanent: bool (default False). If True, create a non-expiring link (effectively very long expiry).
+      - days: int (fallback if permanent is False). Clamped 1..365.
+      - regenerate: bool (default False). If True, revoke existing active calendar public codes before creating a new one.
     """
     if current_user.role != "gradat":
         return jsonify({"error": "Acces neautorizat."}), 403
 
-    # Optionally limit to main gradat (not subuser)
+    # Only for main gradat (not subuser)
     if getattr(current_user, "parent_user_id", None):
         return jsonify({"error": "Funcția nu este disponibilă pentru subutilizatori."}), 403
 
+    # Parse payload
     payload = {}
     try:
         if request.is_json:
@@ -5356,13 +5370,50 @@ def generate_public_calendar_code():
             payload = request.form.to_dict() if request.form else {}
     except Exception:
         payload = {}
-    days = 0
+
+    permanent = False
     try:
-        days = int(payload.get("days", 90))
+        permanent = bool(
+            payload.get("permanent", False)
+        )
     except Exception:
-        days = 90
-    days = max(1, min(days, 365))
-    expires_at = datetime.utcnow() + timedelta(days=days)
+        permanent = False
+
+    regenerate = False
+    try:
+        regenerate = bool(payload.get("regenerate", False))
+    except Exception:
+        regenerate = False
+
+    # Determine expiry
+    if permanent:
+        # Effectively "never" expires: 100 years from now
+        expires_at = datetime.utcnow() + timedelta(days=365 * 100)
+    else:
+        try:
+            days = int(payload.get("days", 90))
+        except Exception:
+            days = 90
+        days = max(1, min(days, 365))
+        expires_at = datetime.utcnow() + timedelta(days=days)
+
+    # Optionally revoke existing active calendar codes before creating a new one
+    if regenerate:
+        try:
+            existing_codes = ScopedAccessCode.query.filter_by(
+                created_by_user_id=current_user.id, is_active=True
+            ).all()
+            for c in existing_codes:
+                try:
+                    perms = c.get_permissions_list()
+                except Exception:
+                    perms = []
+                if "/calendar" in perms and "/api/events" in perms and c.expires_at > datetime.utcnow():
+                    c.is_active = False
+            db.session.flush()
+        except Exception:
+            db.session.rollback()
+            return jsonify({"error": "Eroare la regenerare cod (revocare coduri anterioare)."}), 500
 
     permissions = json.dumps(["/calendar", "/api/events"], ensure_ascii=False)
     code_str = _generate_unique_scoped_code_str(16)
@@ -5387,6 +5438,8 @@ def generate_public_calendar_code():
                 "code": sac.code,
                 "expires_at": sac.expires_at.isoformat(),
                 "permissions": json.loads(sac.permissions),
+                "permanent": permanent,
+                "regenerate": regenerate,
             },
             description=f"User {current_user.username} generated public calendar code.",
         )
@@ -5406,6 +5459,7 @@ def generate_public_calendar_code():
             "code": sac.code,
             "expires_at": sac.expires_at.isoformat(),
             "public_url": public_url,
+            "never_expires": permanent,
         }
     ), 200
 
@@ -5432,14 +5486,17 @@ def list_public_calendar_codes():
         except Exception:
             perms = []
         if "/calendar" in perms and "/api/events" in perms and c.expires_at > now:
+            # Consider links with expiry > 20 years as "never_expires"
+            never_expires = (c.expires_at - now) > timedelta(days=365 * 20)
             results.append(
                 {
                     "code": c.code,
                     "expires_at": c.expires_at.isoformat(),
                     "public_url": url_for("public_calendar_view", code=c.code, _external=True),
+                    "never_expires": never_expires,
                 }
             )
-    # sort newest first
+    # sort by expiry descending (permanent will naturally float to the top)
     results.sort(key=lambda x: x["expires_at"], reverse=True)
     return jsonify({"codes": results})
 

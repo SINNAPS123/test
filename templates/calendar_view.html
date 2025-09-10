@@ -11,7 +11,10 @@
         <div class="d-flex flex-wrap gap-2">
             {% if (current_user.is_authenticated and current_user.role == 'gradat') and not is_public_view %}
                 <button id="generatePublicLinkBtn" class="btn btn-outline-primary">
-                    <i class="fas fa-link me-2"></i>Generează link public
+                    <i class="fas fa-link me-2"></i>Generează link permanent
+                </button>
+                <button id="regeneratePublicLinkBtn" class="btn btn-outline-warning">
+                    <i class="fas fa-sync-alt me-2"></i>Regenerare link permanent
                 </button>
                 <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left me-2"></i>Înapoi la Panou
@@ -99,14 +102,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Generare link public calendar + copiere automată
     const genBtn = document.getElementById('generatePublicLinkBtn');
-    genBtn?.addEventListener('click', async () => {
+    const regenBtn = document.getElementById('regeneratePublicLinkBtn');
+
+    async function createOrRegenerate(permanent=true, regenerate=false, btnEl) {
         try {
-            genBtn.disabled = true;
-            genBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generez...';
+            btnEl.disabled = true;
+            const original = btnEl.innerHTML;
+            btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Lucrez...';
             const resp = await fetch('{{ url_for("generate_public_calendar_code") }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ days: 90 })
+                body: JSON.stringify({ permanent, regenerate })
             });
             if (!resp.ok) {
                 const t = await resp.text();
@@ -116,17 +122,20 @@ document.addEventListener('DOMContentLoaded', function() {
             const publicUrl = data.public_url || '';
             if (publicUrl) {
                 await navigator.clipboard.writeText(publicUrl);
-                genBtn.innerHTML = '<i class="fas fa-check me-2"></i>Link generat și copiat';
+                btnEl.innerHTML = '<i class="fas fa-check me-2"></i>Link permanent ' + (regenerate ? 'regenerat' : 'generat') + ' și copiat';
             } else {
-                genBtn.innerHTML = '<i class="fas fa-check me-2"></i>Link generat';
+                btnEl.innerHTML = '<i class="fas fa-check me-2"></i>Link permanent ' + (regenerate ? 'regenerat' : 'generat');
             }
-            setTimeout(()=>genBtn.innerHTML = '<i class="fas fa-link me-2"></i>Generează link public', 1800);
+            setTimeout(()=>btnEl.innerHTML = original, 1800);
         } catch (e) {
-            alert('Nu am putut genera/copia link-ul: ' + (e?.message || ''));
+            alert('Nu am putut genera/regenera link-ul: ' + (e?.message || ''));
         } finally {
-            genBtn.disabled = false;
+            btnEl.disabled = false;
         }
-    });
+    }
+
+    genBtn?.addEventListener('click', () => createOrRegenerate(true, false, genBtn));
+    regenBtn?.addEventListener('click', () => createOrRegenerate(true, true, regenBtn));
 });
 </script>
 <style>

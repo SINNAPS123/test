@@ -71,41 +71,43 @@
                             </span>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('dashboard') }}">Panou Principal</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('public_updates_page') }}">
-                                <i class="fas fa-bullhorn"></i> Anunțuri
+                            <a class="nav-link icon-btn" href="{{ url_for('dashboard') }}" title="Panou" aria-label="Panou">
+                                <i class="fas fa-home"></i>
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('calendar_view') }}">
-                                <i class="fas fa-calendar-alt"></i> Calendar
+                            <a class="nav-link icon-btn" href="{{ url_for('public_updates_page') }}" title="Anunțuri" aria-label="Anunțuri">
+                                <i class="fas fa-bullhorn"></i>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link icon-btn" href="{{ url_for('calendar_view') }}" title="Calendar" aria-label="Calendar">
+                                <i class="fas fa-calendar-alt"></i>
                             </a>
                         </li>
                         {% if current_user.role == 'gradat' %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('gradat_insights') }}">
-                                <i class="fas fa-chart-pie"></i> Insights
+                            <a class="nav-link icon-btn" href="{{ url_for('gradat_insights') }}" title="Insights" aria-label="Insights">
+                                <i class="fas fa-chart-pie"></i>
                             </a>
                         </li>
                         {% elif current_user.role == 'admin' %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('admin_insights') }}">
-                                <i class="fas fa-chart-pie"></i> Insights
+                            <a class="nav-link icon-btn" href="{{ url_for('admin_insights') }}" title="Insights" aria-label="Insights">
+                                <i class="fas fa-chart-pie"></i>
                             </a>
                         </li>
                         {% endif %}
                         {% if current_user.role == 'gradat' %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('gradat_conflicts') }}">
-                                <i class="fas fa-exclamation-triangle"></i> Conflicte
+                            <a class="nav-link icon-btn" href="{{ url_for('gradat_conflicts') }}" title="Conflicte" aria-label="Conflicte">
+                                <i class="fas fa-exclamation-triangle"></i>
                             </a>
                         </li>
                         {% elif current_user.role == 'admin' %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('admin_conflicts') }}">
-                                <i class="fas fa-exclamation-triangle"></i> Conflicte
+                            <a class="nav-link icon-btn" href="{{ url_for('admin_conflicts') }}" title="Conflicte" aria-label="Conflicte">
+                                <i class="fas fa-exclamation-triangle"></i>
                             </a>
                         </li>
                         {% endif %}
@@ -177,7 +179,9 @@
                             </ul>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('logout') }}">Deconectare</a>
+                            <a class="nav-link icon-btn" href="{{ url_for('logout') }}" title="Deconectare" aria-label="Deconectare">
+                                <i class="fas fa-sign-out-alt"></i>
+                            </a>
                         </li>
                     {% endif %}
                     <li class="nav-item d-flex align-items-center ms-lg-2"> <!-- Eliminat me-2 care putea cauza dubla spațiere dacă ultimul element -->
