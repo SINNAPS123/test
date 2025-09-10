@@ -9,6 +9,7 @@ from flask import (
     session,
     jsonify,
     g,
+    make_response,
 )
 from flask_compress import Compress
 from flask_sqlalchemy import SQLAlchemy
@@ -116,6 +117,18 @@ def inject_global_vars():
 def inject_app_config():
     # Makes the Flask app object available as 'app' in all templates
     return dict(app=app)
+
+@app.context_processor
+def inject_maintenance_settings():
+    try:
+        mm = SiteSetting.query.filter_by(key="maintenance_mode").first()
+        is_on = bool(mm and str(mm.value).lower() in {"1", "true", "on", "yes"})
+        msg_setting = SiteSetting.query.filter_by(key="maintenance_message").first()
+        msg_val = msg_setting.value if (msg_setting and msg_setting.value) else ""
+        return dict(maintenance_mode=is_on, maintenance_message=msg_val)
+    except Exception:
+        # Fail-closed for template context; if any issue, assume not in maintenance
+        return dict(maintenance_mode=False, maintenance_message="")
 
 
 # IMPORTANT: Change this to a strong, unique, and static secret key in a real environment!
@@ -2588,6 +2601,38 @@ def logout():
 
 # --- Subuser scope and permission enforcement ---
 @app.before_request
+def _maintenance_mode_gate():
+    try:
+        # Allow static and health checks to work regardless of maintenance
+        p = request.path or ""
+        if p.startswith("/static/") or p.startswith("/healthz") or p == "/favicon.ico" or p == "/logout":
+            return
+
+        # Check maintenance flag
+        mm = SiteSetting.query.filter_by(key="maintenance_mode").first()
+        if not (mm and str(mm.value).lower() in {"1", "true", "on", "yes"}):
+            return
+
+        # Always allow admin login page
+        if request.endpoint in {"admin_login"}:
+            return
+
+        # Admins can access the site normally during maintenance
+        if current_user.is_authenticated and getattr(current_user, "role", None) == "admin":
+            return
+
+        # For everyone else, show maintenance page with 503 and Retry-After
+        msg_setting = SiteSetting.query.filter_by(key="maintenance_message").first()
+        msg_val = msg_setting.value if (msg_setting and msg_setting.value) else ""
+        resp = make_response(render_template("maintenance.html", maintenance_message=msg_val))
+        resp.status_code = 503
+        resp.headers["Retry-After"] = "3600"
+        return resp
+    except Exception:
+        # On any unexpected error, do not block the request
+        return
+
+@app.before_request
 def _apply_subuser_scope_and_permissions():
     try:
         # Only act for authenticated users
@@ -2822,6 +2867,55 @@ def set_personal_code():
 
     return render_template("set_personal_code.html")
 
+
+@app.route("/admin/maintenance", methods=["GET", "POST"], endpoint="admin_maintenance")
+@login_required
+def admin_maintenance():
+    if current_user.role != "admin":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        mode_on = request.form.get("maintenance_mode") == "on"
+        message = (request.form.get("maintenance_message") or "").strip()
+
+        # Upsert settings
+        def _upsert_setting(k, v):
+            s = SiteSetting.query.filter_by(key=k).first()
+            if s:
+                s.value = v
+            else:
+                s = SiteSetting(key=k, value=v)
+                db.session.add(s)
+
+        _upsert_setting("maintenance_mode", "1" if mode_on else "0")
+        _upsert_setting(
+            "maintenance_message",
+            message or "Facem puțină mentenanță. Revenim mai sprinteni decât cafeaua de dimineață.",
+        )
+        try:
+            db.session.commit()
+            flash("Setările de mentenanță au fost salvate.", "success")
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Eroare la salvarea setărilor: {e}", "danger")
+        return redirect(url_for("admin_maintenance"))
+
+    # GET
+    mm = SiteSetting.query.filter_by(key="maintenance_mode").first()
+    is_on = bool(mm and str(mm.value).lower() in {"1", "true", "on", "yes"})
+    msg_s = SiteSetting.query.filter_by(key="maintenance_message").first()
+    current_msg = (
+        msg_s.value
+        if (msg_s and msg_s.value)
+        else "Facem puțină mentenanță. Revenim mai sprinteni decât cafeaua de dimineață."
+    )
+    return render_template(
+        "admin_maintenance.html",
+        maintenance_enabled=is_on,
+        current_message=current_msg,
+        title="Setări Mentenanță",
+    )
 
 @app.route("/admin/dashboard")
 @login_required
