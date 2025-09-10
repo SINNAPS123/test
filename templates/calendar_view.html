@@ -9,12 +9,18 @@
             <i class="fas fa-calendar-alt me-2"></i> Calendar Evenimente
         </h2>
         <div class="d-flex flex-wrap gap-2">
-            <button id="copyCalendarLinkBtn" class="btn btn-outline-primary">
-                <i class="fas fa-link me-2"></i>Generează/Copiază link calendar
-            </button>
-            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-2"></i>Înapoi la Panou
-            </a>
+            {% if (current_user.is_authenticated and current_user.role == 'gradat') and not is_public_view %}
+                <button id="generatePublicLinkBtn" class="btn btn-outline-primary">
+                    <i class="fas fa-link me-2"></i>Generează link public
+                </button>
+                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Înapoi la Panou
+                </a>
+            {% elif current_user.is_authenticated and not is_public_view %}
+                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Înapoi la Panou
+                </a>
+            {% endif %}
         </div>
     </div>
     <div class="card shadow-sm">
@@ -91,16 +97,34 @@ document.addEventListener('DOMContentLoaded', function() {
 
     calendar.render();
 
-    // Copiere/generare link calendar (în prima fază copiază link-ul paginii curente)
-    const copyBtn = document.getElementById('copyCalendarLinkBtn');
-    copyBtn?.addEventListener('click', async () => {
+    // Generare link public calendar + copiere automată
+    const genBtn = document.getElementById('generatePublicLinkBtn');
+    genBtn?.addEventListener('click', async () => {
         try {
-            const url = window.location.href;
-            await navigator.clipboard.writeText(url);
-            copyBtn.innerHTML = '<i class="fas fa-check me-2"></i>Link copiat';
-            setTimeout(()=>copyBtn.innerHTML = '<i class="fas fa-link me-2"></i>Generează/Copiază link calendar', 1500);
+            genBtn.disabled = true;
+            genBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generez...';
+            const resp = await fetch('{{ url_for("generate_public_calendar_code") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ days: 90 })
+            });
+            if (!resp.ok) {
+                const t = await resp.text();
+                throw new Error(t || ('Eroare (HTTP ' + resp.status + ')'));
+            }
+            const data = await resp.json();
+            const publicUrl = data.public_url || '';
+            if (publicUrl) {
+                await navigator.clipboard.writeText(publicUrl);
+                genBtn.innerHTML = '<i class="fas fa-check me-2"></i>Link generat și copiat';
+            } else {
+                genBtn.innerHTML = '<i class="fas fa-check me-2"></i>Link generat';
+            }
+            setTimeout(()=>genBtn.innerHTML = '<i class="fas fa-link me-2"></i>Generează link public', 1800);
         } catch (e) {
-            alert('Nu s-a putut copia link-ul. ' + (e?.message || ''));
+            alert('Nu am putut genera/copia link-ul: ' + (e?.message || ''));
+        } finally {
+            genBtn.disabled = false;
         }
     });
 });
