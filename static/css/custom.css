@@ -32,7 +32,8 @@
   --radius-lg: 1.25rem;
   --focus-ring: 0 0 0 3px rgba(37,99,235,0.2);
 
-  --navbar-height: 58px;
+  --navbar-height: 44px; /* smaller navbar */
+  --logo-height: 32px;   /* smaller logo */
 
   /* mobile ergonomics */
   --tap-size: 44px;
@@ -99,9 +100,18 @@ a:hover {
   background: var(--card-bg) !important;
   transition: background 0.2s;
   border-bottom: 1px solid var(--border);
+  padding-top: .15rem;
+  padding-bottom: .15rem;
 }
 .navbar .navbar-brand img.logo-img {
-  max-height: 75px; /* Increased from 50px */
+  max-height: var(--logo-height);
+}
+.navbar .nav-link {
+  padding: .35rem .6rem;
+  border-radius: .5rem;
+}
+.navbar .nav-link i {
+  font-size: 1.05rem;
 }
 
 /* Improve navbar usability on mobile */
@@ -159,10 +169,11 @@ a:hover {
 .navbar .nav-link {
   color: var(--text);
   transition: color 0.18s;
-  margin-right: 0.5rem;
+  margin-right: 0.25rem;
 }
 .navbar .nav-link:hover {
   color: var(--brand-primary);
+  background: rgba(37,99,235,0.08);
 }
 .navbar .navbar-toggler {
   border-radius: var(--radius-sm);
@@ -427,7 +438,7 @@ html.dark-mode-preload #loading-overlay {
 /* Responsive adjustments */
 @media (max-width: 992px) {
   .navbar {
-    min-height: 48px;
+    min-height: 44px;
   }
   .section-title {
     font-size: 1.1rem;
