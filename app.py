@@ -200,9 +200,14 @@ def _auto_apply_migrations_and_seed():
         db.session.rollback()
 
 
-@app.before_first_request
-def _bootstrap_db_on_first_request():
-    _auto_apply_migrations_and_seed()
+_db_bootstrapped_once = False
+
+@app.before_request
+def _bootstrap_db_once():
+    global _db_bootstrapped_once
+    if not _db_bootstrapped_once:
+        _auto_apply_migrations_and_seed()
+        _db_bootstrapped_once = True
 
 login_manager = LoginManager(app)
 login_manager.login_view = "user_login"
