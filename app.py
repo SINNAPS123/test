@@ -146,6 +146,9 @@ app.config["SESSION_COOKIE_SECURE"] = os.environ.get(
 # Keep users logged in unless they explicitly logout
 app.config["REMEMBER_COOKIE_DURATION"] = timedelta(days=30)
 app.config["REMEMBER_COOKIE_REFRESH_EACH_REQUEST"] = True
+# Keep remember cookie behavior consistent with session cookie to avoid unexpected logouts
+app.config["REMEMBER_COOKIE_SECURE"] = app.config["SESSION_COOKIE_SECURE"]
+app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
 # Optional: list of extra trusted origins/hosts for CSRF Origin/Referer checks (comma-separated)
 app.config["CSRF_TRUSTED_ORIGINS"] = [
     o.strip() for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
@@ -1060,6 +1063,8 @@ class ScopedAccessCode(db.Model):
         "User", backref=db.backref("scoped_access_codes_created", lazy=True)
     )
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    # Optional custom slug for pretty public URLs like /calendar/permanent
+    custom_slug = db.Column(db.String(64), unique=True, nullable=True)
 
     def get_permissions_list(self):
         try:
@@ -5734,8 +5739,148 @@ def api_events_public(code):
     return jsonify(events)
 
 
-# --- Volunteer Module ---
+# --- Calendar: authenticated and pretty public slugs ---
 
+@app.route("/api/events", methods=["GET"], endpoint="api_events")
+@login_required
+def api_events():
+    """
+    Authenticated events feed for FullCalendar for the current effective user scope.
+    Supports FullCalendar start/end query params (ISO strings).
+    """
+    eff_user = get_current_user_or_scoped()
+    if not eff_user:
+        return jsonify([])
+    # Parse range from query params
+    start_param = request.args.get("start")
+    end_param = request.args.get("end")
+    try:
+        range_start = datetime.fromisoformat(start_param) if start_param else (datetime.utcnow() - timedelta(days=30))
+    except Exception:
+        range_start = datetime.utcnow() - timedelta(days=30)
+    try:
+        range_end = datetime.fromisoformat(end_param) if end_param else (datetime.utcnow() + timedelta(days=60))
+    except Exception:
+        range_end = datetime.utcnow() + timedelta(days=60)
+
+    # Normalize to naive for DB comparisons
+    if range_start.tzinfo is not None:
+        range_start = range_start.replace(tzinfo=None)
+    if range_end.tzinfo is not None:
+        range_end = range_end.replace(tzinfo=None)
+
+    events = _build_calendar_events_for_user_id(eff_user.id, range_start, range_end)
+    return jsonify(events)
+
+@app.route("/calendar", methods=["GET"], endpoint="calendar_page")
+@login_required
+def calendar_page():
+    """
+    Calendar page for authenticated users (uses /api/events).
+    """
+    return render_template("calendar_view.html", events_url=url_for("api_events"), is_public_view=False)
+
+# Pretty public calendar URL using a custom slug (if configured)
+@app.route("/calendar/<string:slug>", methods=["GET"], endpoint="calendar_custom_slug_view")
+def calendar_custom_slug_view(slug):
+    """
+    Public calendar page for a valid, active custom slug.
+    """
+    now_utc = datetime.utcnow()
+    sac = ScopedAccessCode.query.filter_by(custom_slug=slug, is_active=True).first()
+    if not sac or sac.expires_at <= now_utc:
+        return "Link invalid sau expirat.", 404
+    events_url = url_for("api_events_public", code=sac.code)
+    return render_template("calendar_view.html", events_url=events_url, is_public_view=True)
+
+# Manage custom slug for public calendar links
+@app.route("/gradat/calendar/set_slug", methods=["POST"], endpoint="set_public_calendar_slug")
+@login_required
+def set_public_calendar_slug():
+    """
+    Set or update a custom slug for a specific active public calendar code.
+    JSON/Form:
+      - code: the 16-char code string
+      - slug: desired slug (letters, digits, dashes), or empty to remove
+    """
+    if current_user.role != "gradat" or getattr(current_user, "parent_user_id", None):
+        return jsonify({"error": "Acces neautorizat."}), 403
+
+    payload = request.get_json(silent=True) or request.form or {}
+    code = (payload.get("code") or "").strip()
+    slug = (payload.get("slug") or "").strip()
+
+    if not code:
+        return jsonify({"error": "Cod lipsă."}), 400
+
+    sac = ScopedAccessCode.query.filter_by(code=code, is_active=True).first()
+    if not sac or sac.created_by_user_id != current_user.id:
+        return jsonify({"error": "Cod invalid sau nu vă aparține."}), 404
+
+    # Empty slug = remove custom slug
+    if not slug:
+        sac.custom_slug = None
+        try:
+            db.session.commit()
+            return jsonify({"ok": True, "custom_slug": None})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": f"Eroare la ștergere slug: {e}"}), 500
+
+    # Validate and ensure uniqueness
+    import re as _re
+    if not _re.fullmatch(r"[a-z0-9-]{3,64}", slug):
+        return jsonify({"error": "Slug invalid. Folosiți doar litere mici, cifre și liniuță (-), 3-64 caractere."}), 400
+
+    existing = ScopedAccessCode.query.filter_by(custom_slug=slug).first()
+    if existing and existing.id != sac.id:
+        return jsonify({"error": "Slug-ul este deja folosit."}), 409
+
+    sac.custom_slug = slug
+    try:
+        db.session.commit()
+        return jsonify({
+            "ok": True,
+            "custom_slug": slug,
+            "slug_url": url_for("calendar_custom_slug_view", slug=slug, _external=True)
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Eroare la setarea slug-ului: {e}"}), 500
+
+@app.route("/gradat/calendar/get_slug", methods=["GET"], endpoint="get_public_calendar_slug")
+@login_required
+def get_public_calendar_slug():
+    """
+    Returnează slug-ul curent pentru un cod public (dacă există).
+    Params: ?code=...
+    """
+    if current_user.role != "gradat" or getattr(current_user, "parent_user_id", None):
+        return jsonify({"error": "Acces neautorizat."}), 403
+
+    code = (request.args.get("code") or "").strip()
+    if not code:
+        return jsonify({"error": "Cod lipsă."}), 400
+
+    sac = ScopedAccessCode.query.filter_by(code=code, is_active=True).first()
+    if not sac or sac.created_by_user_id != current_user.id:
+        return jsonify({"error": "Cod invalid sau nu vă aparține."}), 404
+
+    return jsonify({
+        "code": sac.code,
+        "custom_slug": sac.custom_slug,
+        "slug_url": url_for("calendar_custom_slug_view", slug=sac.custom_slug, _external=True) if sac.custom_slug else None
+    })
+
+@app.route("/gradat/calendar/links", methods=["GET"], endpoint="calendar_links_manage")
+@login_required
+def calendar_links_manage():
+    if current_user.role != "gradat" or getattr(current_user, "parent_user_id", None):
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+    return render_template("calendar_links.html")
+
+# --- Volunteer Module ---
 
 def get_current_user_or_scoped():
     """Helper to get the active user, either from a scoped context or Flask-Login.

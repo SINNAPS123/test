@@ -933,3 +933,35 @@ html.dark-mode-preload .text-dark {
     top: auto;
   }
 }
+
+/* 11. Neutralize colored row backgrounds in list tables (light mode too) */
+.table tr.table-success,
+.table tr.table-warning,
+.table tr.table-secondary,
+.table tr.table-danger,
+.table tr.table-info,
+.table tr.table-primary,
+.table tr.table-light,
+.table tr.table-dark {
+  background-color: transparent !important;
+}
+.table tr.table-success > td,
+.table tr.table-warning > td,
+.table tr.table-secondary > td,
+.table tr.table-danger > td,
+.table tr.table-info > td,
+.table tr.table-primary > td,
+.table tr.table-light > td,
+.table tr.table-dark > td {
+  background-color: transparent !important;
+  color: inherit !important;
+}
+
+/* 12. FullCalendar readability: wrap text and auto-resize */
+.fc .fc-event-title,
+.fc .fc-event-time,
+.fc .fc-event-main {
+  white-space: normal;
+  line-height: 1.2;
+  font-size: clamp(11px, 1.4vw, 14px);
+}
