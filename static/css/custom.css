@@ -440,7 +440,7 @@ html.dark-mode-preload #loading-overlay {
 /* Sticky table tools on mobile */
 @media (max-width: 576px) {
   .table-tools {
-    position: sticky;
+    position: static;
     top: var(--navbar-height);
     z-index: 1020;
     background: var(--bg);
@@ -805,37 +805,9 @@ html.dark-mode-preload .text-dark {
 /*------------------------------------------------------------------------------
   10. Mobile Sticky Action Bar & FAB tweaks
 ------------------------------------------------------------------------------*/
-.mobile-sticky-actions {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: .5rem .75rem calc(.5rem + env(safe-area-inset-bottom));
-  background: var(--card-bg);
-  border-top: 1px solid var(--border);
-  box-shadow: 0 -6px 22px rgba(0,0,0,.08);
-  display: none;
-  gap: .5rem;
-  z-index: 1055;
-}
-.mobile-sticky-actions.show { display: flex; }
-.mobile-sticky-actions .btn {
-  flex: 1 1 auto;
-  min-height: var(--tap-size);
-}
-@media (min-width: 577px) {
-  .mobile-sticky-actions { display: none !important; }
-}
-.has-sticky-actions {
-  padding-bottom: calc(70px + env(safe-area-inset-bottom));
-}
-
 /* Ensure FABs do not collide with sticky actions */
 .fab-container {
-  bottom: calc(78px + env(safe-area-inset-bottom));
-}
-@media (min-width: 577px) {
-  .fab-container { bottom: 24px; }
+  bottom: 1rem;
 }
 
 /* Raise z-index for Bootstrap modal to ensure it is clickable above any custom overlays */
