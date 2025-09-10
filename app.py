@@ -5741,9 +5741,9 @@ def api_events_public(code):
 
 # --- Calendar: authenticated and pretty public slugs ---
 
-@app.route("/api/events", methods=["GET"], endpoint="api_events")
+@app.route("/api/events_auth", methods=["GET"], endpoint="api_events_auth")
 @login_required
-def api_events():
+def api_events_auth():
     """
     Authenticated events feed for FullCalendar for the current effective user scope.
     Supports FullCalendar start/end query params (ISO strings).
@@ -5778,7 +5778,7 @@ def calendar_page():
     """
     Calendar page for authenticated users (uses /api/events).
     """
-    return render_template("calendar_view.html", events_url=url_for("api_events"), is_public_view=False)
+    return render_template("calendar_view.html", events_url=url_for("api_events_auth"), is_public_view=False)
 
 # Pretty public calendar URL using a custom slug (if configured)
 @app.route("/calendar/<string:slug>", methods=["GET"], endpoint="calendar_custom_slug_view")
