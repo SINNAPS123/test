@@ -8,6 +8,9 @@
         <h2>Asignare Servicii în Masă</h2>
         <a href="{{ url_for('list_services') }}" class="btn btn-outline-secondary btn-sm">&laquo; Înapoi la Lista Servicii</a>
     </div>
+    <div class="alert alert-info" role="alert">
+        Ghid scurt: selectați studenții (Pasul 1), apoi completați detaliile (Pasul 2). Pentru fiecare tip, orele implicite se completează automat. „Participă Apel” este ON în mod implicit pentru toate serviciile, cu excepția Planton 1.
+    </div>
 
     {% if not students_to_prepare %}
     <!-- ====================================================== -->
@@ -186,6 +189,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const serviceDetailsForm = document.getElementById('serviceDetailsForm');
     if (serviceDetailsForm) {
         const defaultTimes = JSON.parse('{{ default_times_json|safe }}');
+        const serviceNoRollCall = ["Planton 1"]; // Singurul tip care NU participă la apel
 
         // Autofill times when service type changes for a specific student
         serviceDetailsForm.querySelectorAll('.common-service-type').forEach(selectElement => {
@@ -195,6 +199,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (defaultTimes[selectedType]) {
                     row.querySelector('.common-start-time').value = defaultTimes[selectedType][0];
                     row.querySelector('.common-end-time').value = defaultTimes[selectedType][1];
+                }
+                // Setează automat participarea la apel: doar Planton 1 NU participă
+                const participatesSwitch = row.querySelector('input[type="checkbox"][name^="participates_"]');
+                if (participatesSwitch) {
+                    participatesSwitch.checked = !serviceNoRollCall.includes(selectedType);
                 }
             });
         });
@@ -220,7 +229,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const commonNotes = document.getElementById('common_notes').value;
 
             document.querySelectorAll('tbody tr').forEach(row => {
-                if(commonType) row.querySelector('.common-service-type').value = commonType;
+                if(commonType) {
+                    row.querySelector('.common-service-type').value = commonType;
+                    // Ajustează automat participarea la apel în funcție de tip
+                    const participatesSwitch = row.querySelector('input[type="checkbox"][name^="participates_"]');
+                    if (participatesSwitch) {
+                        participatesSwitch.checked = !serviceNoRollCall.includes(commonType);
+                    }
+                }
                 if(commonDate) row.querySelector('.common-service-date').value = commonDate;
                 if(commonStart) row.querySelector('.common-start-time').value = commonStart;
                 if(commonEnd) row.querySelector('.common-end-time').value = commonEnd;
