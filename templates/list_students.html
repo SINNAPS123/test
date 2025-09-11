@@ -25,7 +25,7 @@
             </a>
             <a href="{{ url_for('add_student') }}" class="btn btn-success btn-sm me-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-circle-fill me-1 icon-rotate-hover" viewBox="0 0 16 16">
-                    <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8.5 4.5a.5.5 0 0 0-1 0v3h-3a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0v-3h3a.5.5 0 0 0 0-1h-3v-3z"/>
+                    <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8.5 4.5a.5.5 0 0 0-1 0v3h-3a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0V8.5H10a.5.5 0 0 0 0-1H8.5v-1.5z"/>
                 </svg>
                 Adaugă Nou
             </a>
@@ -36,6 +36,9 @@
                 <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Panou Gradat</a>
             {% endif %}
         </div>
+    </div>
+    <div class="alert alert-info" role="alert">
+        Ghid scurt: căutați/filtrați studenții, faceți click pe nume pentru profil, sau selectați mai mulți și folosiți „Aplică Acțiune” pentru a adăuga permisii/învoiri/servicii în masă.
     </div>
 
     {% if is_admin_view %}

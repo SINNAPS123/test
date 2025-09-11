@@ -7167,7 +7167,7 @@ def gradat_page_import_services():
             "Altul": (time(8, 0), time(20, 0)),
         }
 
-        no_roll = {"GSS", "SVM", "Intervenție"}
+        no_roll = {"Planton 1"}
 
         date_re = re.compile(r"(\\d{1,2}[.\\-/]\\d{1,2}[.\\-/]\\d{4})")
         time_re = re.compile(r"(\\d{1,2}[:.]\\d{2})\\s*[-–]\\s*(\\d{1,2}[:.]\\d{2})")
@@ -11010,7 +11010,8 @@ def assign_service(assignment_id=None):
         service_date_str = request.form.get("service_date")
         start_time_str = request.form.get("start_time")
         end_time_str = request.form.get("end_time")
-        participates = "participates_in_roll_call" in request.form
+        service_type_submitted = request.form.get("service_type", "")
+participates = False if service_type_submitted == "Planton 1" else ("participates_in_roll_call" in request.form)
         notes = request.form.get("notes", "").strip()
 
         current_form_data = request.form
@@ -11223,7 +11224,8 @@ def assign_multiple_services():
             service_date_str = request.form.get(f"service_date_{student_id}")
             start_time_str = request.form.get(f"start_time_{student_id}")
             end_time_str = request.form.get(f"end_time_{student_id}")
-            participates = f"participates_{student_id}" in request.form
+            service_type_val = request.form.get(f"service_type_{student_id}", "")
+participates = False if service_type_val == "Planton 1" else (f"participates_{student_id}" in request.form)
             notes = request.form.get(f"notes_{student_id}", "").strip()
 
             student_obj = db.session.get(Student, student_id)

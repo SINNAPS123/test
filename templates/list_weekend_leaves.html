@@ -28,6 +28,9 @@
             <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Panou Gradat</a>
         </div>
     </div>
+    <div class="alert alert-info" role="alert">
+        Ghid scurt: adăugați o învoire de weekend individual sau în masă, ori importați din text. Completați zilele selectate și intervalele; statusul „Activ/Urmează/Expirată” se actualizează automat.
+    </div>
 
     {% macro render_weekend_leaves_table(leaves, table_title) %}
         {% if leaves %}

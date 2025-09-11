@@ -6,6 +6,9 @@
 <div class="container mt-4">
     <h2>Asignează Serviciu Nou</h2>
     <hr>
+    <div class="alert alert-info mt-3" role="alert">
+        Ghid scurt: selectați studentul, tipul serviciului, data și orele. Orele implicite se completează automat în funcție de tip. Bifa „Participă la Apel” este predefinită pe Da pentru toate serviciile, cu excepția Planton 1 (care nu participă la apel).
+    </div>
 
     <div class="row justify-content-center">
         <div class="col-md-8 col-lg-7">
@@ -67,7 +70,7 @@
                             </label>
                         </div>
                         <small class="form-text text-muted d-block mb-3">
-                            Debifați dacă studentul nu este prezent fizic în formație la apel (ex: este la postul de GSS, SVM în timpul apelului).
+                            Debifați doar pentru serviciul Planton 1 (nu participă la apel). Pentru celelalte servicii, lăsați bifat.
                         </small>
 
                         <div class="mb-3">
@@ -107,7 +110,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Format: "ServiceType": ["HH:MM_start", "HH:MM_end", participates_default (true/false)]
     const defaultServiceTimes = {{ default_times | tojson }};
-    const serviceNoRollCall = ["GSS", "SVM", "Intervenție"]; // Tipuri care de obicei nu participă la apel
+    const serviceNoRollCall = ["Planton 1"]; // Singurul tip care nu participă la apel
 
     if (serviceTypeSelect) {
         serviceTypeSelect.addEventListener('change', function() {
