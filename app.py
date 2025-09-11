@@ -2729,6 +2729,7 @@ def _apply_subuser_scope_and_permissions():
                     "/gradat/service",
                     "/gradat/assign_service",
                     "/assign_multiple_services",
+                    "/gradat/import_services",
                 ],
                 "/gradat/situations": [
                     "/gradat/situation",
@@ -7108,6 +7109,188 @@ def delete_volunteer_activity(activity_id):
 
 
 # --- Management Studenți ---
+@app.route("/gradat/import_services", methods=["GET", "POST"], endpoint="gradat_page_import_services")
+@login_required
+def gradat_page_import_services():
+    if current_user.role != "gradat":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+
+    eff_user = get_current_user_or_scoped()
+    students_q = Student.query.filter_by(created_by_user_id=eff_user.id)
+    try:
+        if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+            students_q = students_q.filter(Student.pluton == str(g.subuser_platoon))
+    except Exception:
+        pass
+    students_all = students_q.all()
+
+    if request.method == "POST":
+        bulk_text = request.form.get("services_bulk_data", "") or ""
+        lines = [ln.strip() for ln in bulk_text.splitlines() if ln.strip()]
+        error_details = []
+        success_details = []
+        created = 0
+
+        def _norm(s):
+            return unidecode((s or "").strip().lower())
+
+        students_norm = []
+        for s in students_all:
+            students_norm.append(
+                dict(obj=s, nume=_norm(s.nume), prenume=_norm(s.prenume))
+            )
+
+        abbr = {
+            "svm": "SVM",
+            "gss": "GSS",
+            "p1": "Planton 1",
+            "pl1": "Planton 1",
+            "p2": "Planton 2",
+            "pl2": "Planton 2",
+            "p3": "Planton 3",
+            "pl3": "Planton 3",
+            "int": "Intervenție",
+            "interventie": "Intervenție",
+            "intervenție": "Intervenție",
+            "alt": "Altul",
+            "altul": "Altul",
+        }
+
+        default_times = {
+            "SVM": (time(5, 50), time(20, 0)),
+            "GSS": (time(7, 0), time(7, 0)),  # next day
+            "Planton 1": (time(6, 0), time(14, 0)),
+            "Planton 2": (time(14, 0), time(22, 0)),
+            "Planton 3": (time(22, 0), time(6, 0)),  # next day
+            "Intervenție": (time(8, 0), time(20, 0)),
+            "Altul": (time(8, 0), time(20, 0)),
+        }
+
+        no_roll = {"GSS", "SVM", "Intervenție"}
+
+        date_re = re.compile(r"(\\d{1,2}[.\\-/]\\d{1,2}[.\\-/]\\d{4})")
+        time_re = re.compile(r"(\\d{1,2}[:.]\\d{2})\\s*[-–]\\s*(\\d{1,2}[:.]\\d{2})")
+
+        for raw in lines:
+            raw_norm = _norm(raw)
+            tokens = [t for t in re.split(r"\\s+", raw_norm) if t]
+
+            service_type = None
+            service_idx = -1
+            for idx, tok in enumerate(tokens):
+                tok_clean = tok.replace(".", "").replace(",", "")
+                if tok_clean in abbr:
+                    service_type = abbr[tok_clean]
+                    service_idx = idx
+                    break
+            if not service_type:
+                error_details.append({"line": raw, "error": "Nu am găsit tipul serviciului (ex: SVM, GSS, P1, P2, P3)."})
+                continue
+
+            name_tokens = tokens[:service_idx]
+            if not name_tokens:
+                error_details.append({"line": raw, "error": "Lipsește numele/prenumele studentului înainte de tipul serviciului."})
+                continue
+
+            mdate = date_re.search(raw_norm)
+            if not mdate:
+                error_details.append({"line": raw, "error": "Dată lipsă sau format invalid (așteptat DD.MM.YYYY)."})
+                continue
+            date_str = mdate.group(1).replace("/", ".").replace("-", ".")
+            try:
+                service_date = datetime.strptime(date_str, "%d.%m.%Y").date()
+            except Exception:
+                error_details.append({"line": raw, "error": f"Dată invalidă: {date_str}."})
+                continue
+
+            mtime = time_re.search(raw_norm)
+            if mtime:
+                st_s = mtime.group(1).replace(".", ":")
+                en_s = mtime.group(2).replace(".", ":")
+                try:
+                    st_t = datetime.strptime(st_s, "%H:%M").time()
+                    en_t = datetime.strptime(en_s, "%H:%M").time()
+                except Exception:
+                    st_t, en_t = default_times.get(service_type, (time(8, 0), time(20, 0)))
+            else:
+                st_t, en_t = default_times.get(service_type, (time(8, 0), time(20, 0)))
+
+            candidates = []
+            if len(name_tokens) == 1:
+                nt = name_tokens[0]
+                for sn in students_norm:
+                    if nt == sn["nume"] or nt == sn["prenume"]:
+                        candidates.append(sn["obj"])
+                if len(candidates) > 1:
+                    error_details.append({"line": raw, "error": "Mai mulți studenți corespund. Specificați și prenumele sau numele."})
+                    continue
+            else:
+                name_set = set(name_tokens)
+                for sn in students_norm:
+                    if sn["nume"] in name_set and sn["prenume"] in name_set:
+                        candidates.append(sn["obj"])
+
+            if not candidates:
+                error_details.append({"line": raw, "error": "Studentul nu a fost găsit în evidența dvs."})
+                continue
+            if len(candidates) > 1:
+                error_details.append({"line": raw, "error": "Mai mulți studenți corespund. Specificați și prenumele sau numele complet."})
+                continue
+
+            student = candidates[0]
+
+            start_dt = datetime.combine(service_date, st_t)
+            end_dt = datetime.combine(service_date, en_t)
+            if end_dt <= start_dt:
+                end_dt += timedelta(days=1)
+
+            conflict = check_service_conflict_for_student(
+                student.id, start_dt, end_dt, service_type
+            )
+            if conflict:
+                error_details.append({"line": raw, "error": f"Conflict cu {conflict}."})
+                continue
+
+            sa = ServiceAssignment(
+                student_id=student.id,
+                service_type=service_type,
+                service_date=service_date,
+                start_datetime=start_dt,
+                end_datetime=end_dt,
+                participates_in_roll_call=(service_type not in no_roll),
+                created_by_user_id=current_user.id,
+            )
+            db.session.add(sa)
+            try:
+                log_student_action(
+                    student.id,
+                    "SERVICE_CREATED_IMPORT_TEXT",
+                    f"Serviciu '{service_type}' importat din text: {start_dt.strftime('%d.%m %H:%M')} - {end_dt.strftime('%d.%m %H:%M')}.",
+                )
+            except Exception:
+                pass
+
+            success_details.append(f"{student.nume} {student.prenume} — {service_type} {service_date.strftime('%d.%m.%Y')} {st_t.strftime('%H:%M')}-{en_t.strftime('%H:%M')}")
+
+        if success_details:
+            try:
+                db.session.commit()
+                flash(f"{len(success_details)} servicii au fost importate.", "success")
+            except Exception as e:
+                db.session.rollback()
+                flash(f"Eroare la salvare: {e}", "danger")
+        elif not error_details:
+            flash("Nu s-a detectat nicio intrare validă.", "info")
+
+        return render_template(
+            "gradat_import_services.html",
+            error_details=error_details,
+            success_details=success_details,
+        )
+
+    return render_template("gradat_import_services.html", error_details=None, success_details=None)
+
 @app.route("/gradat/students")
 @app.route("/admin/students")
 @scoped_access_required
