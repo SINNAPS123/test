@@ -38,20 +38,20 @@
                 </thead>
                 <tbody>
                     {% for assignment in services %}
-                    <tr class="{{ 'table-success' if assignment.is_active else ('table-warning' if assignment.is_upcoming else 'table-secondary') }}">
+                    <tr>
                         <td>{{ assignment.student.nume }} {{ assignment.student.prenume }}</td>
-                        <td><span class="badge bg-info text-dark">{{ assignment.service_type }}</span></td>
+                        <td><span class="badge bg-secondary">{{ assignment.service_type }}</span></td>
                         <td>{{ assignment.service_date|localdate('%d-%m-%y (%a)') }}</td>
                         <td>{{ assignment.start_datetime|localdatetime('%H:%M') }} - {{ assignment.end_datetime|localdatetime('%H:%M') }}
                             {% if assignment.end_datetime.date() > assignment.start_datetime.date() %}
-                                <span class="badge bg-light text-dark">până a doua zi</span>
+                                <span class="badge bg-secondary">până a doua zi</span>
                             {% endif %}
                         </td>
                         <td>
                             {% if assignment.participates_in_roll_call %}
-                                <span class="badge bg-success">Da</span>
+                                <span class="badge bg-secondary">Da</span>
                             {% else %}
-                                <span class="badge bg-danger">Nu</span>
+                                <span class="badge bg-secondary">Nu</span>
                             {% endif %}
                         </td>
                         <td>{{ assignment.notes if assignment.notes else '-' }}</td>

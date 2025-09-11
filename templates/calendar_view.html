@@ -16,6 +16,9 @@
                 <button id="regeneratePublicLinkBtn" class="btn btn-outline-warning">
                     <i class="fas fa-sync-alt me-2"></i>Regenerare link permanent
                 </button>
+                <a href="{{ url_for('calendar_links_manage') }}" class="btn btn-info">
+                    <i class="fas fa-cog me-2"></i>Gestionează Linkuri
+                </a>
                 <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left me-2"></i>Înapoi la Panou
                 </a>
@@ -84,9 +87,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const title = student || arg.event.title || '';
             const inner = document.createElement('div');
             inner.className = 'fc-event-custom';
+            inner.style.whiteSpace = 'normal';
+            inner.style.fontSize = '0.75em';
             inner.innerHTML = `
-                <div class="fw-semibold text-truncate">${title}</div>
-                ${type ? `<div class="small text-truncate opacity-75">${type}</div>` : ''}
+                <div class="fw-semibold">${title}</div>
+                ${type ? `<div class="small opacity-75">${type}</div>` : ''}
             `;
             return { domNodes: [inner] };
         },

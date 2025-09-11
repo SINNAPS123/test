@@ -86,26 +86,26 @@
                 </thead>
                 <tbody>
                     {% for leave in leaves %}
-                    <tr class="{{ 'table-success' if leave.is_active else ('table-warning' if leave.is_upcoming else 'table-secondary') }}">
+                    <tr>
                         <td>{{ leave.student.nume }} {{ leave.student.prenume }}</td>
                         <td>{{ leave.leave_date|localdate('%d-%m-%y (%a)') }}</td>
                         <td>{{ leave.start_time|localtime('%H:%M') }}</td>
-                        <td>{{ leave.end_time|localtime('%H:%M') }} {% if leave.end_datetime.date() > leave.leave_date %}<span class="badge bg-info text-dark">ziua următoare</span>{% endif %}</td>
-                        <td><span class="badge {% if leave.leave_type_display == 'În program' %}bg-primary{% elif leave.leave_type_display == 'Afară program' %}bg-secondary{% else %}bg-light text-dark{% endif %}">{{ leave.leave_type_display }}</span></td>
+                        <td>{{ leave.end_time|localtime('%H:%M') }} {% if leave.end_datetime.date() > leave.leave_date %}<span class="badge bg-secondary">ziua următoare</span>{% endif %}</td>
+                        <td><span class="badge bg-secondary">{{ leave.leave_type_display }}</span></td>
                         <td>{{ leave.reason if leave.reason else '-' }}</td>
                         <td>
                             {% if leave.status == 'Aprobată' %}
                                 {% if leave.is_active %}
-                                    <span class="badge bg-success">Activă</span>
+                                    <span class="badge bg-secondary">Activă</span>
                                 {% elif leave.is_upcoming %}
-                                    <span class="badge bg-warning text-dark">Urmează</span>
+                                    <span class="badge bg-secondary">Urmează</span>
                                 {% else %}
                                     <span class="badge bg-secondary">Expirată</span>
                                 {% endif %}
                             {% elif leave.status == 'Anulată' %}
-                                <span class="badge bg-danger">Anulată</span>
+                                <span class="badge bg-secondary">Anulată</span>
                             {% else %}
-                                <span class="badge bg-light text-dark">{{ leave.status }}</span>
+                                <span class="badge bg-secondary">{{ leave.status }}</span>
                             {% endif %}
                         </td>
                         <td>
