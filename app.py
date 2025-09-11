@@ -137,7 +137,7 @@ def inject_maintenance_settings():
 app.config["SECRET_KEY"] = os.environ.get(
     "FLASK_SECRET_KEY", "dev_fallback_super_secret_key_123!@#"
 )
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///site.db"
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///instance/site.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(
     days=30
@@ -547,9 +547,9 @@ class Permission(db.Model):
         sa.Index("ix_permission_creator", "created_by_user_id"),
     )
 
-    @property
-    def is_active(self):
-        now = get_localized_now()
+    def is_active(self, check_datetime=None):
+        if check_datetime is None:
+            check_datetime = get_localized_now()
         start_dt_aware = (
             EUROPE_BUCHAREST.localize(self.start_datetime)
             if self.start_datetime.tzinfo is None
@@ -561,7 +561,7 @@ class Permission(db.Model):
             else self.end_datetime.astimezone(EUROPE_BUCHAREST)
         )
         return (
-            start_dt_aware <= now <= end_dt_aware and self.status == "Aprobată"
+            start_dt_aware <= check_datetime <= end_dt_aware and self.status == "Aprobată"
         )
 
     @property
@@ -630,14 +630,14 @@ class DailyLeave(db.Model):
             effective_end_date, self.end_time
         )  # Returns naive datetime
 
-    @property
-    def is_active(self):
-        now = get_localized_now()
+    def is_active(self, check_datetime=None):
+        if check_datetime is None:
+            check_datetime = get_localized_now()
         # self.start_datetime and self.end_datetime are properties returning naive datetimes
         start_dt_aware = EUROPE_BUCHAREST.localize(self.start_datetime)
         end_dt_aware = EUROPE_BUCHAREST.localize(self.end_datetime)
         return (
-            start_dt_aware <= now <= end_dt_aware and self.status == "Aprobată"
+            start_dt_aware <= check_datetime <= end_dt_aware and self.status == "Aprobată"
         )
 
     @property
@@ -780,14 +780,13 @@ class WeekendLeave(db.Model):
             return False
         return any(interval["end"] >= now for interval in self.get_intervals())
 
-    @property
-    def is_any_interval_active_now(self):
+    def is_any_interval_active(self, check_datetime=None):
         if self.status != "Aprobată":
             return False
-        # This code is only reached if status is 'Aprobată'
-        now = get_localized_now()
+        if check_datetime is None:
+            check_datetime = get_localized_now()
         return any(
-            interval["start"] <= now <= interval["end"]
+            interval["start"] <= check_datetime <= interval["end"]
             for interval in self.get_intervals()
         )
 
@@ -926,9 +925,9 @@ class ServiceAssignment(db.Model):
         sa.Index("ix_service_creator", "created_by_user_id"),
     )
 
-    @property
-    def is_active(self):
-        now = get_localized_now()
+    def is_active(self, check_datetime=None):
+        if check_datetime is None:
+            check_datetime = get_localized_now()
         start_dt_aware = (
             EUROPE_BUCHAREST.localize(self.start_datetime)
             if self.start_datetime.tzinfo is None
@@ -939,7 +938,7 @@ class ServiceAssignment(db.Model):
             if self.end_datetime.tzinfo is None
             else self.end_datetime.astimezone(EUROPE_BUCHAREST)
         )
-        return start_dt_aware <= now <= end_dt_aware
+        return start_dt_aware <= check_datetime <= end_dt_aware
 
     @property
     def is_upcoming(self):
@@ -3096,6 +3095,37 @@ def dashboard():
             .all()
         )
 
+        # --- Quick Actions Logic ---
+        action_counts = (
+            db.session.query(ActionLog.target_model, func.count(ActionLog.target_model))
+            .filter(ActionLog.user_id == current_user.id)
+            .filter(ActionLog.target_model.isnot(None))
+            .group_by(ActionLog.target_model)
+            .order_by(func.count(ActionLog.target_model).desc())
+            .limit(5)
+            .all()
+        )
+
+        module_map = {
+            "Student": ("Studenți", "list_students"),
+            "Permission": ("Permisii", "list_permissions"),
+            "DailyLeave": ("Învoiri Zilnice", "list_daily_leaves"),
+            "WeekendLeave": ("Învoiri Weekend", "list_weekend_leaves"),
+            "ServiceAssignment": ("Servicii", "list_services"),
+            "Situation": ("Formulare (Situații)", "list_situations"),
+            "VolunteerActivity": ("Voluntariat", "volunteer_home"),
+        }
+
+        quick_actions = []
+        for model_name, count in action_counts:
+            if model_name in module_map:
+                display_name, endpoint = module_map[model_name]
+                try:
+                    url = url_for(endpoint)
+                    quick_actions.append({"name": display_name, "url": url})
+                except Exception:
+                    pass # endpoint might not exist
+
         return render_template(
             "gradat_dashboard.html",
             student_count=student_count,
@@ -3142,6 +3172,7 @@ def dashboard():
             )
             .filter(ScopedAccessCode.expires_at > get_localized_now())
             .all(),
+            quick_actions=quick_actions,
         )
     elif current_user.role == "comandant_companie":
         return redirect(url_for("company_commander_dashboard"))
@@ -4284,11 +4315,11 @@ def _calculate_presence_data(student_list, check_datetime):
     active_services_map = {sa.student_id: sa for sa in active_services}
     active_permissions_map = {p.student_id: p for p in active_permissions}
     active_daily_leaves_map = {
-        dl.student_id: dl for dl in all_daily_leaves if dl.is_active
+        dl.student_id: dl for dl in all_daily_leaves if dl.is_active(check_datetime)
     }
     active_weekend_leaves_map = {}
     for wl in all_weekend_leaves:
-        if wl.is_any_interval_active_now:
+        if wl.is_any_interval_active(check_datetime):
             active_interval = next(
                 (
                     interval
@@ -4600,7 +4631,7 @@ def company_commander_dashboard():
         DailyLeave.status == "Aprobată",
     ).all()
     for dl_now in all_dl_company:
-        if dl_now.is_active:  # is_active already uses get_localized_now()
+        if dl_now.is_active(now_localized):  # is_active now takes a datetime
             daily_leaves_active_now_company += 1
 
     weekend_leaves_active_now_company = 0
@@ -4610,8 +4641,8 @@ def company_commander_dashboard():
     ).all()
     for wl_now in all_wl_company_for_now_stats:
         if (
-            wl_now.is_any_interval_active_now
-        ):  # is_any_interval_active_now uses get_localized_now()
+            wl_now.is_any_interval_active(now_localized)
+        ):  # is_any_interval_active now takes a datetime
             weekend_leaves_active_now_company += 1
 
     total_on_leave_now_company = (
@@ -5208,7 +5239,7 @@ def battalion_commander_dashboard():
         DailyLeave.status == "Aprobată",
     ).all()
     for dl_now_b in all_dl_battalion:
-        if dl_now_b.is_active:
+        if dl_now_b.is_active(now_localized_b):
             daily_leaves_active_now_battalion += 1
 
     weekend_leaves_active_now_battalion = 0
@@ -5217,7 +5248,7 @@ def battalion_commander_dashboard():
         WeekendLeave.status == "Aprobată",
     ).all()
     for wl_now_b in all_wl_battalion_for_now_stats:
-        if wl_now_b.is_any_interval_active_now:
+        if wl_now_b.is_any_interval_active(now_localized_b):
             weekend_leaves_active_now_battalion += 1
 
     total_on_leave_now_battalion = (
@@ -11011,7 +11042,7 @@ def assign_service(assignment_id=None):
         start_time_str = request.form.get("start_time")
         end_time_str = request.form.get("end_time")
         service_type_submitted = request.form.get("service_type", "")
-participates = False if service_type_submitted == "Planton 1" else ("participates_in_roll_call" in request.form)
+        participates = False if service_type_submitted == "Planton 1" else ("participates_in_roll_call" in request.form)
         notes = request.form.get("notes", "").strip()
 
         current_form_data = request.form
@@ -11225,7 +11256,7 @@ def assign_multiple_services():
             start_time_str = request.form.get(f"start_time_{student_id}")
             end_time_str = request.form.get(f"end_time_{student_id}")
             service_type_val = request.form.get(f"service_type_{student_id}", "")
-participates = False if service_type_val == "Planton 1" else (f"participates_{student_id}" in request.form)
+            participates = False if service_type_val == "Planton 1" else (f"participates_{student_id}" in request.form)
             notes = request.form.get(f"notes_{student_id}", "").strip()
 
             student_obj = db.session.get(Student, student_id)
