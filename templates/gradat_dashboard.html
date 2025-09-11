@@ -10,7 +10,7 @@
         </a>
     </div>
     <div class="alert alert-info" role="alert">
-        Ghid scurt: „Situație Pluton (ACUM)” arată prezența în acest moment. Folosiți „Acțiuni Rapide” pentru adăugări rapide (permisii/învoiri/servicii). Linkul public permite doar vizualizare.
+        „Situație Pluton (ACUM)” arată prezența în acest moment. Folosiți „Acțiuni Rapide” pentru adăugări rapide (permisii/învoiri/servicii). Linkul public permite doar vizualizare.
     </div>
 
     <!-- Mini Situație Pluton (ACUM) -->
@@ -175,17 +175,20 @@ Absenti motivat:
             </div>
         </div>
 
-        <!-- Card pentru Acțiuni Rapide -->
+        <!-- Card pentru Module Utilizate Frecvent -->
         <div class="col-md-6 mb-4">
             <div class="card h-100">
-                <div class="card-header"><i class="fas fa-bolt me-2"></i>Acțiuni Rapide</div>
+                <div class="card-header"><i class="fas fa-star me-2"></i>Cele mai utilizate module</div>
                 <div class="card-body">
-                    <div class="d-grid gap-2">
-                        <a href="{{ url_for('add_student') }}" class="btn btn-outline-primary"><i class="fas fa-user-plus me-2"></i>Adaugă Student Nou</a>
-                        <a href="{{ url_for('gradat_bulk_add_permission') }}" class="btn btn-outline-primary"><i class="fas fa-users-cog me-2"></i>Adaugă Permisii Multiple</a>
-                        <a href="{{ url_for('gradat_bulk_add_weekend_leave') }}" class="btn btn-outline-primary"><i class="fas fa-calendar-plus me-2"></i>Adaugă Învoiri Weekend Multiple</a>
-                        <a href="{{ url_for('assign_multiple_services') }}" class="btn btn-outline-primary"><i class="fas fa-user-shield me-2"></i>Asignează Servicii Multiple</a>
-                    </div>
+                    {% if quick_actions %}
+                        <div class="d-grid gap-2">
+                            {% for action in quick_actions %}
+                                <a href="{{ action.url }}" class="btn btn-outline-success"><i class="fas fa-arrow-right me-2"></i>{{ action.name }}</a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted">Nu există încă date despre modulele utilizate frecvent. Pe măsură ce veți folosi aplicația, aici vor apărea cele mai accesate module.</p>
+                    {% endif %}
                 </div>
             </div>
         </div>
