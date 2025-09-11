@@ -170,6 +170,35 @@ app.config["CSRF_TRUSTED_ORIGINS"] = [
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)  # Initialize Flask-Migrate
 
+# Custom Type for Timezone-Aware DateTime
+from sqlalchemy.types import TypeDecorator
+
+class AwareDateTime(TypeDecorator):
+    """
+    A DateTime type which can only store tz-aware DateTimes.
+    It forces UTC storage in the database and returns aware datetimes.
+    """
+    impl = db.DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            if not isinstance(value, datetime):
+                raise TypeError("AwareDateTime columns support only datetime objects.")
+            if value.tzinfo is None:
+                # Assume naive datetimes are in the local app timezone and convert to UTC
+                value = EUROPE_BUCHAREST.localize(value, is_dst=None).astimezone(pytz.utc)
+            else:
+                value = value.astimezone(pytz.utc)
+            return value.replace(tzinfo=None)
+        return None
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            if value.tzinfo is None:
+                return value.replace(tzinfo=pytz.utc)
+        return value
+
 # Automatically apply database migrations on first request and ensure base seed data exists.
 # This prevents "no such column" errors when the codebase is ahead of the local SQLite schema.
 def _auto_apply_migrations_and_seed():
@@ -843,7 +872,7 @@ class VolunteerSession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(150), nullable=False)
     created_at = db.Column(
-        db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+        AwareDateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
     created_by_user_id = db.Column(
         db.Integer, db.ForeignKey("user.id"), nullable=False
@@ -938,7 +967,7 @@ class ActionLog(db.Model):
     user_id = db.Column(
         db.Integer, db.ForeignKey("user.id"), nullable=True
     )  # Nullable if action can be system-initiated or by non-logged-in user
-    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    timestamp = db.Column(AwareDateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     action_type = db.Column(
         db.String(50), nullable=False
     )  # e.g., CREATE, UPDATE, DELETE, LOGIN, LOGOUT, RESET_CODE
@@ -1037,10 +1066,10 @@ class UpdateTopic(db.Model):
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(
-        db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+        AwareDateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
     updated_at = db.Column(
-        db.DateTime,
+        AwareDateTime,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
@@ -1080,9 +1109,9 @@ class PublicViewCode(db.Model):
     scope_id = db.Column(
         db.String(50), nullable=False
     )  # The ID of the company or battalion
-    expires_at = db.Column(db.DateTime, nullable=False)
+    expires_at = db.Column(AwareDateTime, nullable=False)
     created_at = db.Column(
-        db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+        AwareDateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
     created_by_user_id = db.Column(
         db.Integer, db.ForeignKey("user.id"), nullable=False
@@ -1104,9 +1133,9 @@ class ScopedAccessCode(db.Model):
     )  # e.g., "Acces Voluntariat pentru Sdt. Popescu"
     # This JSON field will store a list of route prefixes, e.g., '["/volunteer", "/gradat/students"]'
     permissions = db.Column(db.Text, nullable=False)
-    expires_at = db.Column(db.DateTime, nullable=False)
+    expires_at = db.Column(AwareDateTime, nullable=False)
     created_at = db.Column(
-        db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+        AwareDateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
     # The gradat who created this code and whose data will be accessed
     created_by_user_id = db.Column(
@@ -1165,7 +1194,7 @@ class Situation(db.Model):
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     # Public submission link code (unique, optional until generated)
     public_code = db.Column(db.String(24), unique=True, nullable=True)
-    public_expires_at = db.Column(db.DateTime, nullable=True)
+    public_expires_at = db.Column(AwareDateTime, nullable=True)
 
     created_by_user_id = db.Column(
         db.Integer, db.ForeignKey("user.id"), nullable=False
@@ -1201,7 +1230,7 @@ class SituationEntry(db.Model):
     # Optional: link a student if the form included student selection (by id)
     student_id = db.Column(db.Integer, db.ForeignKey("student.id"), nullable=True)
     data = db.Column(db.Text, nullable=False)  # JSON of answers
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = db.Column(AwareDateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     created_ip = db.Column(db.String(64), nullable=True)
 
     situation = db.relationship(
