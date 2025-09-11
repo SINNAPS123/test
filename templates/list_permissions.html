@@ -49,7 +49,7 @@
                 </thead>
                 <tbody>
                     {% for p in permissions %}
-                    <tr class="{{ 'table-success' if p.is_active else ('table-warning' if p.is_upcoming else 'table-secondary') }}">
+                    <tr>
                         <td>{{ p.student.nume }} {{ p.student.prenume }}</td>
                         <td>{{ p.student.grad_militar }}</td>
                         <td>{{ p.start_datetime|localdatetime('%d-%m-%Y %H:%M') }}</td>
@@ -60,16 +60,16 @@
                         <td>
                             {% if p.status == 'Aprobată' %}
                                 {% if p.is_active %}
-                                    <span class="badge bg-success">Activă</span>
+                                    <span class="badge bg-secondary">Activă</span>
                                 {% elif p.is_upcoming %}
-                                    <span class="badge bg-warning text-dark">Urmează</span>
+                                    <span class="badge bg-secondary">Urmează</span>
                                 {% else %}
                                     <span class="badge bg-secondary">Expirată</span>
                                 {% endif %}
                             {% elif p.status == 'Anulată' %}
-                                <span class="badge bg-danger">Anulată</span>
+                                <span class="badge bg-secondary">Anulată</span>
                             {% else %}
-                                <span class="badge bg-light text-dark">{{ p.status }}</span>
+                                <span class="badge bg-secondary">{{ p.status }}</span>
                             {% endif %}
                         </td>
                         <td>

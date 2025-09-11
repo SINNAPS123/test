@@ -162,21 +162,21 @@
                     <td>{{ student.volunteer_points }}</td>
                     <td>
                         {% if student.is_smt %}
-                            <span class="badge bg-danger">SMT</span>
+                            <span class="badge bg-secondary">SMT</span>
                         {% else %}
-                            <span class="badge bg-light text-dark">Nu</span>
+                            <span class="badge bg-secondary">Nu</span>
                         {% endif %}
                     </td>
                     <td>
                         {% if student.exemption_details %}
-                            <span class="badge bg-warning text-dark" title="{{ student.exemption_details }}">{{ student.exemption_details[:20] }}{% if student.exemption_details|length > 20 %}...{% endif %}</span>
+                            <span class="badge bg-secondary" title="{{ student.exemption_details }}">{{ student.exemption_details[:20] }}{% if student.exemption_details|length > 20 %}...{% endif %}</span>
                         {% else %}
                             -
                         {% endif %}
                     </td>
                     <td>
                         {% if student.is_platoon_graded_duty %}
-                            <span class="badge bg-success">Da</span>
+                            <span class="badge bg-secondary">Da</span>
                         {% else %}
                             <span class="badge bg-secondary">Nu</span>
                         {% endif %}

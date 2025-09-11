@@ -33,7 +33,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import bcrypt
 import os
 import secrets
-from datetime import datetime, date, time, timedelta
+from datetime import datetime, date, time, timedelta, timezone
 import time as _time
 from sqlalchemy import (
     func,
@@ -843,7 +843,7 @@ class VolunteerSession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(150), nullable=False)
     created_at = db.Column(
-        db.DateTime, default=datetime.utcnow, nullable=False
+        db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
     created_by_user_id = db.Column(
         db.Integer, db.ForeignKey("user.id"), nullable=False
@@ -938,7 +938,7 @@ class ActionLog(db.Model):
     user_id = db.Column(
         db.Integer, db.ForeignKey("user.id"), nullable=True
     )  # Nullable if action can be system-initiated or by non-logged-in user
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     action_type = db.Column(
         db.String(50), nullable=False
     )  # e.g., CREATE, UPDATE, DELETE, LOGIN, LOGOUT, RESET_CODE
@@ -1037,12 +1037,12 @@ class UpdateTopic(db.Model):
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(
-        db.DateTime, default=datetime.utcnow, nullable=False
+        db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
     updated_at = db.Column(
         db.DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
@@ -1082,7 +1082,7 @@ class PublicViewCode(db.Model):
     )  # The ID of the company or battalion
     expires_at = db.Column(db.DateTime, nullable=False)
     created_at = db.Column(
-        db.DateTime, default=datetime.utcnow, nullable=False
+        db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
     created_by_user_id = db.Column(
         db.Integer, db.ForeignKey("user.id"), nullable=False
@@ -1106,7 +1106,7 @@ class ScopedAccessCode(db.Model):
     permissions = db.Column(db.Text, nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)
     created_at = db.Column(
-        db.DateTime, default=datetime.utcnow, nullable=False
+        db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
     # The gradat who created this code and whose data will be accessed
     created_by_user_id = db.Column(
@@ -1187,7 +1187,7 @@ class Situation(db.Model):
         if self.public_expires_at is None:
             return True
         # public_expires_at stored naive UTC or naive local; for simplicity treat as naive UTC
-        return self.public_expires_at > datetime.utcnow()
+        return self.public_expires_at > datetime.now(timezone.utc)
 
     def __repr__(self):
         return f"<Situation {self.id}: {self.title}>"
@@ -1201,7 +1201,7 @@ class SituationEntry(db.Model):
     # Optional: link a student if the form included student selection (by id)
     student_id = db.Column(db.Integer, db.ForeignKey("student.id"), nullable=True)
     data = db.Column(db.Text, nullable=False)  # JSON of answers
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     created_ip = db.Column(db.String(64), nullable=True)
 
     situation = db.relationship(
@@ -5353,7 +5353,7 @@ def scoped_access_required(f):
         # Check expiry
         if (
             datetime.fromisoformat(access_info["expires_at"])
-            < datetime.utcnow()
+        < datetime.now(timezone.utc)
         ):
             session.pop("scoped_access", None)
             flash("Sesiunea de acces delegat a expirat.", "info")
@@ -5386,7 +5386,7 @@ def scoped_login():
         # Re-validate session on page load
         if (
             datetime.fromisoformat(session["scoped_access"].get("expires_at"))
-            < datetime.utcnow()
+            < datetime.now(timezone.utc)
         ):
             session.pop("scoped_access", None)
             flash("Sesiunea de acces delegat a expirat.", "info")
@@ -5411,7 +5411,7 @@ def scoped_login():
             flash("Vă rugăm introduceți un cod de acces.", "warning")
             return redirect(url_for("scoped_login"))
 
-        now_utc = datetime.utcnow()
+        now_utc = datetime.now(timezone.utc)
         access_code = ScopedAccessCode.query.filter_by(
             code=code_to_check, is_active=True
         ).first()
@@ -5527,14 +5527,14 @@ def generate_public_calendar_code():
     # Determine expiry
     if permanent:
         # Effectively "never" expires: 100 years from now
-        expires_at = datetime.utcnow() + timedelta(days=365 * 100)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=365 * 100)
     else:
         try:
             days = int(payload.get("days", 90))
         except Exception:
             days = 90
         days = max(1, min(days, 365))
-        expires_at = datetime.utcnow() + timedelta(days=days)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=days)
 
     # Optionally revoke existing active calendar codes before creating a new one
     if regenerate:
@@ -5547,7 +5547,7 @@ def generate_public_calendar_code():
                     perms = c.get_permissions_list()
                 except Exception:
                     perms = []
-                if "/calendar" in perms and "/api/events" in perms and c.expires_at > datetime.utcnow():
+                if "/calendar" in perms and "/api/events" in perms and c.expires_at > datetime.now(timezone.utc):
                     c.is_active = False
             db.session.flush()
         except Exception:
@@ -5611,7 +5611,7 @@ def list_public_calendar_codes():
     if getattr(current_user, "parent_user_id", None):
         return jsonify({"error": "Funcția nu este disponibilă pentru subutilizatori."}), 403
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     codes = (
         ScopedAccessCode.query.filter_by(
             created_by_user_id=current_user.id, is_active=True
@@ -5691,7 +5691,7 @@ def public_calendar_view(code):
     """
     Public calendar page for a valid, non-expired scoped code.
     """
-    now_utc = datetime.utcnow()
+    now_utc = datetime.now(timezone.utc)
     sac = ScopedAccessCode.query.filter_by(code=code, is_active=True).first()
     if not sac or sac.expires_at <= now_utc:
         return "Link invalid sau expirat.", 404
@@ -5773,7 +5773,7 @@ def _build_calendar_events_for_user_id(user_id: int, range_start: datetime, rang
             events.append(
                 {
                     "id": f"dl-{d.id}",
-                    "title": sname or "Învoire Zilnică",
+                    "title": f"{sname} ({d.leave_type_display})" if sname else f"Învoire Zilnică ({d.leave_type_display})",
                     "start": s_aware.isoformat(),
                     "end": e_aware.isoformat(),
                     "allDay": False,
@@ -5800,7 +5800,7 @@ def _build_calendar_events_for_user_id(user_id: int, range_start: datetime, rang
                 events.append(
                     {
                         "id": f"wl-{w.id}-{int(it['start'].timestamp())}",
-                        "title": sname or "Învoire Weekend",
+                        "title": f"{sname} ({it['day_name']})" if sname else f"Învoire Weekend ({it['day_name']})",
                         "start": s_aware.isoformat(),
                         "end": e_aware.isoformat(),
                         "allDay": False,
@@ -5826,7 +5826,7 @@ def _build_calendar_events_for_user_id(user_id: int, range_start: datetime, rang
         events.append(
             {
                 "id": f"serv-{s.id}",
-                "title": sname or "Serviciu",
+                "title": f"{sname} ({s.service_type})" if sname else f"Serviciu ({s.service_type})",
                 "start": s_aware.isoformat(),
                 "end": e_aware.isoformat(),
                 "allDay": False,
@@ -5844,7 +5844,7 @@ def api_events_public(code):
     Public events feed for FullCalendar based on a valid scoped access code.
     Accepts FullCalendar start/end query params (ISO strings) to limit data.
     """
-    now_utc = datetime.utcnow()
+    now_utc = datetime.now(timezone.utc)
     sac = ScopedAccessCode.query.filter_by(code=code, is_active=True).first()
     if not sac or sac.expires_at <= now_utc:
         return jsonify([])
@@ -5853,13 +5853,13 @@ def api_events_public(code):
     start_param = request.args.get("start")
     end_param = request.args.get("end")
     try:
-        range_start = datetime.fromisoformat(start_param) if start_param else (datetime.utcnow() - timedelta(days=30))
+        range_start = datetime.fromisoformat(start_param) if start_param else (datetime.now(timezone.utc) - timedelta(days=30))
     except Exception:
-        range_start = datetime.utcnow() - timedelta(days=30)
+        range_start = datetime.now(timezone.utc) - timedelta(days=30)
     try:
-        range_end = datetime.fromisoformat(end_param) if end_param else (datetime.utcnow() + timedelta(days=60))
+        range_end = datetime.fromisoformat(end_param) if end_param else (datetime.now(timezone.utc) + timedelta(days=60))
     except Exception:
-        range_end = datetime.utcnow() + timedelta(days=60)
+        range_end = datetime.now(timezone.utc) + timedelta(days=60)
 
     # Normalize to naive server-local for DB comparisons (models use naive)
     # We treat parsed ISO as naive if tz-aware; strip tzinfo for DB comparisons
@@ -5889,13 +5889,13 @@ def api_events_auth():
     start_param = request.args.get("start")
     end_param = request.args.get("end")
     try:
-        range_start = datetime.fromisoformat(start_param) if start_param else (datetime.utcnow() - timedelta(days=30))
+        range_start = datetime.fromisoformat(start_param) if start_param else (datetime.now(timezone.utc) - timedelta(days=30))
     except Exception:
-        range_start = datetime.utcnow() - timedelta(days=30)
+        range_start = datetime.now(timezone.utc) - timedelta(days=30)
     try:
-        range_end = datetime.fromisoformat(end_param) if end_param else (datetime.utcnow() + timedelta(days=60))
+        range_end = datetime.fromisoformat(end_param) if end_param else (datetime.now(timezone.utc) + timedelta(days=60))
     except Exception:
-        range_end = datetime.utcnow() + timedelta(days=60)
+        range_end = datetime.now(timezone.utc) + timedelta(days=60)
 
     # Normalize to naive for DB comparisons
     if range_start.tzinfo is not None:
@@ -5920,7 +5920,7 @@ def calendar_custom_slug_view(slug):
     """
     Public calendar page for a valid, active custom slug.
     """
-    now_utc = datetime.utcnow()
+    now_utc = datetime.now(timezone.utc)
     sac = ScopedAccessCode.query.filter_by(custom_slug=slug, is_active=True).first()
     if not sac or sac.expires_at <= now_utc:
         return "Link invalid sau expirat.", 404
@@ -11882,7 +11882,7 @@ def admin_edit_update(topic_id):
             else status_color_form
         )
         topic_to_edit.updated_at = (
-            datetime.utcnow()
+            datetime.now(timezone.utc)
         )  # Manually update 'updated_at'
 
         try:
@@ -11944,7 +11944,7 @@ def admin_toggle_pin_update(topic_id):
     topic = db.session.get(UpdateTopic, topic_id)
     if topic:
         topic.is_pinned = not topic.is_pinned
-        topic.updated_at = datetime.utcnow()
+        topic.updated_at = datetime.now(timezone.utc)
         try:
             db.session.commit()
             flash(
@@ -11974,7 +11974,7 @@ def admin_toggle_visibility_update(topic_id):
     topic = db.session.get(UpdateTopic, topic_id)
     if topic:
         topic.is_visible = not topic.is_visible
-        topic.updated_at = datetime.utcnow()  # Consider this an update
+        topic.updated_at = datetime.now(timezone.utc)  # Consider this an update
         try:
             db.session.commit()
             flash(

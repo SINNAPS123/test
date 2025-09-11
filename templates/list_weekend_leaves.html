@@ -46,7 +46,7 @@
                 </thead>
                 <tbody>
                     {% for leave in leaves %}
-                    <tr class="{{ 'table-success' if leave.is_any_interval_active_now and leave.status == 'Aprobată' else ('table-warning' if leave.is_overall_active_or_upcoming else 'table-secondary') }}">
+                    <tr>
                         <td>{{ leave.student.nume }} {{ leave.student.prenume }}</td>
                         <td>{{ leave.weekend_start_date|localdate('%d-%m-%y') }}</td>
                         <td>
@@ -60,7 +60,7 @@
                                         {# Presupunând că `interval` are `start` și `end` ca datetime-uri deja localizate sau naive corecte #}
                                         {% set now_interval_check = get_localized_now() %} {# Necesar dacă interval.start/end sunt naive #}
                                         {% if interval.start <= now_interval_check <= interval.end %}
-                                        <span class="badge bg-success ms-1">Activ acum</span>
+                                        <span class="badge bg-secondary ms-1">Activ acum</span>
                                         {% endif %}
                                     {% endif %}
                                 </div>
@@ -74,16 +74,16 @@
                                 {% if leave.is_overall_past %}
                                     <span class="badge bg-secondary">Expirată</span>
                                 {% elif leave.is_any_interval_active_now %}
-                                     <span class="badge bg-success">Cel puțin un interval Activ</span>
+                                     <span class="badge bg-secondary">Cel puțin un interval Activ</span>
                                 {% elif leave.is_overall_active_or_upcoming %}
-                                    <span class="badge bg-warning text-dark">Urmează</span>
+                                    <span class="badge bg-secondary">Urmează</span>
                                 {% else %}
-                                     <span class="badge bg-info text-dark">Aprobată</span> {# Fallback if logic is tricky #}
+                                     <span class="badge bg-secondary">Aprobată</span> {# Fallback if logic is tricky #}
                                 {% endif %}
                             {% elif leave.status == 'Anulată' %}
-                                <span class="badge bg-danger">Anulată</span>
+                                <span class="badge bg-secondary">Anulată</span>
                             {% else %}
-                                <span class="badge bg-light text-dark">{{ leave.status }}</span>
+                                <span class="badge bg-secondary">{{ leave.status }}</span>
                             {% endif %}
                         </td>
                         <td>

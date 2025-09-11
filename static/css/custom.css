@@ -891,7 +891,7 @@ body.dark-mode tr.table-dark > * {
 body.dark-mode .text-dark,
 [data-theme="dark"] .text-dark,
 html.dark-mode-preload .text-dark {
-    color: #0f172a !important;
+    color: #0f172a;
 }
 
 /*------------------------------------------------------------------------------

@@ -46,7 +46,7 @@
                 <tr>
                   <th style="width: 25%;">Cod</th>
                   <th>URL Public</th>
-                  <th>Alias (Slug)</th>
+                  <th>Alias Personalizat (Slug)</th>
                   <th style="width: 18%;">Expiră</th>
                   <th style="width: 18%;">Acțiuni</th>
                 </tr>
@@ -128,10 +128,10 @@
           <td data-code="${item.code}">
             <div class="input-group input-group-sm">
               <span class="input-group-text">/calendar/</span>
-              <input class="form-control slug-input" placeholder="ex: permanent" value="" />
-              <button class="btn btn-outline-primary set-slug-btn" type="button">Setează</button>
+              <input class="form-control slug-input" placeholder="ex: permanent" value="" title="Introduceți un alias scurt (litere, cifre, cratimă)" />
+              <button class="btn btn-outline-primary set-slug-btn" type="button" title="Salvează aliasul"><i class="fas fa-save"></i></button>
             </div>
-            <div class="small text-muted mt-1 current-slug">—</div>
+            <div class="small text-muted mt-1 current-slug">Niciun alias setat</div>
           </td>
           <td>${item.never_expires ? 'Niciodată' : new Date(item.expires_at).toLocaleString()}</td>
           <td>
