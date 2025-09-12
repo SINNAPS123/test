@@ -9,10 +9,6 @@
             <i class="fas fa-file-alt me-1"></i> Generează Raport Prezență
         </a>
     </div>
-    <div class="alert alert-info" role="alert">
-        „Situație Pluton (ACUM)” arată prezența în acest moment. Folosiți „Acțiuni Rapide” pentru adăugări rapide (permisii/învoiri/servicii). Linkul public permite doar vizualizare.
-    </div>
-
     <!-- Mini Situație Pluton (ACUM) -->
     <div class="mt-2 p-3 border rounded bg-light shadow-sm">
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -175,40 +171,6 @@ Absenti motivat:
             </div>
         </div>
 
-        <!-- Card pentru Module Utilizate Frecvent -->
-        <div class="col-md-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header"><i class="fas fa-star me-2"></i>Cele mai utilizate module</div>
-                <div class="card-body">
-                    {% if quick_actions %}
-                        <div class="d-grid gap-2">
-                            {% for action in quick_actions %}
-                                <a href="{{ action.url }}" class="btn btn-outline-success"><i class="fas fa-arrow-right me-2"></i>{{ action.name }}</a>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <p class="text-muted">Nu există încă date despre modulele utilizate frecvent. Pe măsură ce veți folosi aplicația, aici vor apărea cele mai accesate module.</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        <!-- Card pentru Navigare -->
-        <div class="col-md-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header"><i class="fas fa-compass me-2"></i>Navigare Module</div>
-                <div class="card-body">
-                    <div class="d-grid gap-2">
-                        <a href="{{ url_for('list_students') }}" class="btn btn-outline-secondary"><i class="fas fa-users me-2"></i>Management Studenți</a>
-                        <a href="{{ url_for('list_permissions') }}" class="btn btn-outline-secondary"><i class="fas fa-id-card me-2"></i>Management Permisii</a>
-                        <a href="{{ url_for('list_daily_leaves') }}" class="btn btn-outline-secondary"><i class="fas fa-calendar-day me-2"></i>Management Învoiri Zilnice</a>
-                        <a href="{{ url_for('list_weekend_leaves') }}" class="btn btn-outline-secondary"><i class="fas fa-calendar-week me-2"></i>Management Învoiri Weekend</a>
-                        <a href="{{ url_for('list_services') }}" class="btn btn-outline-secondary"><i class="fas fa-shield-alt me-2"></i>Management Servicii</a>
-                        <a href="{{ url_for('volunteer_home') }}" class="btn btn-outline-secondary"><i class="fas fa-hands-helping me-2"></i>Management Voluntariate</a>
-                        <a href="{{ url_for('list_situations') }}" class="btn btn-outline-secondary"><i class="fas fa-list-alt me-2"></i>Situații (Formulare)</a>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 </div>
 {% endblock %}
