@@ -7200,7 +7200,7 @@ def gradat_page_import_services():
 
         no_roll = {"Planton 1"}
 
-        date_re = re.compile(r"(\\d{1,2}[.\\-/]\\d{1,2}[.\\-/]\\d{4})")
+        date_re = re.compile(r"(\d{1,2}[./-]\d{1,2}[./-]\d{4})")
         time_re = re.compile(r"(\\d{1,2}[:.]\\d{2})\\s*[-–]\\s*(\\d{1,2}[:.]\\d{2})")
 
         for raw in lines:

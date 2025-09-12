@@ -112,72 +112,6 @@
                         </li>
                         {% endif %}
 
-                        <!-- Dropdown pentru secțiuni specifice rolului -->
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle no-loader" href="#" id="navbarRoleSpecificLinks" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                Navigare Rapidă
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarRoleSpecificLinks">
-                                {% if current_user.role == 'gradat' %}
-                                    <li><a class="dropdown-item" href="{{ url_for('calendar_view') }}"><i class="fas fa-calendar-alt fa-fw me-2"></i>Calendar Evenimente</a></li>
-                                    {% if not current_user.parent_user_id %}
-                                    <li><a class="dropdown-item" href="{{ url_for('gradat_manage_subusers') }}"><i class="fas fa-users-cog fa-fw me-2"></i>Subutilizatori</a></li>
-                                    {% endif %}
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('list_students') }}">Studenți</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('list_permissions') }}">Permisii</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('list_daily_leaves') }}">Învoiri Zilnice</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('list_weekend_leaves') }}">Învoiri Weekend</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('list_services') }}">Servicii</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('volunteer_home') }}">Voluntariat</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('presence_report') }}">Raport Prezență</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('morning_invigoration_report') }}">Raport Înviorare</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('list_situations') }}">Situații (Formulare)</a></li>
-                                {% elif current_user.role == 'admin' %}
-                                    <li><a class="dropdown-item" href="{{ url_for('calendar_view') }}"><i class="fas fa-calendar-alt fa-fw me-2"></i>Calendar Evenimente</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('admin_dashboard_route') }}">Management Utilizatori</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('list_students') }}">Listă Studenți (Admin)</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('admin_insights') }}">Insights Sistem</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('morning_invigoration_report') }}">Raport Înviorare</a></li>
-                                    {# Adaugă alte linkuri specifice adminului aici dacă e cazul #}
-                                {% elif current_user.role == 'comandant_companie' %}
-                                    <li><a class="dropdown-item" href="{{ url_for('calendar_view') }}"><i class="fas fa-calendar-alt fa-fw me-2"></i>Calendar Evenimente</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('company_commander_dashboard') }}">Panou Comandant Companie</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('text_report_display_company') }}">Raport Text Companie</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('morning_invigoration_report') }}">Raport Înviorare</a></li>
-                                     {# Alte linkuri pentru comandant companie #}
-                                {% elif current_user.role == 'comandant_batalion' %}
-                                    <li><a class="dropdown-item" href="{{ url_for('calendar_view') }}"><i class="fas fa-calendar-alt fa-fw me-2"></i>Calendar Evenimente</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('battalion_commander_dashboard') }}">Panou Comandant Batalion</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('text_report_display_battalion') }}">Raport Text Batalion</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('morning_invigoration_report') }}">Raport Înviorare</a></li>
-                                     {# Alte linkuri pentru comandant batalion #}
-                                {% endif %}
-                                {% if current_user.role == 'gradat' %}
-                                    <li><a class="dropdown-item" href="{{ url_for('gradat_insights') }}">Insights Pluton</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('gradat_brief') }}">Daily Brief Pluton</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('gradat_conflicts') }}">Conflict Center Pluton</a></li>
-                                {% elif current_user.role == 'admin' %}
-                                    <li><a class="dropdown-item" href="{{ url_for('admin_insights') }}">Insights Sistem</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('admin_brief') }}">Daily Brief Sistem</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('admin_conflicts') }}">Conflict Center Sistem</a></li>
-                                {% elif current_user.role == 'comandant_companie' %}
-                                    <li><a class="dropdown-item" href="{{ url_for('admin_insights') }}">Insights Companie</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('admin_brief') }}">Daily Brief Companie</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('admin_conflicts') }}">Conflict Center Companie</a></li>
-                                {% elif current_user.role == 'comandant_batalion' %}
-                                    <li><a class="dropdown-item" href="{{ url_for('admin_insights') }}">Insights Batalion</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('admin_brief') }}">Daily Brief Batalion</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('admin_conflicts') }}">Conflict Center Batalion</a></li>
-                                {% endif %}
-                                 <li><hr class="dropdown-divider"></li>
-                                 <li><a class="dropdown-item" href="{{ url_for('dashboard') }}">Panou Principal Rol</a></li>
-                            </ul>
-                        </li>
                         <li class="nav-item">
                             <a class="nav-link icon-btn" href="{{ url_for('logout') }}" title="Deconectare" aria-label="Deconectare">
                                 <i class="fas fa-sign-out-alt"></i>
@@ -214,6 +148,43 @@
             </div>
         </div>
     </nav>
+
+    {% if current_user.is_authenticated %}
+    <div class="container-fluid bg-dark py-2">
+        <div class="container">
+            <div class="row">
+                <div class="col-12">
+                    <div class="d-flex flex-wrap justify-content-center gap-2">
+                        {% if current_user.role == 'gradat' %}
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('list_students') }}">Studenți</a>
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('list_permissions') }}">Permisii</a>
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('list_daily_leaves') }}">Învoiri Zilnice</a>
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('list_weekend_leaves') }}">Învoiri Weekend</a>
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('list_services') }}">Servicii</a>
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('volunteer_home') }}">Voluntariat</a>
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('presence_report') }}">Raport Prezență</a>
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('morning_invigoration_report') }}">Raport Înviorare</a>
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('list_situations') }}">Situații</a>
+                        {% elif current_user.role == 'admin' %}
+                             <a class="btn btn-sm btn-outline-light" href="{{ url_for('admin_dashboard_route') }}">Management Utilizatori</a>
+                             <a class="btn btn-sm btn-outline-light" href="{{ url_for('list_students') }}">Listă Studenți</a>
+                             <a class="btn btn-sm btn-outline-light" href="{{ url_for('admin_insights') }}">Insights Sistem</a>
+                             <a class="btn btn-sm btn-outline-light" href="{{ url_for('morning_invigoration_report') }}">Raport Înviorare</a>
+                        {% elif current_user.role == 'comandant_companie' %}
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('company_commander_dashboard') }}">Panou Companie</a>
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('text_report_display_company') }}">Raport Text</a>
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('morning_invigoration_report') }}">Raport Înviorare</a>
+                        {% elif current_user.role == 'comandant_batalion' %}
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('battalion_commander_dashboard') }}">Panou Batalion</a>
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('text_report_display_battalion') }}">Raport Text</a>
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('morning_invigoration_report') }}">Raport Înviorare</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     {% if maintenance_mode %}
     <div class="container-fluid p-0">
