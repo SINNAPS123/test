@@ -7200,12 +7200,12 @@ def gradat_page_import_services():
 
         no_roll = {"Planton 1"}
 
-        date_re = re.compile(r"(\d{1,2}[./-]\d{1,2}[./-]\d{4})")
-        time_re = re.compile(r"(\\d{1,2}[:.]\\d{2})\\s*[-–]\\s*(\\d{1,2}[:.]\\d{2})")
+        date_re = re.compile(r"(\d{1,2})[./-](\d{1,2})[./-](\d{2,5})")
+        time_re = re.compile(r"(\d{1,2}[:.]\d{2})\s*[-–]\s*(\d{1,2}[:.]\d{2})")
 
         for raw in lines:
             raw_norm = _norm(raw)
-            tokens = [t for t in re.split(r"\\s+", raw_norm) if t]
+            tokens = [t for t in re.split(r"\s+", raw_norm) if t]
 
             service_type = None
             service_idx = -1
@@ -7228,11 +7228,19 @@ def gradat_page_import_services():
             if not mdate:
                 error_details.append({"line": raw, "error": "Dată lipsă sau format invalid (așteptat DD.MM.YYYY)."})
                 continue
-            date_str = mdate.group(1).replace("/", ".").replace("-", ".")
+
             try:
-                service_date = datetime.strptime(date_str, "%d.%m.%Y").date()
+                day, month, year_str = mdate.groups()
+                year = int(year_str)
+                if len(year_str) == 5:
+                    year = int(year_str[:4]) # Typo like 20225 -> 2022
+                elif len(year_str) == 2:
+                    year += 2000 # 25 -> 2025
+
+                service_date = date(year, int(month), int(day))
+                date_str = service_date.strftime("%d.%m.%Y")
             except Exception:
-                error_details.append({"line": raw, "error": f"Dată invalidă: {date_str}."})
+                error_details.append({"line": raw, "error": f"Dată invalidă: {mdate.group(0)}."})
                 continue
 
             mtime = time_re.search(raw_norm)
