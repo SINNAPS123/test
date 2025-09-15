@@ -1,28 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}Clasament Voluntari{% endblock %}
+{% block title %}Clasament Voluntari (Public){% endblock %}
 
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2><i class="fas fa-medal me-2"></i>Clasament și Activități Voluntariat</h2>
-        <div>
-            <a href="{{ url_for('volunteer_activity_create') }}" class="btn btn-primary">
-                <i class="fas fa-plus me-1"></i> Creează Activitate
-            </a>
-            <a href="{{ url_for('assign_multiple_activities') }}" class="btn btn-success">
-                <i class="fas fa-user-plus me-1"></i> Asignare Multiplă
-            </a>
-            <a href="{{ url_for('volunteer_sessions_list') }}" class="btn btn-secondary">
-                <i class="fas fa-list-alt me-1"></i> Liste Salvate
-            </a>
-            <a href="{{ url_for('volunteer_generate_students') }}" class="btn btn-info">
-                <i class="fas fa-users-cog me-1"></i> Generează Voluntari
-            </a>
-            <a href="{{ url_for('volunteer_links_manage') }}" class="btn btn-warning">
-                <i class="fas fa-share-alt me-1"></i> Link-uri Publice
-            </a>
-        </div>
+        <a href="{{ url_for('public_view_logout') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-sign-out-alt me-1"></i> Ieșire
+        </a>
+    </div>
+
+    <div class="alert alert-info" role="alert">
+        <i class="fas fa-info-circle me-2"></i>
+        Aceasta este o pagină publică, în mod doar citire (read-only). Datele sunt actualizate în timp real.
     </div>
 
     <div class="row">
@@ -50,7 +41,7 @@
                                 <tr class="{{ row_class }}">
                                     <td>{{ loop.index }}</td>
                                     <td>
-                                        <a href="{{ url_for('student_profile', student_id=student.id) }}" class="text-decoration-none">{{ student.grad_militar }} {{ student.nume }} {{ student.prenume }}</a>
+                                        {{ student.grad_militar }} {{ student.nume }} {{ student.prenume }}
                                         <br>
                                         <small class="text-muted">Pluton: {{ student.pluton }}</small>
                                     </td>
@@ -87,35 +78,19 @@
                         {% for activity in activities %}
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             <div>
-                                <a href="{{ url_for('volunteer_activity_details', activity_id=activity.id) }}" class="fw-bold">{{ activity.name }}</a><br>
+                                <span class="fw-bold">{{ activity.name }}</span><br>
                                 <small class="text-muted">{{ activity.activity_date|localdate('%d %B %Y') }} - {{ activity.description if activity.description else 'Fără descriere' }}</small><br>
                                 <span class="badge bg-light text-dark">Participanți: {{ activity.participants.count() }}</span>
-                            </div>
-                            <div>
-                                <a href="{{ url_for('volunteer_activity_details', activity_id=activity.id) }}" class="btn btn-sm btn-outline-primary me-2" title="Detalii și Management Participanți">
-                                    <i class="fas fa-users"></i> Detalii
-                                </a>
-                                <form method="POST" action="{{ url_for('delete_volunteer_activity', activity_id=activity.id) }}" class="d-inline" onsubmit="return confirm('Ești sigur că vrei să ștergi această activitate și toate punctele asociate? Această acțiune este ireversibilă!');">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Șterge Activitatea">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </button>
-                                </form>
                             </div>
                         </li>
                         {% endfor %}
                     </ul>
                     {% else %}
-                    <p class="text-center text-muted">Nu ați creat nicio activitate de voluntariat încă.</p>
+                    <p class="text-center text-muted">Nu au fost create activități de voluntariat.</p>
                     {% endif %}
                 </div>
             </div>
         </div>
     </div>
-
-    <p class="mt-4">
-        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
-            &laquo; Înapoi la Panoul Gradat
-        </a>
-    </p>
 </div>
 {% endblock %}

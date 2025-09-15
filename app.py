@@ -6075,6 +6075,159 @@ def calendar_links_manage():
         return redirect(url_for("dashboard"))
     return render_template("calendar_links.html")
 
+
+# --- Volunteer API and Link Management ---
+
+@app.route("/volunteer/api/generate_link", methods=["POST"])
+@login_required
+def volunteer_generate_public_link():
+    if current_user.role != "gradat" or getattr(current_user, "parent_user_id", None):
+        return jsonify({"error": "Acces neautorizat."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    permanent = bool(payload.get("permanent", False))
+    regenerate = bool(payload.get("regenerate", False))
+    days = int(payload.get("days", 90)) if not permanent else 365 * 100
+    expires_at = datetime.now(timezone.utc) + timedelta(days=days)
+
+    permissions_list = ["/public/volunteer/", "/public/v/"]
+
+    if regenerate:
+        try:
+            existing_codes = ScopedAccessCode.query.filter_by(
+                created_by_user_id=current_user.id, is_active=True
+            ).all()
+            for c in existing_codes:
+                if any(p in c.get_permissions_list() for p in permissions_list):
+                    c.is_active = False
+            db.session.flush()
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": f"Eroare la revocarea codurilor vechi: {e}"}), 500
+
+    new_code = ScopedAccessCode(
+        code=_generate_unique_scoped_code_str(16),
+        description="Voluntariat Public",
+        permissions=json.dumps(permissions_list, ensure_ascii=False),
+        expires_at=expires_at,
+        created_by_user_id=current_user.id,
+        is_active=True,
+    )
+    db.session.add(new_code)
+    try:
+        db.session.commit()
+        return jsonify({
+            "code": new_code.code,
+            "public_url": url_for("public_volunteer_view_code", code=new_code.code, _external=True),
+            "expires_at": new_code.expires_at.isoformat(),
+            "never_expires": permanent,
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Eroare la generarea codului: {e}"}), 500
+
+
+@app.route("/volunteer/api/list_links", methods=["GET"])
+@login_required
+def volunteer_list_public_links():
+    if current_user.role != "gradat" or getattr(current_user, "parent_user_id", None):
+        return jsonify({"error": "Acces neautorizat."}), 403
+
+    now = datetime.now(timezone.utc)
+    codes = ScopedAccessCode.query.filter_by(
+        created_by_user_id=current_user.id, is_active=True
+    ).filter(ScopedAccessCode.expires_at > now).all()
+
+    results = []
+    for c in codes:
+        if any(p in c.get_permissions_list() for p in ["/public/volunteer/", "/public/v/"]):
+            never_expires = (c.expires_at - now) > timedelta(days=365 * 20)
+            results.append({
+                "code": c.code,
+                "expires_at": c.expires_at.isoformat(),
+                "public_url": url_for("public_volunteer_view_code", code=c.code, _external=True),
+                "never_expires": never_expires,
+            })
+    results.sort(key=lambda x: x["expires_at"], reverse=True)
+    return jsonify({"codes": results})
+
+
+@app.route("/volunteer/api/revoke_link", methods=["POST"])
+@login_required
+def volunteer_revoke_public_link():
+    if current_user.role != "gradat" or getattr(current_user, "parent_user_id", None):
+        return jsonify({"error": "Acces neautorizat."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    code = (payload.get("code") or "").strip()
+    if not code:
+        return jsonify({"error": "Cod lipsă."}), 400
+
+    sac = ScopedAccessCode.query.filter_by(code=code, created_by_user_id=current_user.id).first_or_404()
+    sac.is_active = False
+    try:
+        db.session.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Eroare la revocare: {e}"}), 500
+
+
+@app.route("/volunteer/api/set_slug", methods=["POST"])
+@login_required
+def volunteer_set_public_slug():
+    if current_user.role != "gradat" or getattr(current_user, "parent_user_id", None):
+        return jsonify({"error": "Acces neautorizat."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    code = (payload.get("code") or "").strip()
+    slug = (payload.get("slug") or "").strip()
+
+    if not code:
+        return jsonify({"error": "Cod lipsă."}), 400
+
+    sac = ScopedAccessCode.query.filter_by(code=code, created_by_user_id=current_user.id).first_or_404()
+
+    if not slug:
+        sac.custom_slug = None
+    else:
+        if not re.fullmatch(r"[a-z0-9-]{3,64}", slug):
+            return jsonify({"error": "Slug invalid. Folosiți doar litere mici, cifre și liniuță (-), 3-64 caractere."}), 400
+        existing = ScopedAccessCode.query.filter(ScopedAccessCode.custom_slug == slug, ScopedAccessCode.id != sac.id).first()
+        if existing:
+            return jsonify({"error": "Acest alias este deja folosit."}), 409
+        sac.custom_slug = slug
+
+    try:
+        db.session.commit()
+        return jsonify({
+            "ok": True,
+            "custom_slug": slug,
+            "slug_url": url_for("public_volunteer_view_slug", slug=slug, _external=True) if slug else None
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Eroare la setare alias: {e}"}), 500
+
+@app.route("/volunteer/api/get_slug", methods=["GET"])
+@login_required
+def volunteer_get_public_slug():
+    if current_user.role != "gradat" or getattr(current_user, "parent_user_id", None):
+        return jsonify({"error": "Acces neautorizat."}), 403
+
+    code = (request.args.get("code") or "").strip()
+    if not code:
+        return jsonify({"error": "Cod lipsă."}), 400
+
+    sac = ScopedAccessCode.query.filter_by(code=code, created_by_user_id=current_user.id).first_or_404()
+
+    return jsonify({
+        "code": sac.code,
+        "custom_slug": sac.custom_slug,
+        "slug_url": url_for("public_volunteer_view_slug", slug=sac.custom_slug, _external=True) if sac.custom_slug else None
+    })
+
+
 # --- Volunteer Module ---
 
 def get_current_user_or_scoped():
@@ -6635,6 +6788,60 @@ def volunteer_generate_students():
     )
 
 
+# --- Volunteer Public Links ---
+
+@app.route("/volunteer/links", methods=["GET"], endpoint="volunteer_links_manage")
+@login_required
+def volunteer_links_manage():
+    if current_user.role != "gradat" or getattr(current_user, "parent_user_id", None):
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+    return render_template("volunteer_links.html")
+
+
+@app.route("/public/volunteer/<code>", methods=["GET"], endpoint="public_volunteer_view_code")
+def public_volunteer_view_code(code):
+    now_utc = datetime.now(timezone.utc)
+    sac = ScopedAccessCode.query.filter_by(code=code, is_active=True).first()
+
+    if not sac or sac.expires_at <= now_utc:
+        return "Link invalid sau expirat.", 404
+
+    # Fetch data based on the user ID stored in the code
+    user = db.session.get(User, sac.created_by_user_id)
+    if not user:
+        return "Utilizatorul asociat acestui link nu mai există.", 404
+
+    activities = (
+        VolunteerActivity.query.filter_by(created_by_user_id=user.id)
+        .order_by(VolunteerActivity.activity_date.desc())
+        .all()
+    )
+    students_with_points = (
+        Student.query.filter_by(created_by_user_id=user.id)
+        .order_by(Student.volunteer_points.desc(), Student.nume)
+        .all()
+    )
+
+    return render_template(
+        "public_volunteer.html",
+        activities=activities,
+        students_with_points=students_with_points,
+    )
+
+
+@app.route("/public/v/<slug>", methods=["GET"], endpoint="public_volunteer_view_slug")
+def public_volunteer_view_slug(slug):
+    now_utc = datetime.now(timezone.utc)
+    sac = ScopedAccessCode.query.filter_by(custom_slug=slug, is_active=True).first()
+
+    if not sac or sac.expires_at <= now_utc:
+        return "Link invalid sau expirat.", 404
+
+    # Redirect to the code-based URL to reuse the rendering logic
+    return redirect(url_for('public_volunteer_view_code', code=sac.code))
+
+
 @app.route(
     "/volunteer/save_session",
     methods=["POST"],
@@ -7191,9 +7398,9 @@ def gradat_page_import_services():
         default_times = {
             "SVM": (time(5, 50), time(20, 0)),
             "GSS": (time(7, 0), time(7, 0)),  # next day
-            "Planton 1": (time(6, 0), time(14, 0)),
-            "Planton 2": (time(14, 0), time(22, 0)),
-            "Planton 3": (time(22, 0), time(6, 0)),  # next day
+            "Planton 1": (time(22, 0), time(0, 40)),
+            "Planton 2": (time(0, 40), time(3, 20)),
+            "Planton 3": (time(3, 20), time(6, 0)),
             "Intervenție": (time(8, 0), time(20, 0)),
             "Altul": (time(8, 0), time(20, 0)),
         }
@@ -11033,9 +11240,9 @@ def assign_service(assignment_id=None):
             "GSS": ("07:00", "07:00"),
             "SVM": ("05:50", "20:00"),
             "Intervenție": ("20:00", "00:00"),
-            "Planton 1": ("22:00", "00:00"),
-            "Planton 2": ("00:00", "02:00"),
-            "Planton 3": ("02:00", "04:00"),
+                "Planton 1": ("22:00", "00:40"),
+                "Planton 2": ("00:40", "03:20"),
+                "Planton 3": ("03:20", "06:00"),
             "Altul": ("", ""),
         }
     )
@@ -11408,9 +11615,9 @@ def assign_multiple_services():
         "GSS": ("07:00", "07:00"),
         "SVM": ("05:50", "20:00"),
         "Intervenție": ("20:00", "00:00"),
-        "Planton 1": ("22:00", "00:00"),
-        "Planton 2": ("00:00", "02:00"),
-        "Planton 3": ("02:00", "04:00"),
+        "Planton 1": ("22:00", "00:40"),
+        "Planton 2": ("00:40", "03:20"),
+        "Planton 3": ("03:20", "06:00"),
         "Altul": ("", ""),
     }
 
