@@ -8559,15 +8559,12 @@ def list_permissions():
     past_permissions = []
 
     for p in all_permissions:
-        if (
-            p.status == "Aprobată"
-            and p.end_datetime >= now
-            and p.start_datetime <= now
-        ):
+        # Use the model's built-in timezone-aware properties
+        if p.is_active(check_datetime=now):
             active_permissions.append(p)
-        elif p.status == "Aprobată" and p.start_datetime > now:
+        elif p.is_upcoming:
             upcoming_permissions.append(p)
-        else:
+        else: # is_past or 'Anulată' status
             past_permissions.append(p)
 
     # Sortarea se face în Python
@@ -9130,8 +9127,7 @@ def export_permissions_word():
         flash("Nu aveți studenți pentru a exporta permisii.", "info")
         return redirect(url_for("list_permissions"))
 
-    now = get_localized_now()  # Folosim ora localizată
-    # Fetch active and upcoming permissions only for the export
+    now = get_localized_now()
     permissions_to_export = (
         Permission.query.options(joinedload(Permission.student))
         .filter(
@@ -9142,185 +9138,88 @@ def export_permissions_word():
         .join(Student)
         .order_by(Permission.start_datetime, Student.nume, Student.prenume)
         .all()
-    )  # Initial sort by start_datetime
+    )
 
     if not permissions_to_export:
         flash("Nicio permisie activă sau viitoare de exportat.", "info")
         return redirect(url_for("list_permissions"))
 
-    # Group permissions by period (start_datetime, end_datetime)
-    # Using naive datetime for grouping keys as they come from DB
-    grouped_permissions = {}
-    for p in permissions_to_export:
-        period_key = (p.start_datetime, p.end_datetime)
-        if period_key not in grouped_permissions:
-            grouped_permissions[period_key] = []
-        grouped_permissions[period_key].append(p)
-
-    # Helper function to get day name in Romanian
-    def get_day_name_ro(date_obj):
-        days = [
-            "Luni",
-            "Marți",
-            "Miercuri",
-            "Joi",
-            "Vineri",
-            "Sâmbătă",
-            "Duminică",
-        ]
-        return days[date_obj.weekday()]
-
-    # Custom sorting for periods
-    def get_period_sort_key(period_item):
-        period_key, _ = period_item  # period_key is (start_dt, end_dt)
-        start_dt = period_key[0]
-        end_dt = period_key[1]
-
-        # Make datetimes timezone-aware for correct weekday calculation if they are naive
-        # Assuming EUROPE_BUCHAREST as the reference timezone
-        start_dt_aware = (
-            EUROPE_BUCHAREST.localize(start_dt)
-            if start_dt.tzinfo is None
-            else start_dt.astimezone(EUROPE_BUCHAREST)
-        )
-        end_dt_aware = (
-            EUROPE_BUCHAREST.localize(end_dt)
-            if end_dt.tzinfo is None
-            else end_dt.astimezone(EUROPE_BUCHAREST)
-        )
-
-        start_day_ro = get_day_name_ro(
-            start_dt_aware
-        )  # Luni, Marti, ..., Duminica
-        end_day_ro = get_day_name_ro(end_dt_aware)
-
-        # Define sort order values
-        # Lower value means earlier in sort
-        # Joi (Thursday) = 3, Vineri (Friday) = 4
-        # Duminica (Sunday) = 6, Luni (Monday) = 0 (in weekday())
-
-        # Priority 1: Thursday starts
-        if start_day_ro == "Joi":
-            if end_day_ro == "Duminică":
-                return (1, start_dt)  # Joi - Duminica
-            if end_day_ro == "Luni":
-                return (2, start_dt)  # Joi - Luni
-            return (3, start_dt)  # Other Joi starts (fallback)
-        # Priority 2: Friday starts
-        elif start_day_ro == "Vineri":
-            if end_day_ro == "Duminică":
-                return (4, start_dt)  # Vineri - Duminica
-            if end_day_ro == "Luni":
-                return (5, start_dt)  # Vineri - Luni
-            return (6, start_dt)  # Other Vineri starts (fallback)
-        # Fallback for other start days (sort by start_datetime)
-        return (7, start_dt)
-
-    sorted_grouped_permissions = sorted(
-        grouped_permissions.items(), key=get_period_sort_key
-    )
-
     document = Document()
-    # General document heading (optional, could be removed if each table has a full title)
-    # General document heading (optional, could be removed if each table has a full title)
-    # document.add_heading('Raport Permisii Studenți', level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    document.add_heading(
+        "TABEL NOMINAL CU STUDENȚII CARE PLEACĂ ÎN PERMISIE", level=1
+    ).alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    # User and date info
-    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}"
-    p_user_info = document.add_paragraph()
-    p_user_info.add_run(user_info_text).italic = True
-    p_user_info.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph()  # Spacer
 
-    # Column titles for each table (Period column is removed)
     column_titles = [
         "Nr. crt.",
         "Grad",
-        "Nume și Prenume",
+        "Nume Prenume",
+        "Perioada",
         "Grupa",
-        "Localitate",
+        "Localitatea",
         "Transport",
     ]
-    # New column widths for 6 columns
-    new_widths = {
-        0: Inches(0.4),  # Nr. crt.
-        1: Inches(0.8),  # Grad
-        2: Inches(2.0),  # Nume și Prenume
-        3: Inches(0.8),  # Grupa
-        4: Inches(1.5),  # Localitate
-        5: Inches(1.5),  # Transport
-    }  # Total width approx 7.0 inches
 
-    for period_key, permissions_in_period in sorted_grouped_permissions:
-        start_dt_period = (
-            EUROPE_BUCHAREST.localize(period_key[0])
-            if period_key[0].tzinfo is None
-            else period_key[0].astimezone(EUROPE_BUCHAREST)
-        )
-        end_dt_period = (
-            EUROPE_BUCHAREST.localize(period_key[1])
-            if period_key[1].tzinfo is None
-            else period_key[1].astimezone(EUROPE_BUCHAREST)
-        )
+    table = document.add_table(rows=1, cols=len(column_titles))
+    table.style = "Table Grid"
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-        # Format period string for the title
-        # Example: Joi, 25.07.2024 (14:00) - Duminică, 28.07.2024 (22:00)
-        period_title_str = (
-            f"{get_day_name_ro(start_dt_period)}, {start_dt_period.strftime('%d.%m.%Y (%H:%M)')} - "
-            f"{get_day_name_ro(end_dt_period)}, {end_dt_period.strftime('%d.%m.%Y (%H:%M)')}"
-        )
+    hdr_cells = table.rows[0].cells
+    for i, title in enumerate(column_titles):
+        cell = hdr_cells[i]
+        cell.text = title
+        if cell.paragraphs and cell.paragraphs[0].runs:
+            cell.paragraphs[0].runs[0].font.bold = True
+        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        document.add_heading(
-            f"Tabel nominal cu studenții care pleacă in permisie în perioada {period_title_str}",
-            level=2,
-        ).alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        table = document.add_table(
-            rows=1, cols=len(column_titles)
-        )  # Create table with 6 columns
-        table.style = "Table Grid"
-        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    for idx, p_item in enumerate(permissions_to_export, 1):
+        row_cells = table.add_row().cells
 
-        hdr_cells = table.rows[0].cells
-        for i, title in enumerate(column_titles):
-            hdr_cells[i].text = title
-            hdr_cells[i].paragraphs[0].runs[0].font.bold = True
-            hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # Nr. crt.
+        row_cells[0].text = str(idx)
+        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        # Sort permissions within this period group by student name for consistency
-        permissions_in_period.sort(
-            key=lambda p: (p.student.nume, p.student.prenume)
-        )
+        # Grad
+        row_cells[1].text = p_item.student.grad_militar
 
-        for idx, p_item in enumerate(permissions_in_period):
-            row_cells = table.add_row().cells
-            row_cells[0].text = str(idx + 1)
-            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # Nume Prenume
+        row_cells[2].text = f"{p_item.student.nume} {p_item.student.prenume}"
 
-            row_cells[1].text = p_item.student.grad_militar
-            row_cells[2].text = (
-                f"{p_item.student.nume} {p_item.student.prenume}"  # Combined name
-            )
+        # Perioada
+        start_dt_local = p_item.start_datetime.astimezone(EUROPE_BUCHAREST) if p_item.start_datetime.tzinfo else EUROPE_BUCHAREST.localize(p_item.start_datetime)
+        end_dt_local = p_item.end_datetime.astimezone(EUROPE_BUCHAREST) if p_item.end_datetime.tzinfo else EUROPE_BUCHAREST.localize(p_item.end_datetime)
+        period_str = f"{start_dt_local.strftime('%d.%m.%Y/%H:%M')} - {end_dt_local.strftime('%d.%m.%Y/%H:%M')}"
+        row_cells[3].text = period_str
 
-            row_cells[3].text = p_item.student.pluton  # Grupa/Pluton
-            row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # Grupa
+        row_cells[4].text = p_item.student.pluton
+        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-            row_cells[4].text = (
-                p_item.destination if p_item.destination else "-"
-            )
-            row_cells[5].text = (
-                p_item.transport_mode if p_item.transport_mode else "-"
-            )
+        # Localitatea
+        row_cells[5].text = p_item.destination or "-"
 
-        # Apply column widths to the current table
-        for col_idx, width_val in new_widths.items():
-            for row in table.rows:  # Apply to all rows including header
-                if col_idx < len(row.cells):
-                    row.cells[col_idx].width = width_val
+        # Transport
+        row_cells[6].text = p_item.transport_mode or "-"
 
-        document.add_paragraph()  # Add some space between tables
+    # Set column widths
+    widths = {
+        0: Inches(0.4),
+        1: Inches(0.8),
+        2: Inches(1.8),
+        3: Inches(2.2),
+        4: Inches(0.6),
+        5: Inches(1.2),
+        6: Inches(1.0),
+    }
+    for col_idx, width_val in widths.items():
+        for row in table.rows:
+            if col_idx < len(row.cells):
+                row.cells[col_idx].width = width_val
 
-    # Change font for the whole document (optional)
+    # Set document font
     style = document.styles["Normal"]
     font = style.font
     font.name = "Calibri"
@@ -14231,9 +14130,7 @@ def gradat_export_daily_leaves_word():
         flash("Nu aveți studenți pentru a exporta învoiri zilnice.", "info")
         return redirect(url_for("list_daily_leaves"))
 
-    # Fetch all approved daily leaves for the gradat's students
-    # For export, typically all relevant (approved) leaves are included, or based on a filter.
-    # Here, we'll fetch all approved ones and sort them.
+    # Sort leaves for grouping by platoon and then date
     leaves_to_export = (
         DailyLeave.query.options(joinedload(DailyLeave.student))
         .filter(
@@ -14242,10 +14139,10 @@ def gradat_export_daily_leaves_word():
         )
         .join(Student)
         .order_by(
-            DailyLeave.leave_date.asc(),  # Sort by date first
-            Student.nume.asc(),  # Then by student name
-            Student.prenume.asc(),
-            DailyLeave.start_time.asc(),
+            Student.pluton,
+            DailyLeave.leave_date,
+            Student.nume,
+            Student.prenume,
         )
         .all()
     )
@@ -14255,62 +14152,88 @@ def gradat_export_daily_leaves_word():
         return redirect(url_for("list_daily_leaves"))
 
     document = Document()
-    document.add_heading("Raport Învoiri Zilnice", level=1).alignment = (
-        WD_ALIGN_PARAGRAPH.CENTER
-    )
+    document.add_heading(
+        "TABEL NOMINAL CU STUDENȚII CARE EXECUTĂ ÎNVOIRI", level=1
+    ).alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    user_info_text = f"Raport generat de: {current_user.username}\nData generării: {get_localized_now().strftime('%d-%m-%Y %H:%M')}"
-    p_user = document.add_paragraph()
-    p_user.add_run(user_info_text).italic = True
-    p_user.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    document.add_paragraph()  # Spacer
+    document.add_paragraph() # Spacer
 
-    table = document.add_table(
-        rows=1, cols=5
-    )  # Nr. crt, Grad, Nume și Prenume, Pluton(Grupa), Data
+    column_titles = ["NR. CRT.", "GRADUL", "NUMELE ȘI PRENUMELE", "GRUPA", "DATA", "INTERVALUL ORAR", "SEMNĂTURA"]
+    table = document.add_table(rows=1, cols=len(column_titles))
     table.style = "Table Grid"
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
     hdr_cells = table.rows[0].cells
-    column_titles = [
-        "Nr. crt.",
-        "Grad",
-        "Nume și Prenume",
-        "Plutonul (Grupa)",
-        "Data",
-    ]
     for i, title in enumerate(column_titles):
-        hdr_cells[i].text = title
-        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
-        hdr_cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        cell = hdr_cells[i]
+        cell.text = title
+        if cell.paragraphs and cell.paragraphs[0].runs:
+            cell.paragraphs[0].runs[0].font.bold = True
+        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        cell.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    for idx, leave in enumerate(leaves_to_export):
-        row_cells = table.add_row().cells
-        row_cells[0].text = str(idx + 1)
-        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[1].text = leave.student.grad_militar
-        row_cells[2].text = (
-            f"{leave.student.nume} {leave.student.prenume}"  # Combined Name
-        )
-        row_cells[3].text = leave.student.pluton
-        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        row_cells[4].text = leave.leave_date.strftime("%d.%m.%Y")
-        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    from itertools import groupby
+
+    grouped_leaves = groupby(leaves_to_export, key=lambda l: (l.student.pluton, l.leave_date))
+
+    overall_row_counter = 0
+
+    for (pluton, leave_date), group in grouped_leaves:
+        group_leaves = list(group)
+        start_row_idx_for_merge = len(table.rows)
+
+        for leave in group_leaves:
+            overall_row_counter += 1
+            row_cells = table.add_row().cells
+
+            # Populate cells
+            row_cells[0].text = str(overall_row_counter)
+            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            row_cells[1].text = leave.student.grad_militar
+            row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}"
+
+            # These are filled only for the first row of the group
+            row_cells[3].text = pluton if leave == group_leaves[0] else ""
+            row_cells[4].text = leave_date.strftime('%d.%m.%Y') if leave == group_leaves[0] else ""
+
+            row_cells[5].text = f"{leave.start_time.strftime('%H:%M')} - {leave.end_time.strftime('%H:%M')}"
+            row_cells[6].text = "" # Signature column is empty
+
+        # Merge cells after adding all rows for the group
+        if len(group_leaves) > 1:
+            end_row_idx_for_merge = len(table.rows) - 1
+
+            # Merge "GRUPA" column (index 3)
+            grupa_cell_start = table.cell(start_row_idx_for_merge, 3)
+            grupa_cell_end = table.cell(end_row_idx_for_merge, 3)
+            grupa_cell_start.merge(grupa_cell_end)
+            grupa_cell_start.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+            grupa_cell_start.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            # Merge "DATA" column (index 4)
+            data_cell_start = table.cell(start_row_idx_for_merge, 4)
+            data_cell_end = table.cell(end_row_idx_for_merge, 4)
+            data_cell_start.merge(data_cell_end)
+            data_cell_start.vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+            data_cell_start.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     # Set column widths
-    # NrCrt(0.5), Grad(0.8), Nume și Prenume(2.5), Pluton(1.0), Data(1.0)
     widths = {
-        0: Inches(0.5),
-        1: Inches(0.8),
-        2: Inches(2.5),  # Nume și Prenume
-        3: Inches(1.0),
-        4: Inches(1.0),
+        0: Inches(0.4), # NR. CRT.
+        1: Inches(0.8), # GRADUL
+        2: Inches(2.2), # NUMELE ȘI PRENUMELE
+        3: Inches(0.7), # GRUPA
+        4: Inches(1.0), # DATA
+        5: Inches(1.2), # INTERVALUL ORAR
+        6: Inches(1.2), # SEMNĂTURA
     }
     for col_idx, width_val in widths.items():
         for row in table.rows:
             if col_idx < len(row.cells):
                 row.cells[col_idx].width = width_val
 
+    # Set document font
     style = document.styles["Normal"]
     font = style.font
     font.name = "Calibri"
@@ -16701,6 +16624,285 @@ def delete_situation(situation_id):
         db.session.rollback()
         flash(f"Eroare la ștergere: {e}", "danger")
     return redirect(url_for("list_situations"))
+
+
+# --- Situation Snapshots ---
+
+@app.route("/gradat/situations/snapshots", methods=["GET"])
+@login_required
+def list_situation_snapshots():
+    if current_user.role != "gradat":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+
+    snapshot_dir = os.path.join(app.instance_path, 'snapshots')
+    if not os.path.exists(snapshot_dir):
+        os.makedirs(snapshot_dir)
+
+    user_snapshots = []
+    snapshot_files = [f for f in os.listdir(snapshot_dir) if f.endswith('.json')]
+
+    for filename in snapshot_files:
+        try:
+            filepath = os.path.join(snapshot_dir, filename)
+            with open(filepath, 'r', encoding='utf-8') as f:
+                snapshot_meta = json.load(f)
+
+            if snapshot_meta.get('created_by_user_id') == current_user.id:
+                user_snapshots.append({
+                    "id": filename.replace('.json', ''),
+                    "name": snapshot_meta.get("name", "Fără nume"),
+                    "created_at": snapshot_meta.get("created_at", "Dată necunoscută"),
+                    "data_summary": {
+                        "permissions": len(snapshot_meta.get("data", {}).get("permissions", [])),
+                        "daily_leaves": len(snapshot_meta.get("data", {}).get("daily_leaves", [])),
+                        "weekend_leaves": len(snapshot_meta.get("data", {}).get("weekend_leaves", [])),
+                        "service_assignments": len(snapshot_meta.get("data", {}).get("service_assignments", []))
+                    }
+                })
+        except Exception as e:
+            app.logger.error(f"Failed to read snapshot file {filename}: {e}")
+
+    user_snapshots.sort(key=lambda x: x['created_at'], reverse=True)
+    return render_template("list_snapshots.html", snapshots=user_snapshots)
+
+
+@app.route("/gradat/situations/snapshot/view/<snapshot_id>", methods=["GET"])
+@login_required
+def view_situation_snapshot(snapshot_id):
+    if current_user.role != "gradat":
+        abort(403)
+
+    if not re.match(r'^[a-fA-F0-9]{32}$', snapshot_id):
+        return "ID Situație invalid.", 400
+
+    snapshot_filepath = os.path.join(app.instance_path, 'snapshots', f"{snapshot_id}.json")
+    if not os.path.exists(snapshot_filepath):
+        abort(404)
+
+    try:
+        with open(snapshot_filepath, 'r', encoding='utf-8') as f:
+            snapshot = json.load(f)
+
+        if snapshot.get('created_by_user_id') != current_user.id:
+            abort(403)
+
+        return render_template("view_snapshot.html", snapshot=snapshot, is_public=False)
+    except Exception as e:
+        app.logger.error(f"Error viewing snapshot {snapshot_id}: {e}")
+        abort(500)
+
+
+@app.route("/public/snapshot/<snapshot_id>", methods=["GET"])
+def public_snapshot_view(snapshot_id):
+    if not re.match(r'^[a-fA-F0-9]{32}$', snapshot_id):
+        return "Link invalid sau expirat.", 404
+
+    snapshot_filepath = os.path.join(app.instance_path, 'snapshots', f"{snapshot_id}.json")
+    if not os.path.exists(snapshot_filepath):
+        return "Link invalid sau expirat.", 404
+
+    try:
+        with open(snapshot_filepath, 'r', encoding='utf-8') as f:
+            snapshot = json.load(f)
+        return render_template("view_snapshot.html", snapshot=snapshot, is_public=True)
+    except Exception as e:
+        app.logger.error(f"Error public viewing snapshot {snapshot_id}: {e}")
+        return "Eroare la încărcarea situației.", 500
+
+
+@app.route("/gradat/situations/snapshot/delete/<snapshot_id>", methods=["POST"])
+@login_required
+def delete_situation_snapshot(snapshot_id):
+    if current_user.role != "gradat":
+        abort(403)
+
+    if not re.match(r'^[a-fA-F0-9]{32}$', snapshot_id):
+        flash("ID Situație invalid.", "danger")
+        return redirect(url_for('list_situation_snapshots'))
+
+    snapshot_filepath = os.path.join(app.instance_path, 'snapshots', f"{snapshot_id}.json")
+    if not os.path.exists(snapshot_filepath):
+        abort(404)
+
+    try:
+        with open(snapshot_filepath, 'r', encoding='utf-8') as f:
+            snapshot_meta = json.load(f)
+        if snapshot_meta.get('created_by_user_id') != current_user.id:
+            flash("Nu aveți permisiunea să ștergeți această situație.", "danger")
+            return redirect(url_for('list_situation_snapshots'))
+
+        os.remove(snapshot_filepath)
+        flash("Situația salvată a fost ștearsă cu succes.", "success")
+    except Exception as e:
+        flash(f"Eroare la ștergerea situației: {e}", "danger")
+        app.logger.error(f"Error deleting snapshot {snapshot_id}: {e}")
+
+    return redirect(url_for('list_situation_snapshots'))
+
+
+@app.route("/gradat/situations/snapshot/reset/<snapshot_id>", methods=["POST"])
+@login_required
+def reset_situation_snapshot(snapshot_id):
+    if current_user.role != "gradat":
+        abort(403)
+
+    if not re.match(r'^[a-fA-F0-9]{32}$', snapshot_id):
+        flash("ID Situație invalid.", "danger")
+        return redirect(url_for('list_situation_snapshots'))
+
+    snapshot_filepath = os.path.join(app.instance_path, 'snapshots', f"{snapshot_id}.json")
+    if not os.path.exists(snapshot_filepath):
+        abort(404)
+
+    try:
+        with open(snapshot_filepath, 'r', encoding='utf-8') as f:
+            snapshot = json.load(f)
+
+        if snapshot.get('created_by_user_id') != current_user.id:
+            flash("Nu aveți permisiunea să restaurați această situație.", "danger")
+            return redirect(url_for('list_situation_snapshots'))
+
+        # --- Begin Restore Logic ---
+
+        # 1. Map unique IDs from snapshot back to current student DB IDs
+        students_managed = Student.query.filter_by(created_by_user_id=current_user.id).all()
+        student_uid_to_db_id_map = {s.id_unic_student: s.id for s in students_managed if s.id_unic_student}
+        student_db_ids = [s.id for s in students_managed]
+
+        # Use a transaction to ensure all-or-nothing
+        db.session.begin_nested()
+
+        # 2. Delete existing data for the user's students
+        Permission.query.filter(Permission.student_id.in_(student_db_ids)).delete(synchronize_session=False)
+        DailyLeave.query.filter(DailyLeave.student_id.in_(student_db_ids)).delete(synchronize_session=False)
+        WeekendLeave.query.filter(WeekendLeave.student_id.in_(student_db_ids)).delete(synchronize_session=False)
+        ServiceAssignment.query.filter(ServiceAssignment.student_id.in_(student_db_ids)).delete(synchronize_session=False)
+
+        # 3. Re-create objects from snapshot
+        snapshot_data = snapshot.get("data", {})
+
+        # Permissions
+        for p_data in snapshot_data.get("permissions", []):
+            student_db_id = student_uid_to_db_id_map.get(p_data.get('student_unique_id'))
+            if student_db_id:
+                p_data.pop('student_unique_id', None) # Remove helper field
+                new_p = Permission(student_id=student_db_id, created_by_user_id=current_user.id, **p_data)
+                db.session.add(new_p)
+
+        # Daily Leaves
+        for dl_data in snapshot_data.get("daily_leaves", []):
+            student_db_id = student_uid_to_db_id_map.get(dl_data.get('student_unique_id'))
+            if student_db_id:
+                dl_data.pop('student_unique_id', None)
+                new_dl = DailyLeave(student_id=student_db_id, created_by_user_id=current_user.id, **dl_data)
+                db.session.add(new_dl)
+
+        # Weekend Leaves
+        for wl_data in snapshot_data.get("weekend_leaves", []):
+            student_db_id = student_uid_to_db_id_map.get(wl_data.get('student_unique_id'))
+            if student_db_id:
+                wl_data.pop('student_unique_id', None)
+                new_wl = WeekendLeave(student_id=student_db_id, created_by_user_id=current_user.id, **wl_data)
+                db.session.add(new_wl)
+
+        # Service Assignments
+        for srv_data in snapshot_data.get("service_assignments", []):
+            student_db_id = student_uid_to_db_id_map.get(srv_data.get('student_unique_id'))
+            if student_db_id:
+                srv_data.pop('student_unique_id', None)
+                new_srv = ServiceAssignment(student_id=student_db_id, created_by_user_id=current_user.id, **srv_data)
+                db.session.add(new_srv)
+
+        db.session.commit()
+        flash(f"Situația '{snapshot.get('name')}' a fost restaurată cu succes!", "success")
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Eroare la restaurarea situației: {e}", "danger")
+        app.logger.error(f"Error resetting snapshot {snapshot_id}: {e}")
+
+    return redirect(url_for('list_situation_snapshots'))
+
+
+@app.route("/gradat/situations/snapshot/create", methods=["POST"])
+@login_required
+def create_situation_snapshot():
+    if current_user.role != "gradat":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+
+    snapshot_name = request.form.get("snapshot_name", "").strip()
+    if not snapshot_name:
+        flash("Numele pentru situația salvată este obligatoriu.", "warning")
+        return redirect(url_for("list_situations"))
+
+    # 1. Get user's students and check for unique IDs
+    students = Student.query.filter_by(created_by_user_id=current_user.id).all()
+    student_ids = [s.id for s in students]
+
+    if not student_ids:
+        flash("Nu aveți studenți pentru a salva o situație.", "info")
+        return redirect(url_for("list_situations"))
+
+    students_without_uid = [s for s in students if not s.id_unic_student]
+    if students_without_uid:
+        names = ", ".join([f"{s.nume} {s.prenume}" for s in students_without_uid[:3]])
+        flash(f"Atenție: Următorii studenți nu au un ID unic și datele lor nu vor fi salvate: {names}...", "warning")
+
+    student_id_to_uid_map = {s.id: s.id_unic_student for s in students if s.id_unic_student}
+
+    # 2. Fetch and serialize data
+    def serialize_with_uid(record, id_map):
+        # Exclude fields that will be regenerated on restore
+        data = model_to_dict(record, exclude_fields=['id', 'student_id', 'creator', 'created_by_user_id'])
+        student_uid = id_map.get(record.student_id)
+        if student_uid:
+            data['student_unique_id'] = student_uid
+            return data
+        return None
+
+    permissions = Permission.query.filter(Permission.student_id.in_(student_ids)).all()
+    daily_leaves = DailyLeave.query.filter(DailyLeave.student_id.in_(student_ids)).all()
+    weekend_leaves = WeekendLeave.query.filter(WeekendLeave.student_id.in_(student_ids)).all()
+    services = ServiceAssignment.query.filter(ServiceAssignment.student_id.in_(student_ids)).all()
+
+    snapshot_data = {
+        "permissions": [d for d in [serialize_with_uid(p, student_id_to_uid_map) for p in permissions] if d is not None],
+        "daily_leaves": [d for d in [serialize_with_uid(dl, student_id_to_uid_map) for dl in daily_leaves] if d is not None],
+        "weekend_leaves": [d for d in [serialize_with_uid(wl, student_id_to_uid_map) for wl in weekend_leaves] if d is not None],
+        "service_assignments": [d for d in [serialize_with_uid(s, student_id_to_uid_map) for s in services] if d is not None],
+    }
+
+    # Include student data in the snapshot for reference, mapping by their unique ID
+    snapshot_data["students"] = [model_to_dict(s) for s in students if s.id_unic_student]
+
+    full_snapshot = {
+        "name": snapshot_name,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_by_user_id": current_user.id,
+        "data": snapshot_data,
+    }
+
+    # 4. Save to file
+    snapshot_dir = os.path.join(app.instance_path, 'snapshots')
+    os.makedirs(snapshot_dir, exist_ok=True)
+
+    snapshot_id = secrets.token_hex(16)
+    snapshot_filename = f"{snapshot_id}.json"
+    snapshot_filepath = os.path.join(snapshot_dir, snapshot_filename)
+
+    try:
+        with open(snapshot_filepath, 'w', encoding='utf-8') as f:
+            json.dump(full_snapshot, f, ensure_ascii=False, indent=4, default=str)
+
+        flash(f'Situația "{snapshot_name}" a fost salvată cu succes.', "success")
+    except Exception as e:
+        flash(f"Eroare la salvarea fișierului de situație: {e}", "danger")
+        app.logger.error(f"Failed to save snapshot file: {e}")
+
+    # Redirect to the new page that will list snapshots
+    return redirect(url_for("list_situation_snapshots"))
 
 
 @app.route("/gradat/situations/<int:situation_id>/entries", methods=["GET"])
