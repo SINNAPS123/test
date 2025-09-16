@@ -180,10 +180,8 @@ Absenti motivat:
 
     </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
-{{ super() }}
+<!-- Moved page-specific JS inside the content block to avoid block parsing issues -->
 <script>
 function copyReportToClipboard(elementId) {
     const reportTextElement = document.getElementById(elementId);

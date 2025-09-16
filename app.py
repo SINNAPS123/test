@@ -4275,9 +4275,16 @@ def _calculate_presence_data(student_list, check_datetime):
             "present_exempt_not_in_formation_count": 0,
         }
 
+    # Normalize check time to aware Europe/Bucharest for comparisons
+    if check_datetime.tzinfo is None:
+        check_dt_aware = EUROPE_BUCHAREST.localize(check_datetime)
+    else:
+        check_dt_aware = check_datetime.astimezone(EUROPE_BUCHAREST)
+
     # --- Step 1: Bulk Data Fetch ---
     student_ids = [s.id for s in student_list]
-    now_naive = check_datetime.replace(tzinfo=None)
+    # Use naive version of the aware timestamp for DB (models store naive datetimes)
+    now_naive = check_dt_aware.replace(tzinfo=None)
 
     active_services = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids),
@@ -4306,7 +4313,7 @@ def _calculate_presence_data(student_list, check_datetime):
         )
         .filter(
             ActivityParticipant.student_id.in_(student_ids),
-            VolunteerActivity.activity_date == check_datetime.date(),
+            VolunteerActivity.activity_date == check_dt_aware.date(),
         )
         .all()
     )
@@ -4315,16 +4322,16 @@ def _calculate_presence_data(student_list, check_datetime):
     active_services_map = {sa.student_id: sa for sa in active_services}
     active_permissions_map = {p.student_id: p for p in active_permissions}
     active_daily_leaves_map = {
-        dl.student_id: dl for dl in all_daily_leaves if dl.is_active(check_datetime)
+        dl.student_id: dl for dl in all_daily_leaves if dl.is_active(check_dt_aware)
     }
     active_weekend_leaves_map = {}
     for wl in all_weekend_leaves:
-        if wl.is_any_interval_active(check_datetime):
+        if wl.is_any_interval_active(check_dt_aware):
             active_interval = next(
                 (
                     interval
                     for interval in wl.get_intervals()
-                    if interval["start"] <= check_datetime <= interval["end"]
+                    if interval["start"] <= check_dt_aware <= interval["end"]
                 ),
                 None,
             )
