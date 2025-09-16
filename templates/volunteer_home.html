@@ -91,7 +91,7 @@
                                 <small class="text-muted">{{ activity.activity_date|localdate('%d %B %Y') }} - {{ activity.description if activity.description else 'Fără descriere' }}</small><br>
                                 <span class="badge bg-light text-dark">Participanți: {{ activity.participants.count() }}</span>
                             </div>
-                            <div>
+                            <div class="d-flex align-items-center">
                                 <a href="{{ url_for('volunteer_activity_details', activity_id=activity.id) }}" class="btn btn-sm btn-outline-primary me-2" title="Detalii și Management Participanți">
                                     <i class="fas fa-users"></i> Detalii
                                 </a>
