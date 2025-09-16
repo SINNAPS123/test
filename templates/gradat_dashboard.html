@@ -5,9 +5,16 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="mb-0">Panou de Control Gradat: {{ current_user.username }}</h2>
-        <a href="{{ url_for('presence_report') }}" class="btn btn-info">
-            <i class="fas fa-file-alt me-1"></i> Generează Raport Prezență
-        </a>
+        <div class="btn-group">
+            {% if not current_user.parent_user_id %}
+            <a href="{{ url_for('gradat_manage_subusers') }}" class="btn btn-secondary">
+                <i class="fas fa-users-cog me-1"></i> Gestionează Subutilizatori
+            </a>
+            {% endif %}
+            <a href="{{ url_for('presence_report') }}" class="btn btn-info">
+                <i class="fas fa-file-alt me-1"></i> Generează Raport Prezență
+            </a>
+        </div>
     </div>
     <!-- Mini Situație Pluton (ACUM) -->
     <div class="mt-2 p-3 border rounded bg-light shadow-sm">

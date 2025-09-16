@@ -10,8 +10,44 @@
   </a>
 </div>
 
-<p class="text-muted">Creează și distribuie formulare personalizate (situații/tabele) pentru a colecta informații direct de la studenți. Poți genera link public temporar pentru completare.</p>
+<p class="text-muted">Aici poți defini formulare personalizate (situații/tabele) pentru a colecta informații. Mai jos poți salva o copie a stării curente a datelor (învoiri, permisii, etc.) sau poți vizualiza/restaura situațiile salvate anterior.</p>
 
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-save me-2"></i> Salvează Situația Curentă (Snapshot)</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Salvează starea curentă a tuturor permisiilor și învoirilor pentru studenții tăi. Vei putea vizualiza această stare mai târziu sau chiar reseta datele la această versiune.</p>
+                <form action="{{ url_for('create_situation_snapshot') }}" method="POST">
+                    <div class="input-group">
+                        <input type="text" class="form-control" name="snapshot_name" placeholder="Nume (ex: 'Situație Săpt. 10')" required>
+                        <button class="btn btn-success" type="submit">
+                            <i class="fas fa-save me-1"></i> Salvează Acum
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-history me-2"></i> Gestionează Situațiile Salvate</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Vezi toate situațiile pe care le-ai salvat. Poți vizualiza, șterge sau restaura o situație, suprascriind datele curente cu cele din copia salvată.</p>
+                <a href="{{ url_for('list_situation_snapshots') }}" class="btn btn-info w-100">
+                    <i class="fas fa-cogs me-1"></i> Mergi la Management
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<h3 class="mt-4 mb-3">Formulare Personalizate</h3>
 <div class="card shadow-sm">
   <div class="list-group list-group-flush">
     {% if situations %}
