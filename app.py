@@ -817,6 +817,9 @@ class VolunteerActivity(db.Model):
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
     activity_date = db.Column(db.Date, nullable=False)
+    # Optional duration (local time)
+    start_time = db.Column(db.Time, nullable=True)
+    end_time = db.Column(db.Time, nullable=True)
     created_by_user_id = db.Column(
         db.Integer, db.ForeignKey("user.id"), nullable=True
     )  # Made nullable
@@ -4304,7 +4307,7 @@ def _calculate_presence_data(student_list, check_datetime):
         WeekendLeave.student_id.in_(student_ids),
         WeekendLeave.status == "Aprobată",
     ).all()
-    # Volunteers active on the specific date (treated as absent on that day)
+    # Volunteers on the specific date; we will consider them absent only within activity time window
     vol_entries = (
         db.session.query(ActivityParticipant, VolunteerActivity)
         .join(
@@ -4340,10 +4343,20 @@ def _calculate_presence_data(student_list, check_datetime):
                     "leave": wl,
                     "interval": active_interval,
                 }
-    active_volunteer_map = {}
+    # Build volunteer intervals per student
+    volunteer_intervals = {}
     for ap, act in vol_entries:
-        # If multiple activities in a day, keep the first name encountered
-        active_volunteer_map.setdefault(ap.student_id, act.name)
+        # Determine start/end times; default to full day if not provided
+        start_t = act.start_time or time(0, 0)
+        end_t = act.end_time or time(23, 59)
+        s_dt_naive = datetime.combine(act.activity_date, start_t)
+        e_dt_naive = datetime.combine(act.activity_date, end_t)
+        # Handle overnight just in case (rare for volunteer)
+        if e_dt_naive < s_dt_naive:
+            e_dt_naive += timedelta(days=1)
+        s_dt = EUROPE_BUCHAREST.localize(s_dt_naive)
+        e_dt = EUROPE_BUCHAREST.localize(e_dt_naive)
+        volunteer_intervals.setdefault(ap.student_id, []).append((s_dt, e_dt, act.name))
 
     # --- Step 3: Categorize Students ---
     efectiv_control = len(student_list)
@@ -4424,14 +4437,21 @@ def _calculate_presence_data(student_list, check_datetime):
                 f"{student_display_name} - Învoire Zilnică ({active_daily_leaves_map[s.id].leave_type_display})"
             )
             status_found = True
-        elif not status_found and s.id in active_volunteer_map:
-            general_absent_details.append(
-                f"{student_display_name} - Voluntariat ({active_volunteer_map[s.id]})"
-            )
-            all_absent_details.append(
-                f"{student_display_name} - Voluntariat ({active_volunteer_map[s.id]})"
-            )
-            status_found = True
+        elif not status_found and s.id in volunteer_intervals:
+            # Consider volunteer as absent ONLY if check time falls within any configured interval
+            intervals = volunteer_intervals.get(s.id, [])
+            is_active_volunteer = any(start <= check_dt_aware <= end for start, end, _ in intervals)
+            if is_active_volunteer:
+                # Use first matching interval's activity name for label
+                first_match = next(((start, end, name) for start, end, name in intervals if start <= check_dt_aware <= end), None)
+                act_name = first_match[2] if first_match else "Voluntariat"
+                general_absent_details.append(
+                    f"{student_display_name} - Voluntariat ({act_name})"
+                )
+                all_absent_details.append(
+                    f"{student_display_name} - Voluntariat ({act_name})"
+                )
+                status_found = True
 
         if not status_found:
             # Student is present at the unit; determine their presence category.
@@ -6269,8 +6289,14 @@ def volunteer_home():
         .order_by(VolunteerActivity.activity_date.desc())
         .all()
     )
+    # Exclude gradați/staff from ranking
     students_with_points = (
-        Student.query.filter_by(created_by_user_id=user.id)
+        Student.query.filter(
+            Student.created_by_user_id == user.id,
+            Student.is_platoon_graded_duty == False,
+            or_(Student.assigned_graded_platoon == None, Student.assigned_graded_platoon == ""),
+            Student.pluton != "0",
+        )
         .order_by(Student.volunteer_points.desc(), Student.nume)
         .all()
     )
@@ -6388,6 +6414,8 @@ def volunteer_activity_create():
             "activity_description", ""
         ).strip()
         activity_date_str = request.form.get("activity_date")
+        start_time_str = (request.form.get("start_time") or "").strip()
+        end_time_str = (request.form.get("end_time") or "").strip()
 
         if not activity_name or not activity_date_str:
             flash("Numele activității și data sunt obligatorii.", "warning")
@@ -6411,10 +6439,22 @@ def volunteer_activity_create():
                 "volunteer_activity_create.html", today_str=today_str_for_form
             )
 
+        start_time_obj = None
+        end_time_obj = None
+        try:
+            if start_time_str:
+                start_time_obj = datetime.strptime(start_time_str, "%H:%M").time()
+            if end_time_str:
+                end_time_obj = datetime.strptime(end_time_str, "%H:%M").time()
+        except ValueError:
+            flash("Format oră invalid (folosiți HH:MM).", "warning")
+
         new_activity = VolunteerActivity(
             name=activity_name,
             description=activity_description,
             activity_date=activity_date_obj,
+            start_time=start_time_obj,
+            end_time=end_time_obj,
             created_by_user_id=user.id,
         )
         db.session.add(new_activity)
@@ -6833,8 +6873,14 @@ def public_volunteer_view_code(code):
         .order_by(VolunteerActivity.activity_date.desc())
         .all()
     )
+    # Exclude gradați/staff from public ranking as well
     students_with_points = (
-        Student.query.filter_by(created_by_user_id=user.id)
+        Student.query.filter(
+            Student.created_by_user_id == user.id,
+            Student.is_platoon_graded_duty == False,
+            or_(Student.assigned_graded_platoon == None, Student.assigned_graded_platoon == ""),
+            Student.pluton != "0",
+        )
         .order_by(Student.volunteer_points.desc(), Student.nume)
         .all()
     )
