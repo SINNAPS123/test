@@ -6640,6 +6640,7 @@ def _generate_eligible_volunteers(
 ):
     """
     Helper function to generate a list of eligible students for volunteering.
+    Note: Excludes 'gradați' (leaders) from volunteer generation.
     """
     students_query = Student.query.filter_by(created_by_user_id=gradat_id)
 
@@ -6651,6 +6652,14 @@ def _generate_eligible_volunteers(
     students_query = students_query.filter(
         or_(Student.exemption_details == None, Student.exemption_details == "")
     )
+
+    # Exclude platoon/company/battalion graded duty (gradați)
+    students_query = students_query.filter(Student.is_platoon_graded_duty == False)
+    students_query = students_query.filter(
+        or_(Student.assigned_graded_platoon == None, Student.assigned_graded_platoon == "")
+    )
+    # Exclude personnel marked as company/battalion staff by convention (pluton == '0')
+    students_query = students_query.filter(Student.pluton != "0")
 
     # Exclude students already provided in the exclusion list (e.g., from a session)
     if exclude_student_ids:

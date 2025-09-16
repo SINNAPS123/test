@@ -237,6 +237,28 @@ html { scroll-behavior: smooth; }
 [data-theme="dark"] .list-group-item-success { background-color: rgba(40, 167, 69, 0.15); }
 [data-theme="dark"] .list-group-item-warning { background-color: rgba(255, 193, 7, 0.15); }
 [data-theme="dark"] .list-group-item-danger { background-color: rgba(220, 53, 69, 0.15); }
+
+/* Highlight volunteer lists/cards more visibly in dark mode */
+[data-theme="dark"] .card .list-group-item .fw-bold {
+    color: #8ab4ff !important; /* brighter title for activity (link or span) */
+}
+[data-theme="dark"] .card .list-group-item .badge.bg-light.text-dark {
+    background-color: #3a3a3a !important;
+    color: #eaeaea !important;
+    border: 1px solid var(--border-color);
+}
+[data-theme="dark"] .card .list-group-item {
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+}
+[data-theme="dark"] .card .list-group-item:hover {
+    background-color: var(--bg-surface-hover);
+}
+
+/* Make ranking badges pop in dark mode */
+[data-theme="dark"] .badge.fs-6.bg-danger { filter: brightness(1.1) saturate(1.1); }
+[data-theme="dark"] .badge.fs-6.bg-warning.text-dark { filter: brightness(1.0) saturate(1.1); }
+[data-theme="dark"] .badge.fs-6.bg-info.text-dark { filter: brightness(1.1) saturate(1.1); }
+[data-theme="dark"] .badge.fs-6.bg-success { filter: brightness(1.05) saturate(1.1); }
 /* === END CONSOLIDATED DARK MODE TABLE/LIST STYLING === */
 
 /* General Modal Styling (ensure visibility) */
