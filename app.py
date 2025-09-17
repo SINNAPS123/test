@@ -70,22 +70,28 @@ def get_localized_now():
 def localdatetime_filter(dt, fmt="%d-%m-%Y %H:%M:%S"):
     if not dt:
         return ""
-    if dt.tzinfo is None:
-        # Presupunem că datetime-urile naive sunt în ora serverului (care ar trebui să fie Europe/Bucharest)
-        # sau sunt UTC și trebuie convertite. Pentru siguranță, dacă e naive, îl localizăm ca UTC apoi convertim.
-        # Dar majoritatea datetime-urilor create cu datetime.now() fără tz sunt deja în ora sistemului.
-        # Cel mai sigur este să verificăm dacă provin din datetime.utcnow() sau datetime.now()
-        # Pentru ActionLog.timestamp care e default=datetime.utcnow, va fi conștient de fus (UTC)
-        # Pentru celelalte (ex: Permission.start_datetime), sunt stocate ca naive.
-        # Le vom considera ca fiind în ora serverului și le vom localiza.
-        # Totuși, o practică mai bună ar fi să stocăm totul ca UTC.
-        # Având în vedere structura actuală, vom considera datetime-urile naive ca fiind în ora serverului.
-        localized_dt = EUROPE_BUCHAREST.localize(
-            dt, is_dst=None
-        )  # is_dst=None pentru a gestiona tranzițiile DST
-    else:
-        localized_dt = dt.astimezone(EUROPE_BUCHAREST)
-    return localized_dt.strftime(fmt)
+    # Accept strings (e.g., from JSON) and parse them
+    if isinstance(dt, str):
+        parsed = None
+        try:
+            parsed = datetime.fromisoformat(dt)
+        except Exception:
+            try:
+                # try as unix timestamp in seconds
+                parsed = datetime.fromtimestamp(float(dt), tz=timezone.utc)
+            except Exception:
+                # Fallback: return original string
+                return dt
+        dt = parsed
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            # Considerăm naive ca fiind în ora serverului (Europe/Bucharest)
+            localized_dt = EUROPE_BUCHAREST.localize(dt, is_dst=None)
+        else:
+            localized_dt = dt.astimezone(EUROPE_BUCHAREST)
+        return localized_dt.strftime(fmt)
+    # If it's not a datetime even after parsing, just stringify it
+    return str(dt)
 
 
 @app.template_filter("localtime")
