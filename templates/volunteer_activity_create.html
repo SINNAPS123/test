@@ -24,6 +24,21 @@
                             <label for="activity_date" class="form-label">Data Activității <span class="text-danger">*</span></label>
                             <input type="date" class="form-control" id="activity_date" name="activity_date" value="{{ today_str }}" required>
                         </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="start_time" class="form-label">Ora început (opțional)</label>
+                                <input type="time" class="form-control" id="start_time" name="start_time" placeholder="HH:MM">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="end_time" class="form-label">Ora sfârșit (opțional)</label>
+                                <input type="time" class="form-control" id="end_time" name="end_time" placeholder="HH:MM">
+                            </div>
+                        </div>
+                        <div class="alert alert-light border">
+                            <small>
+                                Dacă setezi intervalul orar, voluntarii vor apărea ca "Voluntariat" la prezență doar în acel interval, nu toată ziua.
+                            </small>
+                        </div>
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
                             <a href="{{ url_for('volunteer_home') }}" class="btn btn-secondary me-md-2">
                                 <i class="fas fa-times me-1"></i> Anulează
