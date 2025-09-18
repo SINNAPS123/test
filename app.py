@@ -70,22 +70,28 @@ def get_localized_now():
 def localdatetime_filter(dt, fmt="%d-%m-%Y %H:%M:%S"):
     if not dt:
         return ""
-    if dt.tzinfo is None:
-        # Presupunem că datetime-urile naive sunt în ora serverului (care ar trebui să fie Europe/Bucharest)
-        # sau sunt UTC și trebuie convertite. Pentru siguranță, dacă e naive, îl localizăm ca UTC apoi convertim.
-        # Dar majoritatea datetime-urilor create cu datetime.now() fără tz sunt deja în ora sistemului.
-        # Cel mai sigur este să verificăm dacă provin din datetime.utcnow() sau datetime.now()
-        # Pentru ActionLog.timestamp care e default=datetime.utcnow, va fi conștient de fus (UTC)
-        # Pentru celelalte (ex: Permission.start_datetime), sunt stocate ca naive.
-        # Le vom considera ca fiind în ora serverului și le vom localiza.
-        # Totuși, o practică mai bună ar fi să stocăm totul ca UTC.
-        # Având în vedere structura actuală, vom considera datetime-urile naive ca fiind în ora serverului.
-        localized_dt = EUROPE_BUCHAREST.localize(
-            dt, is_dst=None
-        )  # is_dst=None pentru a gestiona tranzițiile DST
-    else:
-        localized_dt = dt.astimezone(EUROPE_BUCHAREST)
-    return localized_dt.strftime(fmt)
+    # Accept strings (e.g., from JSON) and parse them
+    if isinstance(dt, str):
+        parsed = None
+        try:
+            parsed = datetime.fromisoformat(dt)
+        except Exception:
+            try:
+                # try as unix timestamp in seconds
+                parsed = datetime.fromtimestamp(float(dt), tz=timezone.utc)
+            except Exception:
+                # Fallback: return original string
+                return dt
+        dt = parsed
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            # Considerăm naive ca fiind în ora serverului (Europe/Bucharest)
+            localized_dt = EUROPE_BUCHAREST.localize(dt, is_dst=None)
+        else:
+            localized_dt = dt.astimezone(EUROPE_BUCHAREST)
+        return localized_dt.strftime(fmt)
+    # If it's not a datetime even after parsing, just stringify it
+    return str(dt)
 
 
 @app.template_filter("localtime")
@@ -3042,11 +3048,10 @@ def dashboard():
                     weekend_leaves_active_today += 1
                     break
 
-        # Servicii active AZI
+        # Servicii ale zilei curente (ancorate pe service_date pentru a evita servicii de ieri care trec peste miezul nopții)
         services_today_count = ServiceAssignment.query.filter(
             ServiceAssignment.student_id.in_(student_ids_managed),
-            ServiceAssignment.start_datetime <= today_end,
-            ServiceAssignment.end_datetime >= today_start,
+            ServiceAssignment.service_date == today_localized,
         ).count()
 
         total_volunteer_activities = VolunteerActivity.query.filter_by(
@@ -3084,15 +3089,14 @@ def dashboard():
                 "platoon_graded_duty_count": 0,  # Gradat pluton (dacă e separat)
             }
 
-        # Serviciile de azi pentru pluton
+        # Serviciile de azi pentru pluton (doar cele a căror service_date este astăzi)
         todays_services = (
             ServiceAssignment.query.options(
                 joinedload(ServiceAssignment.student)
             )
             .filter(
                 ServiceAssignment.student_id.in_(student_ids_managed),
-                ServiceAssignment.start_datetime <= today_end,
-                ServiceAssignment.end_datetime >= today_start,
+                ServiceAssignment.service_date == today_localized,
             )
             .order_by(ServiceAssignment.start_datetime.asc())
             .all()
@@ -4639,8 +4643,7 @@ def company_commander_dashboard():
 
     services_today_company_count = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids_in_company),
-        ServiceAssignment.start_datetime <= today_end,
-        ServiceAssignment.end_datetime >= today_start,
+        ServiceAssignment.service_date == today_localized_company,
     ).count()
 
     # Stats for "NOW"
@@ -4698,8 +4701,7 @@ def company_commander_dashboard():
         )
         .filter(
             ServiceAssignment.student_id.in_(student_ids_in_company),
-            ServiceAssignment.start_datetime <= today_end,
-            ServiceAssignment.end_datetime >= today_start,
+            ServiceAssignment.service_date == today_localized_company,
         )
         .group_by(ServiceAssignment.service_type)
         .all()
@@ -4751,8 +4753,7 @@ def company_commander_dashboard():
         ServiceAssignment.query.options(joinedload(ServiceAssignment.student))
         .filter(
             ServiceAssignment.student_id.in_(student_ids_in_company),
-            ServiceAssignment.start_datetime <= today_end,
-            ServiceAssignment.end_datetime >= today_start,
+            ServiceAssignment.service_date == today_localized_company,
         )
         .order_by(ServiceAssignment.start_datetime.asc())
         .all()
@@ -5247,8 +5248,7 @@ def battalion_commander_dashboard():
 
     services_today_battalion_count = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids_in_battalion),
-        ServiceAssignment.start_datetime <= today_end,
-        ServiceAssignment.end_datetime >= today_start,
+        ServiceAssignment.service_date == today_localized_battalion,
     ).count()
 
     # Stats for "NOW"
@@ -5304,8 +5304,7 @@ def battalion_commander_dashboard():
         )
         .filter(
             ServiceAssignment.student_id.in_(student_ids_in_battalion),
-            ServiceAssignment.start_datetime <= today_end,
-            ServiceAssignment.end_datetime >= today_start,
+            ServiceAssignment.service_date == today_localized_battalion,
         )
         .group_by(ServiceAssignment.service_type)
         .all()
@@ -5382,8 +5381,7 @@ def battalion_commander_dashboard():
         ServiceAssignment.query.options(joinedload(ServiceAssignment.student))
         .filter(
             ServiceAssignment.student_id.in_(student_ids_in_battalion),
-            ServiceAssignment.start_datetime <= today_end,
-            ServiceAssignment.end_datetime >= today_start,
+            ServiceAssignment.service_date == today_localized_battalion,
         )
         .order_by(ServiceAssignment.start_datetime.asc())
         .all()
