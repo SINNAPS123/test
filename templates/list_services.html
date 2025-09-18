@@ -3,20 +3,20 @@
 
 {% block content %}
 <div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <h2 class="mb-0">Management Servicii</h2> <!-- mb-0 for alignment -->
-        <div class="d-flex align-items-center">
-            <a href="{{ url_for('assign_multiple_services') }}" class="btn btn-info btn-sm me-2" title="Asignează mai multe servicii diferite unui singur student">
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <a href="{{ url_for('assign_multiple_services') }}" class="btn btn-info btn-sm" title="Asignează mai multe servicii diferite unui singur student">
                 <i class="fas fa-users-cog icon-rotate-hover"></i> Asignează Multiplu
             </a>
-            <a href="{{ url_for('assign_service') }}" class="btn btn-success btn-sm me-2" title="Asignează un serviciu individual">
+            <a href="{{ url_for('assign_service') }}" class="btn btn-success btn-sm" title="Asignează un serviciu individual">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-shield-plus me-1 icon-rotate-hover" viewBox="0 0 16 16">
                     <path d="M5.338 1.59a61.44 61.44 0 0 0-2.837.856.481.481 0 0 0-.328.39c-.554 4.157.726 7.19 2.253 9.188a10.725 10.725 0 0 0 2.287 2.233c.346.244.652.42.893.533.12.057.218.095.293.118a.55.55 0 0 0 .101.025.615.615 0 0 0 .1-.025c.076-.023.174-.06.294-.118.24-.113.547-.29.893-.533a10.726 10.726 0 0 0 2.287-2.233c1.527-1.997 2.807-5.031 2.253-9.188a.48.48 0 0 0-.328-.39c-.95-.3-2.005-.666-2.837-.855A1.113 1.113 0 0 0 8.338.92H7.662a1.113 1.113 0 0 0-.754.67ZM5.054 1.23A62.725 62.725 0 0 1 8 1c1.178 0 2.242.13 3.226.366C12.136 1.573 13.296 2.796 14 5c.704 2.203.623 4.653-.313 6.566A9.722 9.722 0 0 1 8 14.09a9.722 9.722 0 0 1-5.687-2.524C1.377 9.652 1.296 7.203 2 5c.704-2.203 1.864-3.427 2.77-3.735a1.05 1.05 0 0 1 .283-.035Z"/>
                     <path d="M8 5.5a.5.5 0 0 1 .5.5v1.5H10a.5.5 0 0 1 0 1H8.5V10a.5.5 0 0 1-1 0V8.5H6a.5.5 0 0 1 0-1h1.5V6a.5.5 0 0 1 .5-.5z"/>
                 </svg>
                 Asignează Serviciu
             </a>
-            <a href="{{ url_for('gradat_page_import_services') }}" class="btn btn-warning btn-sm me-2" title="Importă servicii din text">
+            <a href="{{ url_for('gradat_page_import_services') }}" class="btn btn-warning btn-sm" title="Importă servicii din text">
                 <i class="fas fa-file-upload icon-rotate-hover"></i> Importă din text
             </a>
             <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">&laquo; Panou Gradat</a>

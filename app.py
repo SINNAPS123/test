@@ -3048,11 +3048,10 @@ def dashboard():
                     weekend_leaves_active_today += 1
                     break
 
-        # Servicii active AZI
+        # Servicii ale zilei curente (ancorate pe service_date pentru a evita servicii de ieri care trec peste miezul nopții)
         services_today_count = ServiceAssignment.query.filter(
             ServiceAssignment.student_id.in_(student_ids_managed),
-            ServiceAssignment.start_datetime <= today_end,
-            ServiceAssignment.end_datetime >= today_start,
+            ServiceAssignment.service_date == today_localized,
         ).count()
 
         total_volunteer_activities = VolunteerActivity.query.filter_by(
@@ -3090,15 +3089,14 @@ def dashboard():
                 "platoon_graded_duty_count": 0,  # Gradat pluton (dacă e separat)
             }
 
-        # Serviciile de azi pentru pluton
+        # Serviciile de azi pentru pluton (doar cele a căror service_date este astăzi)
         todays_services = (
             ServiceAssignment.query.options(
                 joinedload(ServiceAssignment.student)
             )
             .filter(
                 ServiceAssignment.student_id.in_(student_ids_managed),
-                ServiceAssignment.start_datetime <= today_end,
-                ServiceAssignment.end_datetime >= today_start,
+                ServiceAssignment.service_date == today_localized,
             )
             .order_by(ServiceAssignment.start_datetime.asc())
             .all()
@@ -4645,8 +4643,7 @@ def company_commander_dashboard():
 
     services_today_company_count = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids_in_company),
-        ServiceAssignment.start_datetime <= today_end,
-        ServiceAssignment.end_datetime >= today_start,
+        ServiceAssignment.service_date == today_localized_company,
     ).count()
 
     # Stats for "NOW"
@@ -4704,8 +4701,7 @@ def company_commander_dashboard():
         )
         .filter(
             ServiceAssignment.student_id.in_(student_ids_in_company),
-            ServiceAssignment.start_datetime <= today_end,
-            ServiceAssignment.end_datetime >= today_start,
+            ServiceAssignment.service_date == today_localized_company,
         )
         .group_by(ServiceAssignment.service_type)
         .all()
@@ -4757,8 +4753,7 @@ def company_commander_dashboard():
         ServiceAssignment.query.options(joinedload(ServiceAssignment.student))
         .filter(
             ServiceAssignment.student_id.in_(student_ids_in_company),
-            ServiceAssignment.start_datetime <= today_end,
-            ServiceAssignment.end_datetime >= today_start,
+            ServiceAssignment.service_date == today_localized_company,
         )
         .order_by(ServiceAssignment.start_datetime.asc())
         .all()
@@ -5253,8 +5248,7 @@ def battalion_commander_dashboard():
 
     services_today_battalion_count = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids_in_battalion),
-        ServiceAssignment.start_datetime <= today_end,
-        ServiceAssignment.end_datetime >= today_start,
+        ServiceAssignment.service_date == today_localized_battalion,
     ).count()
 
     # Stats for "NOW"
@@ -5310,8 +5304,7 @@ def battalion_commander_dashboard():
         )
         .filter(
             ServiceAssignment.student_id.in_(student_ids_in_battalion),
-            ServiceAssignment.start_datetime <= today_end,
-            ServiceAssignment.end_datetime >= today_start,
+            ServiceAssignment.service_date == today_localized_battalion,
         )
         .group_by(ServiceAssignment.service_type)
         .all()
@@ -5388,8 +5381,7 @@ def battalion_commander_dashboard():
         ServiceAssignment.query.options(joinedload(ServiceAssignment.student))
         .filter(
             ServiceAssignment.student_id.in_(student_ids_in_battalion),
-            ServiceAssignment.start_datetime <= today_end,
-            ServiceAssignment.end_datetime >= today_start,
+            ServiceAssignment.service_date == today_localized_battalion,
         )
         .order_by(ServiceAssignment.start_datetime.asc())
         .all()
