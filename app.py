@@ -2157,7 +2157,29 @@ def check_leave_conflict(
 ):
     """
     Verifică conflictele pentru un student într-un interval dat, excluzând opțional o învoire existentă.
+    Pe formularele de editare, dacă leave_type/existing_leave_id nu sunt furnizate corect,
+    încearcă să le deducă din request.form pentru a evita autoconflictul (ex: „deja există”).
     """
+    # Best-effort inference from request payload to avoid self-conflict on edit
+    try:
+        if not leave_type:
+            # Try common form flags
+            if request.form.get("permission_id"):
+                leave_type = "permission"
+            elif request.form.get("daily_leave_id"):
+                leave_type = "daily_leave"
+            elif request.form.get("weekend_leave_id"):
+                leave_type = "weekend_leave"
+        if existing_leave_id is None:
+            # Accept several possible keys
+            for key in ("permission_id", "daily_leave_id", "weekend_leave_id", "id", "current_leave_id"):
+                val = request.form.get(key, type=int)
+                if val:
+                    existing_leave_id = val
+                    break
+    except Exception:
+        pass
+
     # 1. Verifică conflicte cu servicii blocante
     blocking_services = ["GSS", "Intervenție"]
     conflicting_service_query = ServiceAssignment.query.filter(
@@ -2177,7 +2199,8 @@ def check_leave_conflict(
         Permission.start_datetime < leave_end_dt,
         Permission.end_datetime > leave_start_dt,
     )
-    if leave_type == "permission" and existing_leave_id:
+    # Exclude current record if this is a permission edit (robust to missing leave_type)
+    if existing_leave_id and (leave_type == "permission" or request.form.get("permission_id")):
         perm_query = perm_query.filter(Permission.id != existing_leave_id)
     conflicting_permission = perm_query.first()
     if conflicting_permission:
@@ -2187,7 +2210,7 @@ def check_leave_conflict(
     daily_leaves_query = DailyLeave.query.filter(
         DailyLeave.student_id == student_id, DailyLeave.status == "Aprobată"
     )
-    if leave_type == "daily_leave" and existing_leave_id:
+    if existing_leave_id and (leave_type == "daily_leave" or request.form.get("daily_leave_id")):
         daily_leaves_query = daily_leaves_query.filter(
             DailyLeave.id != existing_leave_id
         )
@@ -2204,7 +2227,7 @@ def check_leave_conflict(
         WeekendLeave.student_id == student_id,
         WeekendLeave.status == "Aprobată",
     )
-    if leave_type == "weekend_leave" and existing_leave_id:
+    if existing_leave_id and (leave_type == "weekend_leave" or request.form.get("weekend_leave_id")):
         weekend_leaves_query = weekend_leaves_query.filter(
             WeekendLeave.id != existing_leave_id
         )
@@ -2240,6 +2263,12 @@ def check_service_conflict_for_student(
     if current_service_id is None:
         try:
             inferred_id = request.form.get("current_service_id", type=int)
+            if not inferred_id:
+                # Fallback to other common keys used by edit forms
+                for key in ("service_id", "id", "edit_service_id"):
+                    inferred_id = request.form.get(key, type=int)
+                    if inferred_id:
+                        break
             if inferred_id:
                 current_service_id = inferred_id
         except Exception:
