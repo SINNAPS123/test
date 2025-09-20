@@ -1307,6 +1307,8 @@ def gradat_insights():
 
     now = get_localized_now()
     horizon = now + timedelta(days=7)
+    # DB stores naive datetimes (local time). Use a naive \"now\" for DB comparisons.
+    now_naive = now.replace(tzinfo=None)
 
     # Upcoming items
     dl_up = (
@@ -1333,7 +1335,7 @@ def gradat_insights():
         Permission.query.options(joinedload(Permission.student))
         .filter(
             Permission.student_id.in_(student_ids),
-            Permission.end_datetime >= now,
+            Permission.end_datetime >= now_naive,
         )
         .order_by(Permission.start_datetime.asc())
         .all()
@@ -1343,7 +1345,7 @@ def gradat_insights():
         ServiceAssignment.query.options(joinedload(ServiceAssignment.student))
         .filter(
             ServiceAssignment.student_id.in_(student_ids),
-            ServiceAssignment.end_datetime >= now,
+            ServiceAssignment.end_datetime >= now_naive,
         )
         .order_by(ServiceAssignment.start_datetime.asc())
         .all()
@@ -1562,10 +1564,11 @@ def admin_insights():
     # Reuse gradat_insights logic but for all students (capped)
     now = get_localized_now()
     horizon = now + timedelta(days=7)
+    now_naive = now.replace(tzinfo=None)
 
     perm_up = (
         Permission.query.options(joinedload(Permission.student))
-        .filter(Permission.end_datetime >= now)
+        .filter(Permission.end_datetime >= now_naive)
         .order_by(Permission.start_datetime.asc())
         .limit(500)
         .all()
@@ -1584,7 +1587,7 @@ def admin_insights():
     )
     serv_up = (
         ServiceAssignment.query.options(joinedload(ServiceAssignment.student))
-        .filter(ServiceAssignment.end_datetime >= now)
+        .filter(ServiceAssignment.end_datetime >= now_naive)
         .order_by(ServiceAssignment.start_datetime.asc())
         .limit(500)
         .all()
@@ -1945,17 +1948,18 @@ def brief_ack():
 def _collect_conflicts(scope_student_ids=None):
     now = get_localized_now()
     horizon = now + timedelta(days=14)
+    now_naive = now.replace(tzinfo=None)
 
     # Query relevant records
     perm_up = Permission.query.options(joinedload(Permission.student)).filter(
-        Permission.end_datetime >= now
+        Permission.end_datetime >= now_naive
     )
     wl_all = WeekendLeave.query.options(
         joinedload(WeekendLeave.student)
     ).filter(WeekendLeave.status == "Aprobată")
     serv_up = ServiceAssignment.query.options(
         joinedload(ServiceAssignment.student)
-    ).filter(ServiceAssignment.end_datetime >= now)
+    ).filter(ServiceAssignment.end_datetime >= now_naive)
     dl_up = DailyLeave.query.options(joinedload(DailyLeave.student)).filter(
         DailyLeave.status == "Aprobată"
     )
@@ -4677,11 +4681,12 @@ def company_commander_dashboard():
 
     # Stats for "NOW"
     now_localized = get_localized_now()
+    now_naive_for_db = now_localized.replace(tzinfo=None)
     permissions_active_now_company = Permission.query.filter(
         Permission.student_id.in_(student_ids_in_company),
         Permission.status == "Aprobată",
-        Permission.start_datetime <= now_localized,
-        Permission.end_datetime >= now_localized,
+        Permission.start_datetime <= now_naive_for_db,
+        Permission.end_datetime >= now_naive_for_db,
     ).count()
 
     daily_leaves_active_now_company = 0
@@ -4712,8 +4717,8 @@ def company_commander_dashboard():
 
     services_active_now_company = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids_in_company),
-        ServiceAssignment.start_datetime <= now_localized,
-        ServiceAssignment.end_datetime >= now_localized,
+        ServiceAssignment.start_datetime <= now_naive_for_db,
+        ServiceAssignment.end_datetime >= now_naive_for_db,
     ).count()
 
     # New service stats for company
@@ -5282,11 +5287,12 @@ def battalion_commander_dashboard():
 
     # Stats for "NOW"
     now_localized_b = get_localized_now()
+    now_naive_for_db_b = now_localized_b.replace(tzinfo=None)
     permissions_active_now_battalion = Permission.query.filter(
         Permission.student_id.in_(student_ids_in_battalion),
         Permission.status == "Aprobată",
-        Permission.start_datetime <= now_localized_b,
-        Permission.end_datetime >= now_localized_b,
+        Permission.start_datetime <= now_naive_for_db_b,
+        Permission.end_datetime >= now_naive_for_db_b,
     ).count()
 
     daily_leaves_active_now_battalion = 0
@@ -5315,8 +5321,8 @@ def battalion_commander_dashboard():
 
     services_active_now_battalion = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids_in_battalion),
-        ServiceAssignment.start_datetime <= now_localized_b,
-        ServiceAssignment.end_datetime >= now_localized_b,
+        ServiceAssignment.start_datetime <= now_naive_for_db_b,
+        ServiceAssignment.end_datetime >= now_naive_for_db_b,
     ).count()
 
     # New service stats for battalion
