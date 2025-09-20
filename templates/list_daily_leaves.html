@@ -99,7 +99,7 @@
                         <td>{{ leave.reason if leave.reason else '-' }}</td>
                         <td>
                             {% if leave.status == 'Aprobată' %}
-                                {% if leave.is_active %}
+                                {% if leave.is_active() %}
                                     <span class="badge bg-secondary">Activă</span>
                                 {% elif leave.is_upcoming %}
                                     <span class="badge bg-secondary">Urmează</span>
@@ -116,7 +116,7 @@
                             <a href="{{ url_for('add_edit_daily_leave', leave_id=leave.id) }}" class="btn btn-sm btn-warning me-1 py-0 px-1" title="Editare Învoire Zilnică">
                                 <i class="fas fa-edit icon-rotate-hover"></i>
                             </a>
-                            {% if leave.status == 'Aprobată' and (leave.is_active or leave.is_upcoming) %}
+                            {% if leave.status == 'Aprobată' and (leave.is_active() or leave.is_upcoming) %}
                             <form method="POST" action="{{ url_for('cancel_daily_leave', leave_id=leave.id) }}" class="d-inline" onsubmit="return confirm('Ești sigur că vrei să anulezi această învoire?');">
                                 <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="Anulează Învoirea">
                                     <i class="fas fa-times-circle icon-rotate-hover"></i>
