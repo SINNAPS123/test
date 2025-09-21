@@ -11042,7 +11042,7 @@ def process_weekend_leaves_text():
 
 @app.route(
     "/gradat/weekend_leaves/export_word",
-    endpoint="gradat_export_weekend_leaves_word",
+    endpoint="gradat_process_weekend_leaves_text",
 )
 @login_required
 def export_weekend_leaves_word():
@@ -14405,7 +14405,8 @@ def battalion_commander_export_weekend_leaves_word():
 # --- Gradat Daily Leaves Word Export ---
 @app.route(
     "/gradat/daily_leaves/export_word",
-    endpoint="gradat_export_daily_leaves_word",
+    endpoint="gradat_process_daily_leaves_te_codextnew"</,
+,
 )
 @login_required
 def gradat_export_daily_leaves_word():
