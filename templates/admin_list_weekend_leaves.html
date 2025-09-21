@@ -54,7 +54,7 @@
             </thead>
             <tbody>
                 {% for wl in weekend_leaves_pagination.items %}
-                 <tr class="{{ 'table-success' if wl.is_any_interval_active_now and wl.status == 'Aprobată' else ('table-warning' if wl.is_overall_active_or_upcoming else 'table-secondary') if wl.status == 'Aprobată' else ('table-danger' if wl.status == 'Anulată' else '') }}">
+                 <tr class="{{ 'table-success' if wl.is_any_interval_active(get_localized_now()) and wl.status == 'Aprobată' else ('table-warning' if wl.is_overall_active_or_upcoming else 'table-secondary') if wl.status == 'Aprobată' else ('table-danger' if wl.status == 'Anulată' else '') }}">
                     <td>{{ wl.id }}</td>
                     <td>{{ wl.student.nume }} {{ wl.student.prenume }} <small class="text-muted">(ID: {{wl.student.id}})</small></td>
                     <td>{{ wl.student.batalion }}/{{ wl.student.companie }}/{{ wl.student.pluton }}</td>
@@ -79,7 +79,7 @@
                     </td>
                     <td>
                         <span class="badge
-                            {% if wl.status == 'Aprobată' and wl.is_any_interval_active_now %}bg-success
+                            {% if wl.status == 'Aprobată' and wl.is_any_interval_active(get_localized_now()) %}bg-success
                             {% elif wl.status == 'Aprobată' and wl.is_overall_active_or_upcoming %}bg-warning text-dark
                             {% elif wl.status == 'Aprobată' %}bg-secondary
                             {% elif wl.status == 'Anulată' %}bg-danger
@@ -87,7 +87,7 @@
                             {% endif %}">
                             {{ wl.status }}
                             {% if wl.status == 'Aprobată' %}
-                                {% if wl.is_any_interval_active_now %} (Activ)
+                                {% if wl.is_any_interval_active(get_localized_now()) %} (Activ)
                                 {% elif wl.is_overall_active_or_upcoming %} (Urmează)
                                 {% elif wl.is_overall_past %} (Expirat)
                                 {% endif %}

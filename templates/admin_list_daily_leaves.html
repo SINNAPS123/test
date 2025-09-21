@@ -54,7 +54,7 @@
             </thead>
             <tbody>
                 {% for dl in daily_leaves_pagination.items %}
-                <tr class="{{ 'table-success' if dl.is_active else ('table-warning' if dl.is_upcoming else 'table-secondary') if dl.status == 'Aprobată' else ('table-danger' if dl.status == 'Anulată' else '') }}">
+                <tr class="{{ 'table-success' if dl.is_active() else ('table-warning' if dl.is_upcoming else 'table-secondary') if dl.status == 'Aprobată' else ('table-danger' if dl.status == 'Anulată' else '') }}">
                     <td>{{ dl.id }}</td>
                     <td>{{ dl.student.nume }} {{ dl.student.prenume }} <small class="text-muted">(ID: {{dl.student.id}})</small></td>
                     <td>{{ dl.student.batalion }}/{{ dl.student.companie }}/{{ dl.student.pluton }}</td>
@@ -70,7 +70,7 @@
                     </td>
                     <td>
                         <span class="badge
-                            {% if dl.status == 'Aprobată' and dl.is_active %}bg-success
+                            {% if dl.status == 'Aprobată' and dl.is_active() %}bg-success
                             {% elif dl.status == 'Aprobată' and dl.is_upcoming %}bg-warning text-dark
                             {% elif dl.status == 'Aprobată' %}bg-secondary
                             {% elif dl.status == 'Anulată' %}bg-danger
@@ -78,7 +78,7 @@
                             {% endif %}">
                             {{ dl.status }}
                              {% if dl.status == 'Aprobată' %}
-                                {% if dl.is_active %} (Activă)
+                                {% if dl.is_active() %} (Activă)
                                 {% elif dl.is_upcoming %} (Urmează)
                                 {% elif dl.is_past %} (Expirată)
                                 {% endif %}

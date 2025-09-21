@@ -23,7 +23,7 @@
                         <td>{{ p.reason or '-' }}</td>
                         <td>
                             <span class="badge
-                                {% if p.is_active %} bg-success
+                                {% if p.is_active() %} bg-success
                                 {% elif p.is_upcoming %} bg-info text-dark
                                 {% elif p.is_past and p.status == 'Aprobată' %} bg-secondary
                                 {% elif p.status == 'Anulată' %} bg-warning text-dark

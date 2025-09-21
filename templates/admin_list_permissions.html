@@ -53,7 +53,7 @@
             </thead>
             <tbody>
                 {% for p in permissions_pagination.items %}
-                <tr class="{{ 'table-success' if p.is_active else ('table-warning' if p.is_upcoming else 'table-secondary') if p.status == 'Aprobată' else ('table-danger' if p.status == 'Anulată' else '') }}">
+                <tr class="{{ 'table-success' if p.is_active() else ('table-warning' if p.is_upcoming else 'table-secondary') if p.status == 'Aprobată' else ('table-danger' if p.status == 'Anulată' else '') }}">
                     <td>{{ p.id }}</td>
                     <td>{{ p.student.nume }} {{ p.student.prenume }} <small class="text-muted">(ID: {{p.student.id}})</small></td>
                     <td>{{ p.student.grad_militar }}</td>
@@ -71,7 +71,7 @@
                     </td>
                     <td>
                         <span class="badge
-                            {% if p.status == 'Aprobată' and p.is_active %}bg-success
+                            {% if p.status == 'Aprobată' and p.is_active() %}bg-success
                             {% elif p.status == 'Aprobată' and p.is_upcoming %}bg-warning text-dark
                             {% elif p.status == 'Aprobată' %}bg-secondary
                             {% elif p.status == 'Anulată' %}bg-danger
@@ -79,7 +79,7 @@
                             {% endif %}">
                             {{ p.status }}
                             {% if p.status == 'Aprobată' %}
-                                {% if p.is_active %} (Activă)
+                                {% if p.is_active() %} (Activă)
                                 {% elif p.is_upcoming %} (Urmează)
                                 {% elif p.is_past %} (Expirată)
                                 {% endif %}

@@ -10883,7 +10883,7 @@ def export_weekend_leaves_word():
         return redirect(url_for("list_weekend_leaves"))
 
     document = Document()
-    document.add_heading("Raport Învoiri Weekend", level=1).alignment = (
+    document.add_heading("Raport Învoiri Zilnice", level=1).alignment = (
         WD_ALIGN_PARAGRAPH.CENTER
     )
 
