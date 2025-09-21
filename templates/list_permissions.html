@@ -62,7 +62,7 @@
                         <td>{{ p.reason if p.reason else '-' }}</td>
                         <td>
                             {% if p.status == 'Aprobată' %}
-                                {% if p.is_active %}
+                                {% if p.is_active() %}
                                     <span class="badge bg-secondary">Activă</span>
                                 {% elif p.is_upcoming %}
                                     <span class="badge bg-secondary">Urmează</span>
@@ -79,7 +79,7 @@
                             <a href="{{ url_for('add_edit_permission', permission_id=p.id) }}" class="btn btn-sm btn-warning me-1 py-0 px-1" title="Editare Permisie">
                                 <i class="fas fa-edit icon-rotate-hover"></i>
                             </a>
-                            {% if p.status == 'Aprobată' and (p.is_active or p.is_upcoming) %}
+                            {% if p.status == 'Aprobată' and (p.is_active() or p.is_upcoming) %}
                             <form method="POST" action="{{ url_for('cancel_permission', permission_id=p.id) }}" class="d-inline" onsubmit="return confirm('Ești sigur că vrei să anulezi această permisie?');">
                                 <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="Anulează Permisia">
                                     <i class="fas fa-times-circle icon-rotate-hover"></i>

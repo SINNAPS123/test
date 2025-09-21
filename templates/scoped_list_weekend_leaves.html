@@ -47,7 +47,7 @@
                 </thead>
                 <tbody>
                     {% for leave in leaves %}
-                    <tr class="{{ 'table-success' if leave.is_any_interval_active_now and leave.status == 'Aprobată' else ('table-warning' if leave.is_overall_active_or_upcoming else 'table-secondary') }}">
+                    <tr class="{{ 'table-success' if leave.is_any_interval_active(get_localized_now()) and leave.status == 'Aprobată' else ('table-warning' if leave.is_overall_active_or_upcoming else 'table-secondary') }}">
                         <td>{{ leave.student.nume }} {{ leave.student.prenume }}</td>
                         <td>{{ leave.weekend_start_date|localdate('%d-%m-%y') }}</td>
                         <td>
@@ -55,11 +55,8 @@
                                 <div>
                                     <strong>{{ interval.day_name }}</strong> ({{ interval.start|localdatetime('%d-%m') }}):
                                     {{ interval.start|localdatetime('%H:%M') }} - {{ interval.end|localdatetime('%H:%M') }}
-                                    {% if interval.is_active_now and leave.status == 'Aprobată' %} {# is_active_now in interval nu există, e pe leave #}
-                                        {# Verificarea de 'Activ acum' se bazează pe leave.is_any_interval_active_now și intervalul curent #}
-                                        {# Pentru simplificare, vom lăsa cum era, dar corect ar fi să verificăm intervalul curent vs now #}
-                                        {# Presupunând că `interval` are `start` și `end` ca datetime-uri deja localizate sau naive corecte #}
-                                        {% set now_interval_check = get_localized_now() %} {# Necesar dacă interval.start/end sunt naive #}
+                                    {% if leave.status == 'Aprobată' %}
+                                        {% set now_interval_check = get_localized_now() %}
                                         {% if interval.start <= now_interval_check <= interval.end %}
                                         <span class="badge bg-success ms-1">Activ acum</span>
                                         {% endif %}
@@ -74,7 +71,7 @@
                             {% if leave.status == 'Aprobată' %}
                                 {% if leave.is_overall_past %}
                                     <span class="badge bg-secondary">Expirată</span>
-                                {% elif leave.is_any_interval_active_now %}
+                                {% elif leave.is_any_interval_active(get_localized_now()) %}
                                      <span class="badge bg-success">Cel puțin un interval Activ</span>
                                 {% elif leave.is_overall_active_or_upcoming %}
                                     <span class="badge bg-warning text-dark">Urmează</span>

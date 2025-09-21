@@ -26,7 +26,7 @@
                         <td>{{ wl.reason or '-' }}</td>
                         <td>
                             <span class="badge
-                                {% if wl.is_any_interval_active_now %} bg-success
+                                {% if wl.is_any_interval_active(get_localized_now()) %} bg-success
                                 {% elif wl.is_overall_active_or_upcoming %} bg-info text-dark
                                 {% elif wl.is_overall_past and wl.status == 'Aprobată' %} bg-secondary
                                 {% elif wl.status == 'Anulată' %} bg-warning text-dark

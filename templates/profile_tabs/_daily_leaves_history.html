@@ -20,7 +20,7 @@
                         <td>{{ dl.reason or '-' }}</td>
                         <td>
                             <span class="badge
-                                {% if dl.is_active %} bg-success
+                                {% if dl.is_active() %} bg-success
                                 {% elif dl.is_upcoming %} bg-info text-dark
                                 {% elif dl.is_past and dl.status == 'Aprobată' %} bg-secondary
                                 {% elif dl.status == 'Anulată' %} bg-warning text-dark

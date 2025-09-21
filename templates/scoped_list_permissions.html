@@ -65,7 +65,7 @@
             </thead>
             <tbody>
                 {% for p in permissions_pagination.items %}
-                <tr class="{{ 'table-success' if p.is_active else ('table-warning' if p.is_upcoming else 'table-secondary') if p.status == 'Aprobată' else ('table-danger' if p.status == 'Anulată' else '') }}">
+                <tr class="{{ 'table-success' if p.is_active() else ('table-warning' if p.is_upcoming else 'table-secondary') if p.status == 'Aprobată' else ('table-danger' if p.status == 'Anulată' else '') }}">
                     <td>{{ p.student.nume }} {{ p.student.prenume }}</td>
                     <td>{{ p.student.grad_militar }}</td>
                     <td>{{ p.student.pluton }}</td> {# Display Platoon #}
@@ -76,7 +76,7 @@
                     <td>{{ p.reason if p.reason else '-' }}</td>
                     <td>
                         {% if p.status == 'Aprobată' %}
-                            {% if p.is_active %}
+                            {% if p.is_active() %}
                                 <span class="badge bg-success">Activă</span>
                             {% elif p.is_upcoming %}
                                 <span class="badge bg-warning text-dark">Urmează</span>
