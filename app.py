@@ -2755,12 +2755,14 @@ def _apply_subuser_scope_and_permissions():
                 "/gradat/daily_leaves": [
                     "/gradat/daily_leave",
                     "/gradat/bulk_add_daily_leave",
+                    "/gradat/export/daily_leaves",  # export Word/PDF etc.
                 ],
                 "/gradat/weekend_leaves": [
                     "/gradat/weekend_leave",
                     "/gradat/bulk_add_weekend_leave",
                     "/gradat/gradat_import_weekend_leaves",
                     "/gradat/import_weekend_leaves",
+                    "/gradat/export/weekend_leaves",  # export Word/PDF etc.
                 ],
                 "/gradat/services": [
                     "/gradat/service",
@@ -7433,6 +7435,209 @@ def delete_volunteer_activity(activity_id):
         db.session.commit()  # Commit log-ul de eroare
 
     return redirect(url_for("volunteer_home"))
+
+# --- Export (Word) pentru Învoiri Zilnice (fără semnătură) și Weekend (cu secțiune separată pentru Biserică Duminica) ---
+
+@app.route("/gradat/export/daily_leaves/word", methods=["GET"], endpoint="gradat_export_daily_leaves_word")
+@login_required
+def gradat_export_daily_leaves_word():
+    if current_user.role != "gradat":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+
+    eff_user = get_current_user_or_scoped()
+    if not eff_user:
+        flash("Sesiune invalidă.", "danger")
+        return redirect(url_for("dashboard"))
+
+    # Parametru opțional ?date=YYYY-MM-DD (default: azi)
+    date_str = request.args.get("date")
+    if date_str:
+        try:
+            target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except Exception:
+            target_date = get_localized_now().date()
+    else:
+        target_date = get_localized_now().date()
+
+    q = (
+        DailyLeave.query.join(Student, DailyLeave.student_id == Student.id)
+        .options(joinedload(DailyLeave.student))
+        .filter(
+            Student.created_by_user_id == eff_user.id,
+            DailyLeave.status == "Aprobată",
+            DailyLeave.leave_date == target_date,
+        )
+    )
+    try:
+        if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+            q = q.filter(Student.pluton == str(g.subuser_platoon))
+    except Exception:
+        pass
+
+    leaves = q.order_by(Student.pluton.asc(), Student.nume.asc(), Student.prenume.asc()).all()
+
+    doc = Document()
+    doc.add_heading(f"Invoiri Zilnice - {target_date.strftime('%d %B %Y')}", level=1)
+    doc.add_paragraph("Acest export nu include semnături (conform specificației).")
+
+    table = doc.add_table(rows=1, cols=6)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr = table.rows[0].cells
+    hdr[0].text = "Nr."
+    hdr[1].text = "Pluton"
+    hdr[2].text = "Student"
+    hdr[3].text = "De la"
+    hdr[4].text = "Până la"
+    hdr[5].text = "Tip"
+
+    for idx, dl in enumerate(leaves, start=1):
+        cells = table.add_row().cells
+        cells[0].text = str(idx)
+        cells[1].text = str(getattr(dl.student, "pluton", "") or "")
+        name = f"{getattr(dl.student, 'grad_militar', '')} {getattr(dl.student, 'nume', '')} {getattr(dl.student, 'prenume', '')}".strip()
+        cells[2].text = name
+        cells[3].text = dl.start_time.strftime("%H:%M")
+        cells[4].text = dl.end_time.strftime("%H:%M")
+        try:
+            cells[5].text = dl.leave_type_display
+        except Exception:
+            cells[5].text = ""
+
+    bio = io.BytesIO()
+    doc.save(bio)
+    bio.seek(0)
+    filename = f"invoiri_zilnice_{target_date.strftime('%Y%m%d')}.docx"
+    return send_file(
+        bio,
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+@app.route("/gradat/export/weekend_leaves/word", methods=["GET"], endpoint="gradat_export_weekend_leaves_word")
+@login_required
+def gradat_export_weekend_leaves_word():
+    if current_user.role != "gradat":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+
+    eff_user = get_current_user_or_scoped()
+    if not eff_user:
+        flash("Sesiune invalidă.", "danger")
+        return redirect(url_for("dashboard"))
+
+    now = get_localized_now()
+
+    q = (
+        WeekendLeave.query.join(Student, WeekendLeave.student_id == Student.id)
+        .options(joinedload(WeekendLeave.student))
+        .filter(
+            Student.created_by_user_id == eff_user.id,
+            WeekendLeave.status == "Aprobată",
+        )
+    )
+    try:
+        if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+            q = q.filter(Student.pluton == str(g.subuser_platoon))
+    except Exception:
+        pass
+
+    leaves = q.all()
+
+    intervals = []
+    church_sunday = []
+
+    for w in leaves:
+        ivals = w.get_intervals()
+        for it in ivals:
+            # doar intervalele active/viitoare
+            if it["end"] >= now:
+                intervals.append({
+                    "student": w.student,
+                    "day_name": it["day_name"],
+                    "start": it["start"],
+                    "end": it["end"],
+                    "weekend_start_date": w.weekend_start_date,
+                    "is_church": bool(getattr(w, "duminica_biserica", False) and (it["day_name"] or "").lower() == "duminica"),
+                })
+                if getattr(w, "duminica_biserica", False) and (it["day_name"] or "").lower() == "duminica":
+                    church_sunday.append({
+                        "student": w.student,
+                        "start": it["start"],
+                        "end": it["end"],
+                        "weekend_start_date": w.weekend_start_date,
+                    })
+
+    # sortare
+    intervals.sort(key=lambda x: (str(getattr(x["student"], "pluton", "")), x["start"]))
+    church_sunday.sort(key=lambda x: (str(getattr(x["student"], "pluton", "")), x["start"]))
+
+    doc = Document()
+    doc.add_heading(f"Invoiri Weekend - Active/Viitoare (generat {now.strftime('%d %B %Y, %H:%M')})", level=1)
+
+    # tabel general
+    if intervals:
+        table = doc.add_table(rows=1, cols=7)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        hdr = table.rows[0].cells
+        hdr[0].text = "Nr."
+        hdr[1].text = "Pluton"
+        hdr[2].text = "Student"
+        hdr[3].text = "Zi"
+        hdr[4].text = "Data"
+        hdr[5].text = "De la"
+        hdr[6].text = "Până la"
+
+        for idx, item in enumerate(intervals, start=1):
+            st = item["student"]
+            name = f"{getattr(st, 'grad_militar', '')} {getattr(st, 'nume', '')} {getattr(st, 'prenume', '')}".strip()
+            cells = table.add_row().cells
+            cells[0].text = str(idx)
+            cells[1].text = str(getattr(st, "pluton", "") or "")
+            cells[2].text = name
+            cells[3].text = item["day_name"]
+            cells[4].text = item["start"].strftime("%d.%m")
+            cells[5].text = item["start"].strftime("%H:%M")
+            cells[6].text = item["end"].strftime("%H:%M")
+    else:
+        doc.add_paragraph("Nu există învoiri de weekend active sau viitoare.")
+
+    # secțiune separată pentru Duminică - Biserică
+    if church_sunday:
+        doc.add_paragraph("")
+        doc.add_heading("Duminică - Biserică (separat)", level=2)
+        table2 = doc.add_table(rows=1, cols=5)
+        table2.alignment = WD_TABLE_ALIGNMENT.CENTER
+        h2 = table2.rows[0].cells
+        h2[0].text = "Nr."
+        h2[1].text = "Pluton"
+        h2[2].text = "Student"
+        h2[3].text = "De la"
+        h2[4].text = "Până la"
+        for idx, item in enumerate(church_sunday, start=1):
+            st = item["student"]
+            name = f"{getattr(st, 'grad_militar', '')} {getattr(st, 'nume', '')} {getattr(st, 'prenume', '')}".strip()
+            cells = table2.add_row().cells
+            cells[0].text = str(idx)
+            cells[1].text = str(getattr(st, "pluton", "") or "")
+            cells[2].text = name
+            cells[3].text = item["start"].strftime("%H:%M")
+            cells[4].text = item["end"].strftime("%H:%M")
+    else:
+        doc.add_paragraph("")
+        doc.add_paragraph("Nu există solicitări de tip 'Biserică' pentru Duminică.")
+
+    bio = io.BytesIO()
+    doc.save(bio)
+    bio.seek(0)
+    filename = f"invoiri_weekend_{now.strftime('%Y%m%d')}.docx"
+    return send_file(
+        bio,
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        as_attachment=True,
+        download_name=filename,
+    )
 
 
 # --- Management Studenți ---
