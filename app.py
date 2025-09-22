@@ -7427,6 +7427,220 @@ def permissions_set_public_slug():
         return jsonify({"error": f"Eroare la setare alias: {e}"}), 500
 
 
+# Public view: permissions ranking via code
+@app.route("/public/permissions/<code>", methods=["GET"], endpoint="public_permissions_view_code")
+def public_permissions_view_code(code):
+    now_utc = datetime.now(timezone.utc)
+    sac = ScopedAccessCode.query.filter_by(code=code, is_active=True).first()
+    if not sac or sac.expires_at <= now_utc:
+        return "Link invalid sau expirat.", 404
+
+    # Effective user whose data is displayed
+    user = db.session.get(User, sac.created_by_user_id)
+    if not user:
+        return "Utilizatorul asociat acestui link nu mai există.", 404
+
+    # Students managed by user excluding gradați/staff
+    students_q = Student.query.filter(
+        Student.created_by_user_id == user.id,
+        Student.is_platoon_graded_duty == False,
+        or_(Student.assigned_graded_platoon == None, Student.assigned_graded_platoon == ""),
+        Student.pluton != "0",
+    ).with_entities(Student.id).all()
+    student_ids = [sid for sid, in students_q]
+
+    ranking_data = []
+    if student_ids:
+        # Count total approved permissions per student
+        counts = dict(
+            db.session.query(Permission.student_id, func.count(Permission.id))
+            .filter(
+                Permission.student_id.in_(student_ids),
+                Permission.status == "Aprobată",
+            )
+            .group_by(Permission.student_id)
+            .all()
+        )
+
+        # Fetch student objects for those IDs
+        students = Student.query.filter(Student.id.in_(student_ids)).all()
+        # Build rows; default count 0 if none
+        for s in students:
+            total = int(counts.get(s.id, 0) or 0)
+            ranking_data.append({"student": s, "total_permissions": total})
+
+        # Sort descending by total, then by name for stable order
+        ranking_data.sort(key=lambda r: (-r["total_permissions"], r["student"].nume, r["student"].prenume))
+
+    return render_template("public_permissions.html", ranking_data=ranking_data)
+
+
+# Public view via pretty slug (alias)
+@app.route("/public/p/<slug>", methods=["GET"], endpoint="public_permissions_view_slug")
+def public_permissions_view_slug(slug):
+    now_utc = datetime.now(timezone.utc)
+    sac = ScopedAccessCode.query.filter_by(custom_slug=slug, is_active=True).first()
+    if not sac or sac.expires_at <= now_utc:
+        return "Link invalid sau expirat.", 404
+    return redirect(url_for("public_permissions_view_code", code=sac.code))
+
+
+@app.route("/permissions/api/get_slug", methods=["GET"], endpoint...
+
+@app.route("/permissions/links", methods=["GET"], endpoint="permissions_links_manage")
+@login_required
+def permissions_links_manage():
+    if current_user.role != "gradat" or getattr(current_user, "parent_user_id", None):
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+    return render_template("permissions_links.html")
+
+
+@app.route("/permissions/api/generate_link", methods=["POST"], endpoint="permissions_generate_public_link")
+@login_required
+def permissions_generate_public_link():
+    if current_user.role != "gradat" or getattr(current_user, "parent_user_id", None):
+        return jsonify({"error": "Acces neautorizat."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    permanent = bool(payload.get("permanent", False))
+    regenerate = bool(payload.get("regenerate", False))
+    days = 365 * 100 if permanent else int(payload.get("days", 90))
+    days = max(1, min(days, 365 * 100))
+    expires_at = datetime.now(timezone.utc) + timedelta(days=days)
+
+    # Revoke existing permission-ranking public links if regenerate is requested
+    permissions_list = ["/public/permissions/", "/public/p/"]
+    if regenerate:
+        try:
+            existing_codes = ScopedAccessCode.query.filter_by(
+                created_by_user_id=current_user.id, is_active=True
+            ).all()
+            for c in existing_codes:
+                try:
+                    perms = c.get_permissions_list()
+                except Exception:
+                    perms = []
+                if any(p in perms for p in permissions_list) and c.expires_at > datetime.now(timezone.utc):
+                    c.is_active = False
+            db.session.flush()
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": f"Eroare la revocarea codurilor vechi: {e}"}), 500
+
+    new_code = ScopedAccessCode(
+        code=_generate_unique_scoped_code_str(16),
+        description="Clasament Permisii Public",
+        permissions=json.dumps(permissions_list, ensure_ascii=False),
+        expires_at=expires_at,
+        created_by_user_id=current_user.id,
+        is_active=True,
+    )
+    db.session.add(new_code)
+    try:
+        db.session.commit()
+        return jsonify({
+            "code": new_code.code,
+            "public_url": url_for("public_permissions_view_code", code=new_code.code, _external=True),
+            "expires_at": new_code.expires_at.isoformat(),
+            "never_expires": permanent,
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Eroare la generarea codului: {e}"}), 500
+
+
+@app.route("/permissions/api/list_links", methods=["GET"], endpoint="permissions_list_public_links")
+@login_required
+def permissions_list_public_links():
+    if current_user.role != "gradat" or getattr(current_user, "parent_user_id", None):
+        return jsonify({"error": "Acces neautorizat."}), 403
+
+    now = datetime.now(timezone.utc)
+    codes = ScopedAccessCode.query.filter_by(
+        created_by_user_id=current_user.id, is_active=True
+    ).filter(ScopedAccessCode.expires_at > now).all()
+
+    results = []
+    for c in codes:
+        try:
+            perms = c.get_permissions_list()
+        except Exception:
+            perms = []
+        if any(p in perms for p in ["/public/permissions/", "/public/p/"]):
+            never_expires = (c.expires_at - now) > timedelta(days=365 * 20)
+            results.append({
+                "code": c.code,
+                "expires_at": c.expires_at.isoformat(),
+                "public_url": url_for("public_permissions_view_code", code=c.code, _external=True),
+                "never_expires": never_expires,
+            })
+    results.sort(key=lambda x: x["expires_at"], reverse=True)
+    return jsonify({"codes": results})
+
+
+@app.route("/permissions/api/revoke_link", methods=["POST"], endpoint="permissions_revoke_public_link")
+@login_required
+def permissions_revoke_public_link():
+    if current_user.role != "gradat" or getattr(current_user, "parent_user_id", None):
+        return jsonify({"error": "Acces neautorizat."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    code = (payload.get("code") or "").strip()
+    if not code:
+        return jsonify({"error": "Cod lipsă."}), 400
+
+    sac = ScopedAccessCode.query.filter_by(code=code, created_by_user_id=current_user.id).first()
+    if not sac:
+        return jsonify({"error": "Cod invalid."}), 404
+
+    sac.is_active = False
+    try:
+        db.session.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Eroare la revocare: {e}"}), 500
+
+
+@app.route("/permissions/api/set_slug", methods=["POST"], endpoint="permissions_set_public_slug")
+@login_required
+def permissions_set_public_slug():
+    if current_user.role != "gradat" or getattr(current_user, "parent_user_id", None):
+        return jsonify({"error": "Acces neautorizat."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    code = (payload.get("code") or "").strip()
+    slug = (payload.get("slug") or "").strip()
+
+    if not code:
+        return jsonify({"error": "Cod lipsă."}), 400
+
+    sac = ScopedAccessCode.query.filter_by(code=code, created_by_user_id=current_user.id).first_or_404()
+
+    if not slug:
+        sac.custom_slug = None
+    else:
+        import re as _re
+        if not _re.fullmatch(r"[a-z0-9-]{3,64}", slug):
+            return jsonify({"error": "Slug invalid. Folosiți doar litere mici, cifre și liniuță (-), 3-64 caractere."}), 400
+        existing = ScopedAccessCode.query.filter(ScopedAccessCode.custom_slug == slug, ScopedAccessCode.id != sac.id).first()
+        if existing:
+            return jsonify({"error": "Acest alias este deja folosit."}), 409
+        sac.custom_slug = slug
+
+    try:
+        db.session.commit()
+        return jsonify({
+            "ok": True,
+            "custom_slug": sac.custom_slug,
+            "slug_url": url_for("public_permissions_view_slug", slug=sac.custom_slug, _external=True) if sac.custom_slug else None
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Eroare la setare alias: {e}"}), 500
+
+
 @app.route("/permissions/api/get_slug", methods=["GET"], endpoint="permissions_get_public_slug")
 @login_required
 def permissions_get_public_slug():
