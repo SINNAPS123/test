@@ -4,8 +4,11 @@
 
 {% block content %}
 <div class="container mt-4">
-   <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="fas fa-id-card-alt me-"></i>Clasament Permisii</h2>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="fas fa-id-card-alt me-2"></i>
+            Clasament Permisii
+        </h2>
         <a href="{{ url_for('public_view_logout') }}" class="btn btn-sm btn-outline-secondary">
             <i class="fas fa-sign-out-alt me-1"></i> Ieșire
         </a>
@@ -13,7 +16,58 @@
 
     <div class="alert alert-info" role="alert">
         <i class="fas fa-info-circle me-2"></i>
-        Pagina este publică, doar pentru vizualizare. Clasamentul se bazează pe numărul total de permisii aprobate pentru fiecare student (excluzând gradații/personal).
+        Pagină publică, doar pentru vizualizare. Clasamentul se bazează pe numărul total de permisii aprobate pentru fiecare student (gradații/personalul sunt excluși).
     </div>
+
+    {# Accept multiple possible variable names from the view for robustness #}
+    {% set data = students_with_counts if students_with_counts is defined else (students_with_total_permissions if students_with_total_permissions is defined else []) %}
+
+    <div class="card shadow-sm">
+        <div class="card-header">
+            <h4 class="mb-0"><i class="fas fa-list-ol me-2"></i>Top Permisii</h4>
+        </div>
+        <div class="card-body">
+            {% if data and data|length > 0 %}
+            <div class="table-responsive" style="max-height: 520px; overflow-y: auto;">
+                <table class="table table-sm table-hover table-striped align-middle">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th style="width: 60px;">#</th>
+                            <th>Student</th>
+                            <th class="text-center" style="width: 160px;">Total Permisii</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {# Each item can be:
+                           - a dict: {'student': <Student>, 'count': int}
+                           - a tuple: (Student, count)
+                           - a Student with attribute total_permissions
+                        #}
+                        {% for item in data %}
+                            {% set student = (item.student if item is mapping and item.get('student') is not none else (item[0] if item is sequence and item|length>=1 else (item if item.__class__.__name__ == 'Student' else None))) %}
+                            {% set count = (item.count if item is mapping and item.get('count') is not none else (item[1] if item is sequence and item|length>=2 else (item.total_permissions if student and item is not mapping and item is not sequence and hasattr(item, 'total_permissions') else 0))) %}
+                            {% if student %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td>
+                                    {{ student.grad_militar }} {{ student.nume }} {{ student.prenume }}<br>
+                                    <small class="text-muted">Pluton: {{ student.pluton }}</small>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-primary fs-6">{{ count }}</span>
+                                </td>
+                            </tr>
+                            {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+                <p class="text-muted mb-0">Nu există date pentru afișare.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
 
    
