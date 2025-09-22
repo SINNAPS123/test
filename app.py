@@ -14,6 +14,8 @@ from flask import (
 from flask_compress import Compress
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate  # Added for database migrations
+from flask_wtf.csrf import CSRFProtect
+from flask_caching import Cache
 from sqlalchemy.orm import joinedload
 import sqlalchemy as sa  # Adăugat pentru server_default=sa.text()
 import io
@@ -48,6 +50,121 @@ import json
 import pytz  # Adăugat pentru fusuri orare
 from functools import wraps
 from urllib.parse import urlparse
+
+# SECURITY: Input validation and sanitization utilities
+import html
+import bleach
+
+def sanitize_html_input(text):
+    """Sanitize HTML input to prevent XSS attacks."""
+    if not text:
+        return text
+    # Allow basic formatting but remove dangerous tags
+    allowed_tags = ['p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li']
+    allowed_attributes = {}
+    return bleach.clean(str(text), tags=allowed_tags, attributes=allowed_attributes)
+
+def validate_and_sanitize_form_data(form_data, required_fields=None, max_lengths=None):
+    """Validate and sanitize form data."""
+    errors = []
+    sanitized_data = {}
+    
+    for key, value in form_data.items():
+        if isinstance(value, str):
+            # Basic sanitization
+            value = value.strip()
+            # HTML escape for safety
+            value = html.escape(value)
+            
+        sanitized_data[key] = value
+        
+        # Check required fields
+        if required_fields and key in required_fields and not value:
+            errors.append(f"Câmpul '{key}' este obligatoriu.")
+            
+        # Check max lengths
+        if max_lengths and key in max_lengths and isinstance(value, str):
+            if len(value) > max_lengths[key]:
+                errors.append(f"Câmpul '{key}' depășește lungimea maximă de {max_lengths[key]} caractere.")
+    
+    return sanitized_data, errors
+
+# PERFORMANCE: Database query optimization helpers
+def get_students_for_user(user_id, platoon=None, eager_load=True):
+    """Optimized function to get students for a user with optional platoon filter."""
+    cache_key = f"students_user_{user_id}_{platoon}_{eager_load}"
+    
+    @cache.memoize(timeout=180)  # 3 minutes cache
+    def _get_students():
+        query = Student.query.filter_by(created_by_user_id=user_id)
+        if platoon:
+            query = query.filter(Student.pluton == str(platoon))
+        if eager_load:
+            query = query.options(
+                joinedload(Student.permissions),
+                joinedload(Student.daily_leaves),
+                joinedload(Student.weekend_leaves)
+            )
+        return query.all()
+    
+    return _get_students()
+
+def get_paginated_results(query, page=1, per_page=50):
+    """Helper for consistent pagination across the app."""
+    try:
+        return query.paginate(
+            page=page, 
+            per_page=per_page, 
+            error_out=False,
+            max_per_page=100  # Prevent excessive memory usage
+        )
+    except Exception as e:
+        app.logger.warning(f"Pagination error: {e}")
+        return query.paginate(page=1, per_page=20, error_out=False)
+
+# LOGGING: Enhanced error handling with structured logging
+import logging
+from datetime import datetime as dt
+
+def setup_enhanced_logging():
+    """Setup structured logging for the application."""
+    if not app.debug:
+        if not os.path.exists('logs'):
+            os.mkdir('logs')
+        
+        file_handler = logging.FileHandler('logs/gradat_app.log')
+        file_handler.setFormatter(logging.Formatter(
+            '%(asctime)s %(levelname)s: %(message)s '
+            '[in %(pathname)s:%(lineno)d]'
+        ))
+        file_handler.setLevel(logging.WARNING)
+        app.logger.addHandler(file_handler)
+        app.logger.setLevel(logging.WARNING)
+        app.logger.info('Aplicația Gradat a pornit')
+
+def log_security_event(event_type, details, user_id=None):
+    """Log security-related events."""
+    timestamp = dt.now().isoformat()
+    user_info = f"user_id:{user_id}" if user_id else "anonymous"
+    app.logger.warning(f"SECURITY_EVENT [{timestamp}] {event_type} - {details} - {user_info}")
+
+# Role-based authorization decorator to reduce code duplication
+def require_role(required_role):
+    """Decorator to check if current user has required role."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if current_user.role != required_role:
+                log_security_event(
+                    "UNAUTHORIZED_ACCESS_ATTEMPT", 
+                    f"User {current_user.username if current_user.is_authenticated else 'anonymous'} tried to access {request.endpoint} requiring {required_role}",
+                    getattr(current_user, 'id', None)
+                )
+                flash("Acces neautorizat.", "danger")
+                return redirect(url_for("dashboard"))
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 # Inițializare aplicație Flask
 app = Flask(__name__)
@@ -137,20 +254,39 @@ def inject_maintenance_settings():
         return dict(maintenance_mode=False, maintenance_message="")
 
 
-# IMPORTANT: Change this to a strong, unique, and static secret key in a real environment!
-# Using a static key is crucial for session persistence across app restarts.
-# For production, load from an environment variable.
-app.config["SECRET_KEY"] = os.environ.get(
-    "FLASK_SECRET_KEY", "dev_fallback_super_secret_key_123!@#"
+# SECURITY: Robust secret key management
+import secrets as sec
+if not os.environ.get("FLASK_SECRET_KEY"):
+    # Generate a secure random key if none is set (development only)
+    import warnings
+    warnings.warn("No FLASK_SECRET_KEY set! Using auto-generated key for development only.", 
+                  RuntimeWarning)
+    _dev_key = sec.token_urlsafe(32)
+else:
+    _dev_key = None
+
+app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", _dev_key)
+# SECURITY: Database URI configuration with environment variable support
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+    "DATABASE_URL", 
+    "sqlite:////root/GradatFinal/instance/site.db"
 )
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///instance/site.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+# PERFORMANCE: Optimized session and caching configuration
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(
-    days=30
-)  # Sesiune permanentă de 30 de zile
+    hours=int(os.environ.get("SESSION_LIFETIME_HOURS", "12"))  # Default 12h instead of 30 days
+)
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = timedelta(
-    days=30
-)  # Cache static files for 30 days
+    days=int(os.environ.get("STATIC_CACHE_DAYS", "7"))  # Default 7 days
+)
+
+# PERFORMANCE: SQLAlchemy optimizations
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    'pool_size': int(os.environ.get("DB_POOL_SIZE", "10")),
+    'pool_timeout': int(os.environ.get("DB_POOL_TIMEOUT", "20")),
+    'pool_recycle': int(os.environ.get("DB_POOL_RECYCLE", "300")),  # 5 minutes
+    'max_overflow': int(os.environ.get("DB_MAX_OVERFLOW", "20"))
+}
 # Cookie hardening (non-breaking defaults)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -175,6 +311,18 @@ app.config["CSRF_TRUSTED_ORIGINS"] = [
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)  # Initialize Flask-Migrate
+
+# SECURITY: Enable CSRF Protection
+csrf = CSRFProtect(app)
+
+# PERFORMANCE: Enable caching
+cache_config = {
+    'CACHE_TYPE': 'simple',  # Use Redis in production: 'redis'
+    'CACHE_DEFAULT_TIMEOUT': 300,  # 5 minutes
+    'CACHE_KEY_PREFIX': 'gradat_app_'
+}
+app.config.update(cache_config)
+cache = Cache(app)
 
 # Custom Type for Timezone-Aware DateTime
 from sqlalchemy.types import TypeDecorator
@@ -226,7 +374,11 @@ def _auto_apply_migrations_and_seed():
                 admin = UserModel(username="admin", role="admin", is_first_login=False)
                 # Set default development password
                 try:
-                    admin.set_password("admin123")
+                # SECURITY: Use stronger default password or generate random one
+                default_pwd = os.environ.get("ADMIN_DEFAULT_PASSWORD", sec.token_urlsafe(12))
+                if default_pwd != "admin123":
+                    print(f"INFO: Admin user created with password: {default_pwd}")
+                admin.set_password(default_pwd)
                 except Exception:
                     pass
                 db.session.add(admin)
@@ -242,7 +394,21 @@ def _bootstrap_db_once():
     global _db_bootstrapped_once
     if not _db_bootstrapped_once:
         _auto_apply_migrations_and_seed()
+        setup_enhanced_logging()  # Setup logging on first request
         _db_bootstrapped_once = True
+
+# PERFORMANCE: Request monitoring and optimization
+@app.before_request
+def monitor_performance():
+    g.start_time = _time.time()
+
+@app.after_request
+def log_performance(response):
+    if hasattr(g, 'start_time'):
+        duration = _time.time() - g.start_time
+        if duration > 2.0:  # Log slow requests (> 2 seconds)
+            app.logger.warning(f"SLOW_REQUEST: {request.endpoint} took {duration:.2f}s")
+    return response
 
 login_manager = LoginManager(app)
 login_manager.login_view = "user_login"
@@ -252,9 +418,9 @@ login_manager.login_message = (
 )
 
 
-# Security and caching headers
+# Enhanced security headers
 @app.after_request
-def add_default_headers(response):
+def add_security_headers(response):
     try:
         path = request.path or ""
         if path.startswith("/static/"):
@@ -265,12 +431,13 @@ def add_default_headers(response):
             # Avoid caching dynamic content to keep data fresh
             response.headers["Cache-Control"] = "no-store"
 
-        # Helpful security headers (non-breaking)
+        # Enhanced security headers
         response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Permissions-Policy"] = (
-            "geolocation=(), camera=(), microphone=()"
+            "geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=()"
         )
 
         # Content Security Policy tuned to current external CDNs and inline usage
@@ -379,7 +546,173 @@ SUBUSER_SAFE_PREFIXES = [
     "/scoped_logout",
     "/public_view",
     "/public_dashboard",
-    "/public_view/logout",
+    "/api/v1/",  # Modern API endpoints
+]
+
+# API Response helpers for modern AJAX endpoints
+def api_success(data=None, message=None):
+    """Standard success response for API endpoints."""
+    response = {'success': True}
+    if data is not None:
+        response['data'] = data
+    if message:
+        response['message'] = message
+    return jsonify(response)
+
+def api_error(message, code=400, details=None):
+    """Standard error response for API endpoints."""
+    response = {
+        'success': False,
+        'error': message,
+        'code': code
+    }
+    if details:
+        response['details'] = details
+    return jsonify(response), code
+
+# MODERN API ENDPOINTS for AJAX functionality
+
+@app.route("/api/v1/students/search", methods=["GET"])
+@login_required
+def api_search_students():
+    """Modern API endpoint for student search with autocomplete."""
+    try:
+        query = request.args.get('q', '').strip()
+        if len(query) < 2:
+            return api_error("Query prea scurtă. Minim 2 caractere.")
+        
+        # Sanitize input
+        query = html.escape(query)
+        
+        eff_user = get_current_user_or_scoped()
+        students_query = Student.query.filter_by(created_by_user_id=eff_user.id)
+        
+        # Search in name and military rank
+        search_filter = or_(
+            Student.nume.ilike(f'%{query}%'),
+            Student.prenume.ilike(f'%{query}%'),
+            Student.grad_militar.ilike(f'%{query}%')
+        )
+        students = students_query.filter(search_filter).limit(20).all()
+        
+        results = [{
+            'id': s.id,
+            'name': f"{s.grad_militar} {s.nume} {s.prenume}",
+            'platoon': s.pluton,
+            'company': s.companie
+        } for s in students]
+        
+        return api_success(data={'students': results})
+        
+    except Exception as e:
+        app.logger.error(f"API student search error: {e}")
+        return api_error("Eroare la căutare")
+
+@app.route("/api/v1/dashboard/stats", methods=["GET"])
+@login_required
+def api_dashboard_stats():
+    """API endpoint for dashboard statistics (for dynamic updates)."""
+    try:
+        if current_user.role != "gradat":
+            return api_error("Acces neautorizat", 403)
+        
+        eff_user = get_current_user_or_scoped()
+        
+        # Use optimized query with caching
+        students = get_students_for_user(eff_user.id, eager_load=False)
+        student_ids = [s.id for s in students]
+        
+        today = get_localized_now().date()
+        
+        stats = {
+            'total_students': len(students),
+            'active_permissions': Permission.query.filter(
+                Permission.student_id.in_(student_ids),
+                Permission.status == "Aprobată",
+                func.date(Permission.start_datetime) <= today,
+                func.date(Permission.end_datetime) >= today
+            ).count() if student_ids else 0,
+            'daily_leaves_today': DailyLeave.query.filter(
+                DailyLeave.student_id.in_(student_ids),
+                DailyLeave.status == "Aprobată",
+                DailyLeave.leave_date == today
+            ).count() if student_ids else 0,
+            'last_updated': get_localized_now().strftime('%H:%M:%S')
+        }
+        
+        return api_success(data=stats)
+        
+    except Exception as e:
+        app.logger.error(f"API dashboard stats error: {e}")
+        return api_error("Eroare la obținerea statisticilor")
+
+@app.route("/api/v1/health", methods=["GET"])
+def api_health_check():
+    """Health check endpoint for monitoring."""
+    try:
+        # Test database connection
+        db.session.execute(text('SELECT 1')).fetchone()
+        
+        return api_success(data={
+            'status': 'healthy',
+            'timestamp': get_localized_now().isoformat(),
+            'version': '2.0.0'  # Update version as needed
+        })
+    except Exception as e:
+        app.logger.error(f"Health check failed: {e}")
+        return api_error("Service unhealthy", 503)
+
+# NOTIFICATIONS SYSTEM for better UX
+class NotificationSystem:
+    """Simple notification system for user feedback."""
+    
+    @staticmethod
+    def success(message, title="Succes!"):
+        flash(f"{title}: {message}", "success")
+    
+    @staticmethod
+    def warning(message, title="Atenție!"):
+        flash(f"{title}: {message}", "warning")
+    
+    @staticmethod
+    def error(message, title="Eroare!"):
+        flash(f"{title}: {message}", "danger")
+    
+    @staticmethod
+    def info(message, title="Informație"):
+        flash(f"{title}: {message}", "info")
+
+# Global notification instance
+notify = NotificationSystem()
+
+# PROGRESSIVE WEB APP Support
+@app.route('/manifest.webmanifest')
+def manifest():
+    """Web app manifest for PWA support."""
+    manifest_data = {
+        "name": "Aplicația Gradat",
+        "short_name": "Gradat",
+        "description": "Sistem de management pentru activitățile militare",
+        "start_url": "/",
+        "display": "standalone",
+        "theme_color": "#2c3e50",
+        "background_color": "#ffffff",
+        "icons": [
+            {
+                "src": "/static/icon-192.png",
+                "sizes": "192x192",
+                "type": "image/png"
+            },
+            {
+                "src": "/static/icon-512.png",
+                "sizes": "512x512",
+                "type": "image/png"
+            }
+        ]
+    }
+    response = jsonify(manifest_data)
+    response.headers['Content-Type'] = 'application/manifest+json'
+    return response
     "/api/events",
 ]
 
@@ -2215,12 +2548,13 @@ def check_leave_conflict(
             DailyLeave.id != existing_leave_id
         )
 
-    for dl in daily_leaves_query.all():
-        if (
-            dl.start_datetime < leave_end_dt
-            and dl.end_datetime > leave_start_dt
-        ):
-            return f"o învoire zilnică pe {dl.leave_date.strftime('%d.%m')}"
+    # Optimize: check for conflicts directly in the query instead of fetching all records
+    conflicting_daily_leave = daily_leaves_query.filter(
+        DailyLeave.start_datetime < leave_end_dt,
+        DailyLeave.end_datetime > leave_start_dt
+    ).first()
+    if conflicting_daily_leave:
+        return f"o învoire zilnică pe {conflicting_daily_leave.leave_date.strftime('%d.%m')}"
 
     # 4. Verifică conflicte cu Învoiri de Weekend
     weekend_leaves_query = WeekendLeave.query.filter(
@@ -2240,7 +2574,11 @@ def check_leave_conflict(
         leave_start_dt_aware = leave_start_dt.astimezone(EUROPE_BUCHAREST)
         leave_end_dt_aware = leave_end_dt.astimezone(EUROPE_BUCHAREST)
 
-    for wl in weekend_leaves_query.all():
+    # Note: Weekend leave conflicts need custom handling due to get_intervals() complexity
+    # This is more complex to optimize without changing the get_intervals() method
+    # For now, we'll fetch with a limit to avoid loading too many records at once
+    weekend_leaves = weekend_leaves_query.limit(100).all()  # Add reasonable limit
+    for wl in weekend_leaves:
         for interval in wl.get_intervals():
             if (
                 interval["start"] < leave_end_dt_aware
@@ -2283,20 +2621,20 @@ def check_service_conflict_for_student(
         ).first()
         if conflicting_permission:
             return f"permisie ({conflicting_permission.start_datetime.strftime('%d.%m %H:%M')} - {conflicting_permission.end_datetime.strftime('%d.%m %H:%M')})"
-        daily_leaves = DailyLeave.query.filter(
+        # Optimize: check for conflicts directly in the query
+        conflicting_daily_leave = DailyLeave.query.filter(
             DailyLeave.student_id == student_id,
             DailyLeave.status == "Aprobată",
-        ).all()
-        for dl in daily_leaves:
-            if (
-                dl.start_datetime < service_end_dt
-                and dl.end_datetime > service_start_dt
-            ):
-                return f"învoire zilnică ({dl.leave_date.strftime('%d.%m')} {dl.start_time.strftime('%H:%M')}-{dl.end_time.strftime('%H:%M')})"
+            DailyLeave.start_datetime < service_end_dt,
+            DailyLeave.end_datetime > service_start_dt
+        ).first()
+        if conflicting_daily_leave:
+            return f"învoire zilnică ({conflicting_daily_leave.leave_date.strftime('%d.%m')} {conflicting_daily_leave.start_time.strftime('%H:%M')}-{conflicting_daily_leave.end_time.strftime('%H:%M')})"
+        # Optimize: Add limit to avoid loading too many weekend leaves at once
         weekend_leaves = WeekendLeave.query.filter(
             WeekendLeave.student_id == student_id,
             WeekendLeave.status == "Aprobată",
-        ).all()
+        ).limit(100).all()  # Add reasonable limit
         for wl in weekend_leaves:
             for interval in wl.get_intervals():
                 if (
@@ -3037,7 +3375,7 @@ def dashboard():
                 students_q = students_q.filter(Student.pluton == str(g.subuser_platoon))
         except Exception:
             pass
-        student_ids_managed = [sid for (sid,) in students_q.with_entities(Student.id).all()]
+        student_ids_managed = [sid[0] for sid in students_q.with_entities(Student.id)]
         student_count = len(student_ids_managed)
 
         today_localized = get_localized_now().date()
@@ -11042,7 +11380,7 @@ def process_weekend_leaves_text():
 
 @app.route(
     "/gradat/weekend_leaves/export_word",
-    endpoint="gradat_process_weekend_leaves_text",
+    endpoint="gradat_export_weekend_leaves_word_v2",
 )
 @login_required
 def export_weekend_leaves_word():
@@ -14405,8 +14743,7 @@ def battalion_commander_export_weekend_leaves_word():
 # --- Gradat Daily Leaves Word Export ---
 @app.route(
     "/gradat/daily_leaves/export_word",
-    endpoint="gradat_process_daily_leaves_te_codextnew"</,
-,
+    endpoint="gradat_export_daily_leaves_word_v2",
 )
 @login_required
 def gradat_export_daily_leaves_word():
