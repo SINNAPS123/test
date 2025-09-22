@@ -3009,6 +3009,18 @@ def logout():
     return redirect(url_for("home"))
 
 # --- Subuser scope and permission enforcement ---
+# Public view logout (for code-based public pages)
+@app.route("/public/logout", methods=["GET"], endpoint="public_view_logout")
+def public_view_logout():
+    # No authenticated session is expected on public views, but ensure any scoped/public artifacts are cleared.
+    try:
+        session.pop("scoped_access", None)
+        session.pop("public_view_access", None)
+    except Exception:
+        pass
+    flash("Ai ieșit din vizualizarea publică.", "info")
+    return redirect(url_for("home"))
+
 @app.before_request
 def _maintenance_mode_gate():
     try:
