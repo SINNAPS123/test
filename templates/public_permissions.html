@@ -4,6 +4,72 @@
 
 {% block content %}
 <div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-id-card-alt me-2"></i>Clasament Permisii</h2>
+        <a href="{{ url_for('public_view_logout') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-sign-out-alt me-1"></i> Ieșire
+        </a>
+    </div>
+
+    <div class="alert alert-info" role="alert">
+        <i class="fas fa-info-circle me-2"></i>
+        Pagina este publică și doar pentru vizualizare. Clasamentul este calculat exclusiv pe baza numărului TOTAL de permisii aprobate, per student, excluzând gradații și personalul (pluton 0 sau desemnați gradat).
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="mb-0"><i class="fas fa-list-ol me-2"></i>Clasament după numărul total de permisii</h4>
+            {% if ranking_data %}
+                <span class="badge bg-light text-dark">Studenți afișați: {{ ranking_data|length }}</span>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            {% if ranking_data %}
+            <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                <table class="table table-sm table-hover table-striped">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th>#</th>
+                            <th>Nume și Prenume</th>
+                            <th class="text-center">Total Permisii</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in ranking_data %}
+                        {% set total = row.total_permissions %}
+                        {% set s = row.student %}
+                        {% set row_class = 'table-danger' if total == 0 else ('table-warning' if total <= 2 else '') %}
+                        <tr class="{{ row_class }}">
+                            <td>{{ loop.index }}</td>
+                            <td>
+                                {{ s.grad_militar }} {{ s.nume }} {{ s.prenume }}
+                                <br>
+                                <small class="text-muted">Pluton: {{ s.pluton }} | Companie: {{ s.companie }}</small>
+                            </td>
+                            <td class="text-center align-middle">
+                                <span class="badge fs-6
+                                    {% if total == 0 %} bg-danger
+                                    {% elif total <= 2 %} bg-warning text-dark
+                                    {% elif total <= 5 %} bg-info text-dark
+                                    {% else %} bg-success {% endif %}">
+                                    {{ total }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+                <p class="text-muted text-center mb-0">Nu există date pentru clasament sau link-ul nu are încă studenți.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
    <div class="d-flex justify-content-between align-items-center mb-4">
         <h2><i class="fas fa-id-card-alt me-"></i>Clasament Permisii</h2>
         <a href="{{ url_for('public_view_logout') }}" class="btn btn-sm btn-outline-secondary">
