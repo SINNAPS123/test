@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block title %}Linkuri Publice Clasament Permisii{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">Linkuri Publice Clasament Permisii</h2>
+    <a href="{{ url_for('admin_list_permissions') if current_user.role == 'admin' else url_for('list_permissions') }}" class="btn btn-outline-primary btn-sm">
+      <i class="fas fa-id-card me-1"></i> Permisii
+    </a>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-5">
+      <div class="card">
+        <div class="card-header"><i class="fas fa-link me-2"></i>Generează Link Public</div>
+        <div class="card-body">
+          <form id="generateForm">
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" id="permanentSwitch">
+              <label class="form-check-label" for="permanentSwitch">Permanent (nu expiră)</label>
+            </div>
+            <div class="mb-3" id="daysWrap">
+              <label class="form-label">Valabilitate (zile)</label>
+              <input type="number" class="form-control" id="daysInput" min="1" max="365" value="90">
+            </div>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" id="regenerateSwitch">
+              <label class="form-check-label" for="regenerateSwitch">Revocă vechile linkuri și creează unul nou</label>
+            </div>
+            <button class="btn btn-primary w-100" type="submit"><i class="fas fa-plus-circle me-1"></i> Generează</button>
+          </form>
+        </div>
+      </div>
+      <div class="alert alert-info mt-3 small">
+        - Linkul public este doar pentru vizualizare.<br>
+        - Poți seta un alias personalizat (ex: /public/p/clasament-permisii) pentru orice cod activ.<br>
+        - Poți revoca oricând un link din listă.
+      </div>
+    </div>
+
+    <div class="col-md-7">
+      <div class="card">
+        <div class="card-header"><i class="fas fa-list me-2"></i>Linkuri Active</div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm table-striped table-hover align-middle">
+              <thead>
+                <tr>
+                  <th style="width: 25%;">Cod</th>
+                  <th>URL Public</th>
+                  <th>Alias Personalizat (Slug)</th>
+                  <th style="width: 18%;">Expiră</th>
+                  <th style="width: 18%;">Acțiuni</th>
+                </tr>
+              </thead>
+              <tbody id="linksTbody">
+                <tr><td colspan="5" class="text-muted small">Se încarcă...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="text-end">
+            <button id="reloadBtn" class="btn btn-outline-secondary btn-sm"><i class="fas fa-sync me-1"></i>Reîncarcă</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+(function() {
+  const $ = (sel, ctx=document) => ctx.querySelector(sel);
+  const $$ = (sel, ctx=document) => Array.from(ctx.querySelectorAll(sel));
+
+  const daysWrap = $('#daysWrap');
+  const permSwitch = $('#permanentSwitch');
+  const genForm = $('#generateForm');
+  const tbody = $('#linksTbody');
+  const reloadBtn = $('#reloadBtn');
+
+  permSwitch.addEventListener('change', () => {
+    daysWrap.style.display = permSwitch.checked ? 'none' : 'block';
+  });
+
+  genForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        permanent: permSwitch.checked,
+        regenerate: $('#regenerateSwitch').checked
+      };
+      if (!payload.permanent) {
+        payload.days = Number($('#daysInput').value || 90);
+      }
+      const res = await fetch("{{ url_for('permissions_generate_public_link') }}", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Eroare la generare.');
+      alert('Link generat: ' + (data.public_url || data.code));
+      await loadLinks();
+    } catch (err) {
+      alert(err.message || 'Eroare.');
+    }
+  });
+
+  async function loadLinks() {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-muted small">Se încarcă...</td></tr>';
+    try {
+      const res = await fetch("{{ url_for('permissions_list_public_links') }}");
+      const data = await res.json();
+      const codes = (data && data.codes) || [];
+      if (codes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-muted small">Nu există linkuri active.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = '';
+      for (const item of codes) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><code>${item.code}</code></td>
+          <td>
+            <a href="${item.public_url}" target="_blank" rel="noopener">${item.public_url}</a>
+          </td>
+          <td data-code="${item.code}">
+            <div class="input-group input-group-sm">
+              <span class="input-group-text">/public/p/</span>
+              <input class="form-control slug-input" placeholder="ex: clasament-permisii" value="" title="Introduceți un alias scurt (litere, cifre, cratimă)" />
+              <button class="btn btn-outline-primary set-slug-btn" type="button" title="Salvează aliasul"><i class="fas fa-save"></i></button>
+            </div>
+            <div class="small text-muted mt-1 current-slug">Niciun alias setat</div>
+          </td>
+          <td>${item.never_expires ? 'Niciodată' : new Date(item.expires_at).toLocaleString()}</td>
+          <td>
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-danger revoke-btn"><i class="fas fa-ban me-1"></i> Revocă</button>
+              <a class="btn btn-outline-secondary" target="_blank" rel="noopener" href="${item.public_url}"><i class="fas fa-external-link-alt"></i></a>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+      // Load current slugs
+      for (const row of $$('.current-slug', tbody)) {
+        const code = row.closest('td').dataset.code;
+        try {
+          const r = await fetch(`{{ url_for('permissions_get_public_slug') }}?code=${encodeURIComponent(code)}`);
+          const j = await r.json();
+          const slug = j.custom_slug;
+          const url = j.slug_url;
+          const input = row.parentElement.querySelector('.slug-input');
+          if (slug) {
+            row.textContent = url || ('/public/p/' + slug);
+            input.value = slug;
+          } else {
+            row.textContent = '—';
+          }
+        } catch(_) {}
+      }
+
+      // Bind actions
+      for (const btn of $$('.revoke-btn', tbody)) {
+        btn.addEventListener('click', async (ev) => {
+          const code = ev.target.closest('tr').querySelector('td code').textContent;
+          if (!confirm('Sigur revoci acest link?')) return;
+          try {
+            const res = await fetch("{{ url_for('permissions_revoke_public_link') }}", {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({code})
+            });
+            const data = await res.json();
+            if (!res.ok || data.ok !== true) throw new Error(data.error || 'Eroare la revocare.');
+            await loadLinks();
+          } catch (err) {
+            alert(err.message || 'Eroare.');
+          }
+        });
+      }
+      for (const btn of $$('.set-slug-btn', tbody)) {
+        btn.addEventListener('click', async (ev) => {
+          const cell = ev.target.closest('td');
+          const code = cell.dataset.code;
+          const input = cell.querySelector('.slug-input');
+          const slug = (input.value || '').trim();
+          try {
+            const res = await fetch("{{ url_for('permissions_set_public_slug') }}", {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({code, slug})
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) throw new Error(data.error || 'Eroare la setarea alias-ului.');
+            await loadLinks();
+          } catch(err) {
+            alert(err.message || 'Eroare.');
+          }
+        });
+      }
+    } catch(err) {
+      tbody.innerHTML = `<tr><td colspan="5" class="text-danger small">Eroare la încărcarea listei: ${err.message || err}</td></tr>`;
+    }
+  }
+
+  reloadBtn.addEventListener('click', loadLinks);
+  loadLinks();
+})();
+</script>
+{% endblock %}
