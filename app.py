@@ -5018,11 +5018,13 @@ def company_commander_dashboard():
 
     # Stats for "NOW"
     now_localized = get_localized_now()
+    # Use naive timestamp for DB comparisons (columns are naive)
+    now_naive = now_localized.replace(tzinfo=None)
     permissions_active_now_company = Permission.query.filter(
         Permission.student_id.in_(student_ids_in_company),
         Permission.status == "Aprobată",
-        Permission.start_datetime <= now_localized,
-        Permission.end_datetime >= now_localized,
+        Permission.start_datetime <= now_naive,
+        Permission.end_datetime >= now_naive,
     ).count()
 
     daily_leaves_active_now_company = 0
@@ -5053,8 +5055,8 @@ def company_commander_dashboard():
 
     services_active_now_company = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids_in_company),
-        ServiceAssignment.start_datetime <= now_localized,
-        ServiceAssignment.end_datetime >= now_localized,
+        ServiceAssignment.start_datetime <= now_naive,
+        ServiceAssignment.end_datetime >= now_naive,
     ).count()
 
     # New service stats for company
@@ -5623,11 +5625,13 @@ def battalion_commander_dashboard():
 
     # Stats for "NOW"
     now_localized_b = get_localized_now()
+    # Use naive timestamp for DB comparisons (columns are naive)
+    now_naive_b = now_localized_b.replace(tzinfo=None)
     permissions_active_now_battalion = Permission.query.filter(
         Permission.student_id.in_(student_ids_in_battalion),
         Permission.status == "Aprobată",
-        Permission.start_datetime <= now_localized_b,
-        Permission.end_datetime >= now_localized_b,
+        Permission.start_datetime <= now_naive_b,
+        Permission.end_datetime >= now_naive_b,
     ).count()
 
     daily_leaves_active_now_battalion = 0
@@ -5656,8 +5660,8 @@ def battalion_commander_dashboard():
 
     services_active_now_battalion = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids_in_battalion),
-        ServiceAssignment.start_datetime <= now_localized_b,
-        ServiceAssignment.end_datetime >= now_localized_b,
+        ServiceAssignment.start_datetime <= now_naive_b,
+        ServiceAssignment.end_datetime >= now_naive_b,
     ).count()
 
     # New service stats for battalion
