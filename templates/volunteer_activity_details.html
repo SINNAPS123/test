@@ -31,13 +31,16 @@
                             <p><small>Selectează studenții care au participat la această activitate:</small></p>
                             <ul class="list-group">
                             {% for student in students_managed %}
-                                <li class="list-group-item">
-                                    <input class="form-check-input me-1" type="checkbox" name="participant_ids[]" value="{{ student.id }}" id="student_{{ student.id }}"
-                                           {% if student.id in current_participant_ids %}checked{% endif %}>
-                                    <label class="form-check-label stretched-link" for="student_{{ student.id }}">
-                                        {{ student.grad_militar }} {{ student.nume }} {{ student.prenume }} ({{ student.pluton }}) - Pcte: {{student.volunteer_points }}
-                                    </label>
-                                </li>
+                                {% set agp = (student.assigned_graded_platoon or '')|string %}
+                                {% if not student.is_platoon_graded_duty and (agp == '' or agp == '0') and student.pluton != '0' %}
+                                    <li class="list-group-item">
+                                        <input class="form-check-input me-1" type="checkbox" name="participant_ids[]" value="{{ student.id }}" id="student_{{ student.id }}"
+                                            {% if student.id in current_participant_ids %}checked{% endif %}>
+                                        <label class="form-check-label stretched-link" for="student_{{ student.id }}">
+                                            {{ student.grad_militar }} {{ student.nume }} {{ student.prenume }} ({{ student.pluton }}) - Pcte: {{student.volunteer_points }}
+                                        </label>
+                                    </li>
+                                {% endif %}
                             {% endfor %}
                             </ul>
                         {% else %}

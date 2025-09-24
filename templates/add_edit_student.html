@@ -117,7 +117,8 @@
                         <hr>
                         <h5 class="mt-3 mb-2">Statut Gradat</h5>
                         <div class="mb-3 form-check">
-                            <input type="checkbox" class="form-check-input" id="is_platoon_graded_duty" name="is_platoon_graded_duty" {% if student and student.is_platoon_graded_duty %}checked{% elif form_data and form_data.is_platoon_graded_duty %}checked{% endif %}>
+                            <input type="checkbox" class="form-check-input" id="is_platoon_graded_duty" name="is_platoon_graded_duty"
+                                {% if (form_data and form_data.is_platoon_graded_duty) or (current_user.role == 'admin' and student and student.is_platoon_graded_duty) %}checked{% endif %}>
                             <label class="form-check-label" for="is_platoon_graded_duty">
                                 Desemnat Gradat în Plutonul Propriu (<strong class="text-info">{{ student.pluton if student else (form_data.pluton if form_data else 'N/A') }}</strong>)
                             </label>
@@ -127,9 +128,16 @@
                         </div>
                         <div class="mb-3">
                             <label for="assigned_graded_platoon" class="form-label">Gradat la Alt Pluton (ID Pluton)</label>
-                            <input type="text" class="form-control form-control-sm" id="assigned_graded_platoon" name="assigned_graded_platoon" value="{{ student.assigned_graded_platoon if student and student.assigned_graded_platoon else (form_data.assigned_graded_platoon if form_data else '') }}" placeholder="ex: 2, 113 (lasă gol dacă nu e cazul)">
+                            <input
+                                type="text"
+                                class="form-control form-control-sm"
+                                id="assigned_graded_platoon"
+                                name="assigned_graded_platoon"
+                                value="{{ (student.assigned_graded_platoon if current_user.role == 'admin' and student and student.assigned_graded_platoon and student.assigned_graded_platoon != '0' else (form_data.assigned_graded_platoon if form_data else '')) }}"
+                                placeholder="ex: 2, 113 (0 sau gol = nu e gradat)">
                             <small class="form-text text-muted">
                                 Dacă studentul este desemnat gradat la un alt pluton decât cel de apartenență, introduceți aici ID-ul acelui pluton.
+                                Lăsați gol sau introduceți 0 dacă NU este gradat la alt pluton.
                             </small>
                         </div>
                         {% endif %}

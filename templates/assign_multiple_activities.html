@@ -29,7 +29,10 @@
                                 <p class="text-muted small">Țineți apăsat Ctrl (sau Cmd pe Mac) pentru a selecta mai mulți studenți.</p>
                                 <select multiple class="form-select" id="student_ids" name="student_ids" size="15" required>
                                     {% for student in students_managed %}
-                                    <option value="{{ student.id }}">{{ student.grad_militar }} {{ student.nume }} {{ student.prenume }} ({{ student.volunteer_points }} pct.)</option>
+                                        {% set agp = (student.assigned_graded_platoon or '')|string %}
+                                        {% if not student.is_platoon_graded_duty and (agp == '' or agp == '0') and student.pluton != '0' %}
+                                            <option value="{{ student.id }}">{{ student.grad_militar }} {{ student.nume }} {{ student.prenume }} ({{ student.volunteer_points }} pct.)</option>
+                                        {% endif %}
                                     {% endfor %}
                                 </select>
                             </div>

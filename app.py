@@ -838,7 +838,7 @@ class Student(db.Model):
         details = []
         if self.is_platoon_graded_duty:
             details.append("Gradat Pluton Propriu")
-        if self.assigned_graded_platoon:
+        if self.assigned_graded_platoon and str(self.assigned_graded_platoon).strip() != "0":
             details.append(f"Gradat la Pl.{self.assigned_graded_platoon}")
         if self.is_smt:
             details.append("SMT")
@@ -4176,9 +4176,10 @@ def admin_edit_student(student_id):
         student_to_edit.is_platoon_graded_duty = (
             "is_platoon_graded_duty" in request.form
         )
-        student_to_edit.assigned_graded_platoon = (
-            form.get("assigned_graded_platoon", "").strip() or None
-        )
+        val_agp = (form.get("assigned_graded_platoon", "").strip() or None)
+        if val_agp in {"0", "None", "none"}:
+            val_agp = None
+        student_to_edit.assigned_graded_platoon = val_agp
         student_to_edit.is_smt = "is_smt" in request.form
         student_to_edit.exemption_details = (
             form.get("exemption_details", "").strip() or None
@@ -4832,9 +4833,9 @@ def _calculate_presence_data(student_list, check_datetime):
             # assigned_graded_platoon indicates assigned to lead another platoon or unit (e.g., '99' for battalion/company level)
             # pluton == '0' is used for company/battalion staff
             assigned_other_pl = (
-                getattr(s, "assigned_graded_platoon", None) or ""
-            ).strip()
-            if assigned_other_pl:
+                (getattr(s, "assigned_graded_platoon", None) or "").strip()
+            )
+            if assigned_other_pl and assigned_other_pl != "0":
                 if assigned_other_pl == "99":
                     present_graded_staff.append(
                         f"{student_display_name} - Gradat (Comp./Bat.)"
@@ -5017,11 +5018,13 @@ def company_commander_dashboard():
 
     # Stats for "NOW"
     now_localized = get_localized_now()
+    # Use naive timestamp for DB comparisons (columns are naive)
+    now_naive = now_localized.replace(tzinfo=None)
     permissions_active_now_company = Permission.query.filter(
         Permission.student_id.in_(student_ids_in_company),
         Permission.status == "Aprobată",
-        Permission.start_datetime <= now_localized,
-        Permission.end_datetime >= now_localized,
+        Permission.start_datetime <= now_naive,
+        Permission.end_datetime >= now_naive,
     ).count()
 
     daily_leaves_active_now_company = 0
@@ -5052,8 +5055,8 @@ def company_commander_dashboard():
 
     services_active_now_company = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids_in_company),
-        ServiceAssignment.start_datetime <= now_localized,
-        ServiceAssignment.end_datetime >= now_localized,
+        ServiceAssignment.start_datetime <= now_naive,
+        ServiceAssignment.end_datetime >= now_naive,
     ).count()
 
     # New service stats for company
@@ -5622,11 +5625,13 @@ def battalion_commander_dashboard():
 
     # Stats for "NOW"
     now_localized_b = get_localized_now()
+    # Use naive timestamp for DB comparisons (columns are naive)
+    now_naive_b = now_localized_b.replace(tzinfo=None)
     permissions_active_now_battalion = Permission.query.filter(
         Permission.student_id.in_(student_ids_in_battalion),
         Permission.status == "Aprobată",
-        Permission.start_datetime <= now_localized_b,
-        Permission.end_datetime >= now_localized_b,
+        Permission.start_datetime <= now_naive_b,
+        Permission.end_datetime >= now_naive_b,
     ).count()
 
     daily_leaves_active_now_battalion = 0
@@ -5655,8 +5660,8 @@ def battalion_commander_dashboard():
 
     services_active_now_battalion = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids_in_battalion),
-        ServiceAssignment.start_datetime <= now_localized_b,
-        ServiceAssignment.end_datetime >= now_localized_b,
+        ServiceAssignment.start_datetime <= now_naive_b,
+        ServiceAssignment.end_datetime >= now_naive_b,
     ).count()
 
     # New service stats for battalion
@@ -6661,7 +6666,11 @@ def volunteer_home():
         Student.query.filter(
             Student.created_by_user_id == user.id,
             Student.is_platoon_graded_duty == False,
-            or_(Student.assigned_graded_platoon == None, Student.assigned_graded_platoon == ""),
+            or_(
+                Student.assigned_graded_platoon == None,
+                Student.assigned_graded_platoon == "",
+                Student.assigned_graded_platoon == "0",
+            ),
             Student.pluton != "0",
         )
         .order_by(Student.volunteer_points.desc(), Student.nume)
@@ -7063,7 +7072,11 @@ def _generate_eligible_volunteers(
     # Exclude platoon/company/battalion graded duty (gradați)
     students_query = students_query.filter(Student.is_platoon_graded_duty == False)
     students_query = students_query.filter(
-        or_(Student.assigned_graded_platoon == None, Student.assigned_graded_platoon == "")
+        or_(
+            Student.assigned_graded_platoon == None,
+            Student.assigned_graded_platoon == "",
+            Student.assigned_graded_platoon == "0",
+        )
     )
     # Exclude personnel marked as company/battalion staff by convention (pluton == '0')
     students_query = students_query.filter(Student.pluton != "0")
@@ -7245,7 +7258,11 @@ def public_volunteer_view_code(code):
         Student.query.filter(
             Student.created_by_user_id == user.id,
             Student.is_platoon_graded_duty == False,
-            or_(Student.assigned_graded_platoon == None, Student.assigned_graded_platoon == ""),
+            or_(
+                Student.assigned_graded_platoon == None,
+                Student.assigned_graded_platoon == "",
+                Student.assigned_graded_platoon == "0",
+            ),
             Student.pluton != "0",
         )
         .order_by(Student.volunteer_points.desc(), Student.nume)
@@ -7269,6 +7286,53 @@ def public_volunteer_view_slug(slug):
 
     # Redirect to the code-based URL to reuse the rendering logic
     return redirect(url_for('public_volunteer_view_code', code=sac.code))
+
+# --- Public Permissions Ranking Views ---
+@app.route("/public/permissions/<code>", methods=["GET"], endpoint="public_permissions_view_code")
+def public_permissions_view_code(code):
+    now_utc = datetime.now(timezone.utc)
+    sac = ScopedAccessCode.query.filter_by(code=code, is_active=True).first()
+    if not sac or sac.expires_at <= now_utc:
+        return "Link invalid sau expirat.", 404
+
+    user = db.session.get(User, sac.created_by_user_id)
+    if not user:
+        return "Utilizatorul asociat acestui link nu mai există.", 404
+
+    # All students managed by this user (we do not exclude gradați here unless required)
+    students = Student.query.filter_by(created_by_user_id=user.id).all()
+
+    # Aggregate total approved permissions per student
+    counts = dict(
+        db.session.query(Permission.student_id, func.count(Permission.id))
+        .join(Student, Permission.student_id == Student.id)
+        .filter(
+            Student.created_by_user_id == user.id,
+            Permission.status == "Aprobată",
+        )
+        .group_by(Permission.student_id)
+        .all()
+    )
+
+    students_with_counts = []
+    for s in students:
+        total_perms = counts.get(s.id, 0)
+        students_with_counts.append((s, total_perms))
+
+    students_with_counts.sort(key=lambda x: (-x[1], x[0].nume, x[0].prenume))
+
+    return render_template(
+        "public_permissions.html",
+        students_with_counts=students_with_counts,
+    )
+
+@app.route("/public/p/<slug>", methods=["GET"], endpoint="public_permissions_view_slug")
+def public_permissions_view_slug(slug):
+    now_utc = datetime.now(timezone.utc)
+    sac = ScopedAccessCode.query.filter_by(custom_slug=slug, is_active=True).first()
+    if not sac or sac.expires_at <= now_utc:
+        return "Link invalid sau expirat.", 404
+    return redirect(url_for("public_permissions_view_code", code=sac.code))
 
 
 # === Public Permissions Ranking (similar to Volunteer public ranking) ===
