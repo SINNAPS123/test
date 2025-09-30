@@ -10,7 +10,7 @@
   {% endif %}
 </div>
 
-<form method="POST" class="card p-3 shadow-sm">
+<form method="POST" class="card p-3 shadow-sm" id="public-situation-form">
   <div class="alert alert-info py-2 small" role="alert">
     Câmpurile marcate cu <strong>*</strong> sunt obligatorii.
   </div>
@@ -39,11 +39,11 @@
 
       {# Numeric, Email, Phone #}
       {% elif ftype == 'number' %}
-        <input type="number" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or '' }}" {% if frequired %}required{% endif %}>
+        <input type="number" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or '' }}" {% if frerequired %}required{% endif %}>
       {% elif ftype == 'email' %}
-        <input type="email" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or 'ex: nume@exemplu.ro' }}" {% if frequired %}required{% endif %}>
+        <input type="email" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or 'ex: nume@exemplu.ro' }}\" {% if frequired %}required{% endif %}>
       {% elif ftype == 'tel' %}
-        <input type="tel" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or 'ex: 07xx xxx xxx' }}" {% if frequired %}required{% endif %}>
+        <input type="tel" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or 'ex: 07xx xxx xxx' }}\" {% if frequired %}required{% endif %}>
 
       {# Select with options #}
       {% elif ftype == 'select' and f.options %}
@@ -93,7 +93,7 @@
   {% endfor %}
 
   <div class="d-flex gap-2">
-    <button type="submit" class="btn btn-primary">
+    <button type="submit" class="btn btn-primary" id="submit-btn">
       <i class="fas fa-paper-plane me-2"></i> Trimite
     </button>
     <a href="{{ url_for('public_view_login') }}" class="btn btn-outline-secondary">Înapoi</a>
@@ -103,4 +103,49 @@
     Datele sunt folosite doar pentru această raportare și sunt stocate securizat.
   </p>
 </form>
+
+<script>
+  (function() {
+    try {
+      const form = document.getElementById('public-situation-form');
+      const btn = document.getElementById('submit-btn');
+      // Build a localStorage key unique per situation (uses public_code when available)
+      const key = 'sit_submit_' + ({{ situation.public_code and ('\"' ~ situation.public_code ~ '\"') or '\"' ~ situation.id ~ '\"' }});
+      // Prevent multiple rapid submissions
+      let submitting = false;
+      if (form && btn) {
+        form.addEventListener('submit', function(e) {
+          if (submitting) {
+            e.preventDefault();
+            return false;
+          }
+          submitting = true;
+          // Disable button to prevent double-clicks
+          btn.disabled = true;
+          btn.classList.add('disabled');
+          btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Trimitere...';
+
+          // Mark submit time (10 minutes window)
+          try {
+            const now = Date.now();
+            localStorage.setItem(key, String(now));
+          } catch (_) {}
+        });
+      }
+
+      // Optional: if user refreshes immediately after submit, avoid accidental re-submission via browser UI
+      try {
+        const last = parseInt(localStorage.getItem(key) || '0', 10);
+        const tenMinutes = 10 * 60 * 1000;
+        if (last && (Date.now() - last) < tenMinutes) {
+          // Show a gentle info message and keep form enabled (server uses PRG ideally)
+          const info = document.createElement('div');
+          info.className = 'alert alert-info mt-3';
+          info.innerText = 'Am primit o trimitere recentă. Dacă ați apăsat din greșeală refresh, nu este nevoie să retrimiteți.';
+          form.parentNode.insertBefore(info, form);
+        }
+      } catch (_) {}
+    } catch (_) {}
+  })();
+</script>
 {% endblock %}
