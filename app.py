@@ -1625,6 +1625,156 @@ class SituationEntry(db.Model):
     def __repr__(self):
         return f"<SituationEntry {self.id} for Situation {self.situation_id}>"
 
+# --- Situations Entries: Edit/Delete routes ---
+@app.route("/gradat/situations/<int:situation_id>/entries/<int:entry_id>/edit", methods=["GET", "POST"], endpoint="edit_situation_entry")
+@login_required
+def edit_situation_entry(situation_id, entry_id):
+    # Load entry and related situation
+    entry = SituationEntry.query.get_or_404(entry_id)
+    situation = entry.situation
+    if not situation or situation.id != situation_id:
+        flash("Situația nu a fost găsită.", "danger")
+        return redirect(url_for("list_situations"))
+
+    # Permission: only creator gradat (effective) or admin can edit
+    eff_user = get_current_user_or_scoped()
+    if current_user.role != "admin":
+        if not eff_user or situation.created_by_user_id != eff_user.id:
+            flash("Acces neautorizat pentru editarea acestui răspuns.", "danger")
+            return redirect(url_for("situation_entries", situation_id=situation.id))
+
+    fields = situation.get_fields() or []
+    # Build students list only if a student_select field exists
+    has_student_select = any((f.get("type") == "student_select") for f in fields if isinstance(f, dict))
+    students = []
+    if has_student_select and eff_user:
+        students_q = Student.query.filter_by(created_by_user_id=eff_user.id)
+        try:
+            if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+                students_q = students_q.filter(Student.pluton == str(g.subuser_platoon))
+        except Exception:
+            pass
+        students = students_q.order_by(Student.nume.asc(), Student.prenume.asc()).all()
+
+    existing_data = entry.get_data() or {}
+
+    if request.method == "POST":
+        form = request.form
+        new_data = {}
+        new_student_id = entry.student_id
+
+        for f in fields:
+            if not isinstance(f, dict):
+                continue
+            name = (f.get("name") or "").strip()
+            ftype = (f.get("type") or "text").strip()
+            if not name:
+                continue
+
+            if ftype == "multiselect":
+                vals = form.getlist(name)
+                new_data[name] = vals
+            elif ftype == "student_select":
+                sid_raw = form.get(name) or ""
+                try:
+                    sid_val = int(sid_raw)
+                except Exception:
+                    sid_val = None
+                new_student_id = sid_val
+                new_data[name] = sid_raw
+            else:
+                new_data[name] = form.get(name, "")
+
+        details_before = {
+            "student_id": entry.student_id,
+            "data": existing_data,
+        }
+        entry.data = json.dumps(new_data, ensure_ascii=False)
+        entry.student_id = new_student_id
+
+        try:
+            db.session.flush()
+            log_action(
+                "UPDATE_SITUATION_ENTRY_SUCCESS",
+                target_model_name="SituationEntry",
+                target_id=entry.id,
+                details_before_dict=details_before,
+                details_after_dict={"student_id": entry.student_id, "data": new_data},
+                description=f"Edited entry for situation {situation.id}",
+            )
+            db.session.commit()
+            flash("Răspunsul a fost actualizat.", "success")
+            return redirect(url_for("situation_entries", situation_id=situation.id))
+        except Exception as e:
+            db.session.rollback()
+            log_action(
+                "UPDATE_SITUATION_ENTRY_FAIL",
+                target_model_name="SituationEntry",
+                target_id=entry.id,
+                details_before_dict=details_before,
+                description=f"DB error: {e}",
+            )
+            db.session.commit()
+            flash("Eroare la actualizarea răspunsului.", "danger")
+            # Fall through to re-render with posted data
+            existing_data = new_data
+
+    return render_template(
+        "edit_situation_entry.html",
+        situation=situation,
+        entry=entry,
+        fields=fields,
+        students=students,
+        existing_data=existing_data,
+    )
+
+
+@app.route("/gradat/situations/<int:situation_id>/entries/<int:entry_id>/delete", methods=["POST"], endpoint="delete_situation_entry")
+@login_required
+def delete_situation_entry(situation_id, entry_id):
+    entry = SituationEntry.query.get_or_404(entry_id)
+    situation = entry.situation
+    if not situation or situation.id != situation_id:
+        flash("Situația nu a fost găsită.", "danger")
+        return redirect(url_for("list_situations"))
+
+    eff_user = get_current_user_or_scoped()
+    if current_user.role != "admin":
+        if not eff_user or situation.created_by_user_id != eff_user.id:
+            flash("Acces neautorizat pentru ștergere.", "danger")
+            return redirect(url_for("situation_entries", situation_id=situation.id))
+
+    details_before = {
+        "id": entry.id,
+        "situation_id": entry.situation_id,
+        "student_id": entry.student_id,
+        "data": entry.get_data(),
+    }
+    try:
+        db.session.delete(entry)
+        log_action(
+            "DELETE_SITUATION_ENTRY_SUCCESS",
+            target_model_name="SituationEntry",
+            target_id=entry_id,
+            details_before_dict=details_before,
+            description=f"Deleted entry from situation {situation.id}",
+        )
+        db.session.commit()
+        flash("Răspunsul a fost șters.", "success")
+    except Exception as e:
+        db.session.rollback()
+        log_action(
+            "DELETE_SITUATION_ENTRY_FAIL",
+            target_model_name="SituationEntry",
+            target_id=entry_id,
+            details_before_dict=details_before,
+            description=f"DB error: {e}",
+        )
+        db.session.commit()
+        flash("Eroare la ștergere.", "danger")
+
+    return redirect(url_for("situation_entries", situation_id=situation.id))
+
 
 @login_manager.user_loader
 def load_user(user_id):

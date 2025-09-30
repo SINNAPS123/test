@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Editează Răspuns - {{ situation.title }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0"><i class="fas fa-edit me-2"></i> Editează Răspuns</h2>
+  <a href="{{ url_for('situation_entries', situation_id=situation.id) }}" class="btn btn-outline-secondary btn-sm">
+    &laquo; Înapoi la Răspunsuri
+  </a>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header">
+    <strong>{{ situation.title }}</strong>
+  </div>
+  <div class="card-body">
+    <form method="POST" action="{{ url_for('edit_situation_entry', situation_id=situation.id, entry_id=entry.id) }}">
+      <div class="row g-3">
+        {% set data = existing_data or entry.get_data() %}
+        {% for f in fields %}
+          {% set fname   = f.name %}
+          {% set flabel  = f.label or f.name %}
+          {% set ftype   = f.type or 'text' %}
+          {% set freq    = f.required %}
+          <div class="col-12">
+            <label class="form-label">{{ flabel }}{% if freq %} <span class="text-danger">*</span>{% endif %}</label>
+
+            {% if ftype == 'student_select' %}
+              <select name="{{ fname }}" class="form-select" {% if freq %}required{% endif %}>
+                <option value="">— Selectează student —</option>
+                {% for s in students or [] %}
+                  <option value="{{ s.id }}" {% if (entry.student_id and s.id == entry.student_id) or (data.get(fname)|int == s.id) %}selected{% endif %}>
+                    {{ s.grad_militar }} {{ s.nume }} {{ s.prenume }} (Pl. {{ s.pluton }})
+                  </option>
+                {% endfor %}
+              </select>
+
+            {% elif ftype == 'textarea' %}
+              <textarea name="{{ fname }}" class="form-control" rows="3" {% if freq %}required{% endif %}>{{ data.get(fname, '') }}</textarea>
+
+            {% elif ftype == 'select' %}
+              <select name="{{ fname }}" class="form-select" {% if freq %}required{% endif %}>
+                <option value="">— Selectează —</option>
+                {% for opt in f.options or [] %}
+                  <option value="{{ opt }}" {% if data.get(fname, '') == opt %}selected{% endif %}>{{ opt }}</option>
+                {% endfor %}
+              </select>
+
+            {% elif ftype == 'multiselect' %}
+              <select name="{{ fname }}" class="form-select" multiple {% if freq %}required{% endif %}>
+                {% set selected_vals = data.get(fname, []) %}
+                {% for opt in f.options or [] %}
+                  <option value="{{ opt }}" {% if opt in selected_vals %}selected{% endif %}>{{ opt }}</option>
+                {% endfor %}
+              </select>
+
+            {% elif ftype == 'date' %}
+              <input type="date" name="{{ fname }}" class="form-control" value="{{ data.get(fname, '') }}" {% if freq %}required{% endif %}>
+
+            {% elif ftype == 'time' %}
+              <input type="time" name="{{ fname }}" class="form-control" value="{{ data.get(fname, '') }}" {% if freq %}required{% endif %}>
+
+            {% elif ftype == 'number' %}
+              <input type="number" name="{{ fname }}" class="form-control" value="{{ data.get(fname, '') }}" {% if freq %}required{% endif %}>
+
+            {% else %}
+              <input type="text" name="{{ fname }}" class="form-control" value="{{ data.get(fname, '') }}" {% if freq %}required{% endif %}>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center mt-4">
+        <a href="{{ url_for('situation_entries', situation_id=situation.id) }}" class="btn btn-secondary">
+          Anulează
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-save me-1"></i> Salvează modificările
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
