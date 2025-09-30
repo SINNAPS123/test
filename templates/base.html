@@ -279,6 +279,53 @@
         })();
     </script>
 
+    <script>
+    (function() {
+        try {
+            var token = "{{ csrf_token() }}";
+            window.CSRF_TOKEN = token;
+            // Inject hidden CSRF field into all non-GET forms
+            document.addEventListener('DOMContentLoaded', function() {
+                try {
+                    document.querySelectorAll('form').forEach(function(form) {
+                        var method = (form.getAttribute('method') || 'GET').toUpperCase();
+                        if (method !== 'GET' && !form.querySelector('input[name="csrf_token"]')) {
+                            var inp = document.createElement('input');
+                            inp.type = 'hidden';
+                            inp.name = 'csrf_token';
+                            inp.value = token;
+                            form.appendChild(inp);
+                        }
+                    });
+                } catch (e) {}
+            });
+            // Patch fetch to include CSRF header for same-origin state-changing requests
+            var _fetch = window.fetch;
+            window.fetch = function(input, init) {
+                init = init || {};
+                var url = (typeof input === 'string') ? input : (input && input.url) || '';
+                var method = (init.method || 'GET').toUpperCase();
+                var isSameOrigin = true;
+                try {
+                    var u = new URL(url, window.location.origin);
+                    isSameOrigin = (u.origin === window.location.origin);
+                } catch (e) {}
+                if (isSameOrigin && method !== 'GET') {
+                    init.headers = init.headers || {};
+                    if (init.headers instanceof Headers) {
+                        init.headers.set('X-CSRFToken', token);
+                    } else if (Array.isArray(init.headers)) {
+                        init.headers.push(['X-CSRFToken', token]);
+                    } else {
+                        init.headers['X-CSRFToken'] = token;
+                    }
+                }
+                return _fetch(input, init);
+            };
+        } catch (e) {}
+    })();
+    </script>
+
     {% block scripts %}{% endblock %}
     {% block extra_js %}{% endblock %}
 </body>
