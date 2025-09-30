@@ -2577,11 +2577,12 @@ def check_leave_conflict(
             DailyLeave.id != existing_leave_id
         )
 
-    # Optimize: check for conflicts directly in the query instead of fetching all records
-    conflicting_daily_leave = daily_leaves_query.filter(
-        DailyLeave.start_datetime < leave_end_dt,
-        DailyLeave.end_datetime > leave_start_dt
-    ).first()
+    # Check conflicts in Python since start/end are computed properties, not DB columns
+    conflicting_daily_leave = None
+    for dl in daily_leaves_query.limit(200).all():
+        if dl.start_datetime < leave_end_dt and dl.end_datetime > leave_start_dt:
+            conflicting_daily_leave = dl
+            break
     if conflicting_daily_leave:
         return f"o învoire zilnică pe {conflicting_daily_leave.leave_date.strftime('%d.%m')}"
 
@@ -7316,52 +7317,7 @@ def public_volunteer_view_slug(slug):
     # Redirect to the code-based URL to reuse the rendering logic
     return redirect(url_for('public_volunteer_view_code', code=sac.code))
 
-# --- Public Permissions Ranking Views ---
-@app.route("/public/permissions/<code>", methods=["GET"], endpoint="public_permissions_view_code")
-def public_permissions_view_code(code):
-    now_utc = datetime.now(timezone.utc)
-    sac = ScopedAccessCode.query.filter_by(code=code, is_active=True).first()
-    if not sac or sac.expires_at <= now_utc:
-        return "Link invalid sau expirat.", 404
 
-    user = db.session.get(User, sac.created_by_user_id)
-    if not user:
-        return "Utilizatorul asociat acestui link nu mai există.", 404
-
-    # All students managed by this user (we do not exclude gradați here unless required)
-    students = Student.query.filter_by(created_by_user_id=user.id).all()
-
-    # Aggregate total approved permissions per student
-    counts = dict(
-        db.session.query(Permission.student_id, func.count(Permission.id))
-        .join(Student, Permission.student_id == Student.id)
-        .filter(
-            Student.created_by_user_id == user.id,
-            Permission.status == "Aprobată",
-        )
-        .group_by(Permission.student_id)
-        .all()
-    )
-
-    students_with_counts = []
-    for s in students:
-        total_perms = counts.get(s.id, 0)
-        students_with_counts.append((s, total_perms))
-
-    students_with_counts.sort(key=lambda x: (-x[1], x[0].nume, x[0].prenume))
-
-    return render_template(
-        "public_permissions.html",
-        students_with_counts=students_with_counts,
-    )
-
-@app.route("/public/p/<slug>", methods=["GET"], endpoint="public_permissions_view_slug")
-def public_permissions_view_slug(slug):
-    now_utc = datetime.now(timezone.utc)
-    sac = ScopedAccessCode.query.filter_by(custom_slug=slug, is_active=True).first()
-    if not sac or sac.expires_at <= now_utc:
-        return "Link invalid sau expirat.", 404
-    return redirect(url_for("public_permissions_view_code", code=sac.code))
 
 
 # === Public Permissions Ranking (similar to Volunteer public ranking) ===
