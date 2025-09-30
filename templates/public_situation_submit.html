@@ -10,6 +10,13 @@
   {% endif %}
 </div>
 
+{# Success notice for PRG: server should redirect with ?ok=1 after saving #}
+{% if request.args.get('ok') %}
+  <div class="alert alert-success">
+    Formularul a fost trimis. Mulțumim!
+  </div>
+{% endif %}
+
 <form method="POST" class="card p-3 shadow-sm" id="public-situation-form">
   <div class="alert alert-info py-2 small" role="alert">
     Câmpurile marcate cu <strong>*</strong> sunt obligatorii.
@@ -39,11 +46,11 @@
 
       {# Numeric, Email, Phone #}
       {% elif ftype == 'number' %}
-        <input type="number" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or '' }}" {% if frerequired %}required{% endif %}>
+        <input type="number" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or '' }}" {% if frequired %}required{% endif %}>
       {% elif ftype == 'email' %}
-        <input type="email" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or 'ex: nume@exemplu.ro' }}\" {% if frequired %}required{% endif %}>
+        <input type="email" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or 'ex: nume@exemplu.ro' }}" {% if frequired %}required{% endif %}>
       {% elif ftype == 'tel' %}
-        <input type="tel" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or 'ex: 07xx xxx xxx' }}\" {% if frequired %}required{% endif %}>
+        <input type="tel" class="form-control" name="{{ fname }}" value="{{ val }}" placeholder="{{ placeholder or 'ex: 07xx xxx xxx' }}" {% if frequired %}required{% endif %}>
 
       {# Select with options #}
       {% elif ftype == 'select' and f.options %}
