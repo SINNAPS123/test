@@ -14,7 +14,7 @@ from flask import (
 from flask_compress import Compress
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate  # Added for database migrations
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask_caching import Cache
 from sqlalchemy.orm import joinedload
 import sqlalchemy as sa  # Adăugat pentru server_default=sa.text()
@@ -314,6 +314,15 @@ migrate = Migrate(app, db)  # Initialize Flask-Migrate
 
 # SECURITY: Enable CSRF Protection
 csrf = CSRFProtect(app)
+
+@app.context_processor
+def inject_csrf_token():
+    try:
+        return dict(csrf_token=generate_csrf)
+    except Exception:
+        # Fallback: provide empty token to avoid template errors; CSRF will still enforce on POST
+        return dict(csrf_token=lambda:_code "new"</)
+)
 
 # PERFORMANCE: Enable caching
 cache_config = {
