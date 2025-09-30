@@ -321,8 +321,7 @@ def inject_csrf_token():
         return dict(csrf_token=generate_csrf)
     except Exception:
         # Fallback: provide empty token to avoid template errors; CSRF will still enforce on POST
-        return dict(csrf_token=lambda:_code "new"</)
-)
+        return dict(csrf_token=lambda: "")
 
 # PERFORMANCE: Enable caching
 cache_config = {
@@ -2660,15 +2659,18 @@ def check_service_conflict_for_student(
         ).first()
         if conflicting_permission:
             return f"permisie ({conflicting_permission.start_datetime.strftime('%d.%m %H:%M')} - {conflicting_permission.end_datetime.strftime('%d.%m %H:%M')})"
-        # Optimize: check for conflicts directly in the query
-        conflicting_daily_leave = DailyLeave.query.filter(
+        # Check daily leaves overlap in Python (start/end are computed properties)
+        # Narrow by date window to avoid scanning too many rows
+        min_date = (service_start_dt - timedelta(days=1)).date()
+        max_date = service_end_dt.date()
+        daily_leaves = DailyLeave.query.filter(
             DailyLeave.student_id == student_id,
             DailyLeave.status == "Aprobată",
-            DailyLeave.start_datetime < service_end_dt,
-            DailyLeave.end_datetime > service_start_dt
-        ).first()
-        if conflicting_daily_leave:
-            return f"învoire zilnică ({conflicting_daily_leave.leave_date.strftime('%d.%m')} {conflicting_daily_leave.start_time.strftime('%H:%M')}-{conflicting_daily_leave.end_time.strftime('%H:%M')})"
+            DailyLeave.leave_date.between(min_date, max_date)
+        ).limit(200).all()
+        for dl in daily_leaves:
+            if dl.start_datetime < service_end_dt and dl.end_datetime > service_start_dt:
+                return f"învoire zilnică ({dl.leave_date.strftime('%d.%m')} {dl.start_time.strftime('%H:%M')}-{dl.end_time.strftime('%H:%M')})"
         # Optimize: Add limit to avoid loading too many weekend leaves at once
         weekend_leaves = WeekendLeave.query.filter(
             WeekendLeave.student_id == student_id,
