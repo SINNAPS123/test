@@ -374,11 +374,11 @@ def _auto_apply_migrations_and_seed():
                 admin = UserModel(username="admin", role="admin", is_first_login=False)
                 # Set default development password
                 try:
-                # SECURITY: Use stronger default password or generate random one
-                default_pwd = os.environ.get("ADMIN_DEFAULT_PASSWORD", sec.token_urlsafe(12))
-                if default_pwd != "admin123":
-                    print(f"INFO: Admin user created with password: {default_pwd}")
-                admin.set_password(default_pwd)
+                    # SECURITY: Use stronger default password or generate random one
+                    default_pwd = os.environ.get("ADMIN_DEFAULT_PASSWORD", sec.token_urlsafe(12))
+                    if default_pwd != "admin123":
+                        print(f"INFO: Admin user created with password: {default_pwd}")
+                    admin.set_password(default_pwd)
                 except Exception:
                     pass
                 db.session.add(admin)
@@ -608,6 +608,37 @@ def api_search_students():
         app.logger.error(f"API student search error: {e}")
         return api_error("Eroare la căutare")
 
+@app.route("/api/v1/students/<int:student_id>/permission_defaults", methods=["GET"])
+@login_required
+def api_student_permission_defaults(student_id):
+    """
+    Returnează ultimele detalii de permisie (destinație, transport, motiv) pentru studentul dat.
+    Acestea sunt extrase din ultima permisie înregistrată pentru student.
+    """
+    try:
+        eff_user = get_current_user_or_scoped()
+        st = db.session.get(Student, student_id)
+        if not st:
+            return api_error("Student inexistent.", 404)
+        if current_user.role != "admin":
+            if st.created_by_user_id != eff_user.id:
+                return api_error("Acces neautorizat la acest student.", 403)
+
+        last_perm = (
+            Permission.query.filter_by(student_id=student_id)
+            .order_by(Permission.id.desc())
+            .first()
+        )
+        data = {
+            "destination": last_perm.destination if last_perm and last_perm.destination else "",
+            "transport_mode": last_perm.transport_mode if last_perm and last_perm.transport_mode else "",
+            "reason": last_perm.reason if last_perm and last_perm.reason else "",
+        }
+        return api_success(data=data)
+    except Exception as e:
+        app.logger.error(f"API permission defaults error: {e}")
+        return api_error("Eroare la obținerea setărilor implicite.")
+
 @app.route("/api/v1/dashboard/stats", methods=["GET"])
 @login_required
 def api_dashboard_stats():
@@ -713,8 +744,6 @@ def manifest():
     response = jsonify(manifest_data)
     response.headers['Content-Type'] = 'application/manifest+json'
     return response
-    "/api/events",
-]
 
 # --- Simple in-memory rate limiting (per-process) ---
 _RATE_LIMIT_BUCKETS = {}

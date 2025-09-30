@@ -88,4 +88,44 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Detect if we are editing an existing permission or creating a new one
+    var isEdit = {{ 'true' if permission else 'false' }};
+    const studentSelect = document.getElementById('student_id');
+    const destField = document.getElementById('destination');
+    const transportField = document.getElementById('transport_mode');
+    const reasonField = document.getElementById('reason');
+
+    async function loadDefaults(studentId) {
+        if (!studentId) return;
+        try {
+            const resp = await fetch(`/api/v1/students/${studentId}/permission_defaults`, { credentials: 'same-origin' });
+            const data = await resp.json();
+            if (data && data.success && data.data) {
+                // Populate only empty fields to avoid overwriting user input
+                if (destField && !destField.value) destField.value = data.data.destination || '';
+                if (transportField && !transportField.value) transportField.value = data.data.transport_mode || '';
+                if (reasonField && !reasonField.value) reasonField.value = data.data.reason || '';
+            }
+        } catch (e) {
+            // Silent fail - this is a convenience feature only
+            console.warn('Nu s-au putut încărca detaliile implicite ale permisiei pentru student.', e);
+        }
+    }
+
+    if (studentSelect) {
+        // When student changes, try to load defaults (fills only empty fields)
+        studentSelect.addEventListener('change', function () {
+            loadDefaults(this.value);
+        });
+
+        // On initial load, if adding a new permission and a student is preselected, try to prefill
+        if (!isEdit && studentSelect.value) {
+            loadDefaults(studentSelect.value);
+        }
+    }
+});
+</script>
 {% endblock %}
