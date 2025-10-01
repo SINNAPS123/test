@@ -82,6 +82,11 @@
                     <div class="col-md-3">
                         <label for="common_end_datetime" class="form-label">Sfârșit</label>
                         <input type="datetime-local" class="form-control" id="common_end_datetime">
+                        <div class="input-group input-group-sm mt-2">
+                            <span class="input-group-text">Durată (ore)</span>
+                            <input type="number" class="form-control" id="common_duration_hours" step="0.5" min="0" placeholder="ex: 12">
+                        </div>
+                        <small class="form-text text-muted">Optional: dacă specificați durata și lăsați câmpul „Sfârșit” gol, se va calcula automat din „Început”.</small>
                     </div>
                     <div class="col-md-2">
                         <label for="common_destination" class="form-label">Destinația</label>
@@ -253,17 +258,74 @@ document.addEventListener('DOMContentLoaded', function() {
     const permissionDetailsForm = document.getElementById('permissionDetailsForm');
     if (permissionDetailsForm) {
         const fillAllButton = document.getElementById('fillAllButton');
-        fillAllButton.addEventListener('click', function() {
-            const commonStart = document.getElementById('common_start_datetime').value;
-            const commonEnd = document.getElementById('common_end_datetime').value;
-            const commonDest = document.getElementById('common_destination').value;
-            const commonTransport = document.getElementById('common_transport_mode').value;
 
-            document.querySelectorAll('.common-start').forEach(input => input.value = commonStart);
-            document.querySelectorAll('.common-end').forEach(input => input.value = commonEnd);
-            document.querySelectorAll('.common-dest').forEach(input => input.value = commonDest);
-            document.querySelectorAll('.common-transport').forEach(input => input.value = commonTransport);
-        });
+        // Helper to format a Date as YYYY-MM-DDTHH:MM (for input[type="datetime-local"])
+        const formatLocal = (d) => {
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        };
+
+        if (fillAllButton) {
+            fillAllButton.addEventListener('click', function() {
+                const commonStartVal = (document.getElementById('common_start_datetime').value || '').trim();
+                let commonEndVal = (document.getElementById('common_end_datetime').value || '').trim();
+
+                // Optional duration: if provided and end is empty, compute end = start + duration
+                const durInput = document.getElementById('common_duration_hours');
+                const durRaw = durInput ? durInput.value : '';
+                const durHours = durRaw !== '' ? parseFloat(durRaw) : NaN;
+
+                if (!commonEndVal && commonStartVal && !Number.isNaN(durHours) && durHours > 0) {
+                    const base = new Date(commonStartVal);
+                    // Add duration in minutes (support fractions like 1.5 hours)
+                    base.setMinutes(base.getMinutes() + Math.round(durHours * 60));
+                    commonEndVal = formatLocal(base);
+                    const endEl = document.getElementById('common_end_datetime');
+                    if (endEl) endEl.value = commonEndVal; // reflect computed end back into common field
+                }
+
+                const commonDest = (document.getElementById('common_destination').value || '');
+                const commonTransport = (document.getElementById('common_transport_mode').value || '');
+
+                // Fill destination/transport only if provided
+                if (commonDest) {
+                    document.querySelectorAll('.common-dest').forEach(input => input.value = commonDest);
+                }
+                if (commonTransport) {
+                    document.querySelectorAll('.common-transport').forEach(input => input.value = commonTransport);
+                }
+
+                // Fill start/end values
+                if (commonStartVal) {
+                    document.querySelectorAll('.common-start').forEach(input => input.value = commonStartVal);
+                }
+                if (commonEndVal) {
+                    document.querySelectorAll('.common-end').forEach(input => input.value = commonEndVal);
+                }
+
+                // If both start and end exist and end <= start, auto-adjust end to next day keeping the time-of-day
+                if (commonStartVal && commonEndVal) {
+                    document.querySelectorAll('tbody tr').forEach(row => {
+                        const s = row.querySelector('.common-start');
+                        const e = row.querySelector('.common-end');
+                        if (!s || !e || !s.value || !e.value) return;
+
+                        const sDate = new Date(s.value);
+                        const eDate = new Date(e.value);
+
+                        if (eDate <= sDate) {
+                            // Keep end time-of-day, but move to next day relative to start
+                            const endHours = eDate.getHours();
+                            const endMinutes = eDate.getMinutes();
+                            const adjusted = new Date(sDate);
+                            adjusted.setDate(adjusted.getDate() + 1);
+                            adjusted.setHours(endHours, endMinutes, 0, 0);
+                            e.value = formatLocal(adjusted);
+                        }
+                    });
+                }
+            });
+        }
 
         permissionDetailsForm.addEventListener('submit', function(event) {
             let isValid = true;
