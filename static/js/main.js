@@ -141,13 +141,13 @@ document.addEventListener('DOMContentLoaded', function () {
         const printBtn = document.createElement('button');
         printBtn.className = 'btn btn-secondary fab-button no-loader';
         printBtn.type = 'button';
-        printBtn.title = 'Printează pagina (Shift+P)';
+        printBtn.title = 'Printează pagina';
         printBtn.innerHTML = '<i class="fas fa-print"></i>';
         printBtn.addEventListener('click', () => window.print());
         const topBtn = document.createElement('button');
         topBtn.className = 'btn btn-secondary fab-button no-loader';
         topBtn.type = 'button';
-        topBtn.title = 'Mergi sus (Shift+T)';
+        topBtn.title = 'Mergi sus';
         topBtn.innerHTML = '<i class="fas fa-arrow-up"></i>';
         topBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
         container.appendChild(printBtn);
@@ -156,18 +156,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     createFloatingActions();
 
-    // === Keyboard Shortcuts ===
-    document.addEventListener('keydown', (e) => {
-        if (e.shiftKey && !e.ctrlKey && !e.altKey) {
-            if (e.key.toLowerCase() === 'd') {
-                if (toggleButton) toggleButton.click();
-            } else if (e.key.toLowerCase() === 'p') {
-                window.print();
-            } else if (e.key.toLowerCase() === 't') {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-        }
-    });
+// Keyboard shortcuts removed on request (Shift+P/T/D/F were interfering with typing)
 
     // === Persist GET Form Filter State ===
     function restoreFormState(form) {
@@ -431,7 +420,7 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
         filterInput.addEventListener('input', filterRows);
-        document.addEventListener('keydown', (e) => { if (e.shiftKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'f') { filterInput.focus(); e.preventDefault(); } });
+        // Shortcut removed: no Shift+F focus to avoid interfering with typing
 
         // === Copy Table Button ===
         const copyTableBtn = document.createElement('button');

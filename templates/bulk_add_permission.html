@@ -74,7 +74,7 @@
                 <h5>Date Comune (Opțional - pentru completare rapidă)</h5>
             </div>
             <div class="card-body">
-                <div class="row align-items-end">
+                <div class="row align-items-end g-2">
                     <div class="col-md-3">
                         <label for="common_start_datetime" class="form-label">Început</label>
                         <input type="datetime-local" class="form-control" id="common_start_datetime">
@@ -97,10 +97,14 @@
                         <input type="text" class="form-control" id="common_transport_mode" placeholder="Ex: Personal">
                     </div>
                     <div class="col-md-2">
-                        <button type="button" class="btn btn-info w-100" id="fillAllButton">
-                            <i class="fas fa-fill-drip"></i> Umple Tot
-                        </button>
+                        <label for="common_pluton" class="form-label">Grupa/Pluton</label>
+                        <input type="text" class="form-control" id="common_pluton" placeholder="ex: 32 sau 'ALL 32'">
                     </div>
+                </div>
+                <div class="text-end mt-2">
+                    <button type="button" class="btn btn-info" id="fillAllButton">
+                        <i class="fas fa-fill-drip"></i> Umple Tot
+                    </button>
                 </div>
             </div>
         </div>
@@ -120,6 +124,7 @@
                                 <th>Sfârșit <span class="text-danger">*</span></th>
                                 <th>Destinația</th>
                                 <th>Transport</th>
+                                <th>Grupa</th>
                                 <th>Motiv/Observații</th>
                             </tr>
                         </thead>
@@ -132,6 +137,7 @@
                                 <td><input type="datetime-local" name="end_datetime_{{ student.id }}" class="form-control form-control-sm common-end" required></td>
                                 <td><input type="text" name="destination_{{ student.id }}" class="form-control form-control-sm common-dest"></td>
                                 <td><input type="text" name="transport_mode_{{ student.id }}" class="form-control form-control-sm common-transport"></td>
+                                <td><input type="text" name="pluton_{{ student.id }}" class="form-control form-control-sm common-pluton" value="{{ student.pluton }}"></td>
                                 <td><input type="text" name="reason_{{ student.id }}" class="form-control form-control-sm"></td>
                             </tr>
                             {% endfor %}
@@ -259,6 +265,28 @@ document.addEventListener('DOMContentLoaded', function() {
     if (permissionDetailsForm) {
         const fillAllButton = document.getElementById('fillAllButton');
 
+        // Prefill per-student fields from last permission (destination, transport, reason)
+        (function prefillFromLast(){
+            const rows = permissionDetailsForm.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const hiddenSid = row.querySelector('input[name^="student_id_"]');
+                if (!hiddenSid) return;
+                const sid = hiddenSid.value;
+                fetch(`/api/v1/students/${sid}/permission_defaults`, { headers: { 'X-CSRFToken': window.CSRF_TOKEN || '' } })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (!data || !data.success || !data.data) return;
+                        const dest = row.querySelector(`input[name="destination_${sid}"]`);
+                        const trsp = row.querySelector(`input[name="transport_mode_${sid}"]`);
+                        const reas = row.querySelector(`input[name="reason_${sid}"]`);
+                        if (dest && !dest.value) dest.value = data.data.destination || '';
+                        if (trsp && !trsp.value) trsp.value = data.data.transport_mode || '';
+                        if (reas && !reas.value) reas.value = data.data.reason || '';
+                    })
+                    .catch(() => {});
+            });
+        })();
+
         // Helper to format a Date as YYYY-MM-DDTHH:MM (for input[type="datetime-local"])
         const formatLocal = (d) => {
             const pad = (n) => String(n).padStart(2, '0');
@@ -286,6 +314,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const commonDest = (document.getElementById('common_destination').value || '');
                 const commonTransport = (document.getElementById('common_transport_mode').value || '');
+                const commonPlutonRaw = (document.getElementById('common_pluton')?.value || '').trim();
+                let commonPluton = commonPlutonRaw;
+                const m = commonPlutonRaw.toUpperCase().match(/^ALL\s+(.*)$/);
+                if (m) { commonPluton = m[1].trim(); }
 
                 // Fill destination/transport only if provided
                 if (commonDest) {
@@ -293,6 +325,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 if (commonTransport) {
                     document.querySelectorAll('.common-transport').forEach(input => input.value = commonTransport);
+                }
+                if (commonPluton) {
+                    document.querySelectorAll('.common-pluton').forEach(input => input.value = commonPluton);
                 }
 
                 // Fill start/end values
