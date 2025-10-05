@@ -15425,7 +15425,7 @@ def gradat_export_daily_leaves_word():
             row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
             row_cells[1].text = leave.student.grad_militar
-            row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}"
+            row_cells[2].text = f"{leave.student.nume} {leave.student.prenume}" + ((lambda _m: (" (" + "; ".join([f"{_abbr} {_m[_d][0]}-{_m[_d][1]}" for _d, _abbr in [('Vineri','V'), ('Sambata','S'), ('Duminica','D')] if _d in _m]) + ")") if not (set(_m.keys()) == {'Vineri','Sambata','Duminica'} and all(_m[_d] == {'Vineri': ('15:00','20:00'), 'Sambata': ('15:00','22:00'), 'Duminica': ('15:00','22:00')}[_d] for _d in ['Vineri','Sambata','Duminica'])) else "")({iv['day_name']: (iv['start'].strftime('%H:%M'), iv['end'].strftime('%H:%M')) for iv in leave.get_intervals()}))
 
             # These are filled only for the first row of the group
             row_cells[3].text = pluton if leave == group_leaves[0] else ""
