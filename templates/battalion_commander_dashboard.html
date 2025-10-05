@@ -58,7 +58,7 @@
             <div class="card text-center shadow-sm h-100">
                 <div class="card-body">
                     <h5 class="card-title">Permisii <span class="text-muted small">(în ziua de azi)</span></h5>
-                    <p class="card-text fs-4 fw-bold">{{ permissions_today_count }}</p>
+                    <p class="card-text fs-4 fw-bold">{{ leave_stats.permissions_today }}</p>
                     <a href="{{ url_for('view_scoped_permissions') }}" class="btn btn-sm btn-outline-secondary">Vezi Detalii Permisii</a>
                 </div>
             </div>
@@ -67,8 +67,8 @@
             <div class="card text-center shadow-sm h-100">
                 <div class="card-body">
                     <h5 class="card-title">Învoiri <span class="text-muted small">(în ziua de azi)</span></h5>
-                    <p class="card-text fs-4 fw-bold">{{ total_leaves_today_count }}</p>
-                     <small>(Zilnice: {{ daily_leaves_today_battalion }}, Weekend: {{ weekend_leaves_today_battalion }})</small><br>
+                    <p class="card-text fs-4 fw-bold">{{ leave_stats.total_leaves_today }}</p>
+                     <small>(Zilnice: {{ leave_stats.daily_leaves_today }}, Weekend: {{ leave_stats.weekend_leaves_today }})</small><br>
                     <a href="{{ url_for('view_scoped_daily_leaves') }}" class="btn btn-sm btn-outline-secondary mt-1">Vezi Detalii Învoiri Zilnice</a>
                     <a href="{{ url_for('view_scoped_weekend_leaves') }}" class="btn btn-sm btn-outline-secondary mt-1">Vezi Detalii Învoiri Weekend</a>
                 </div>
@@ -78,7 +78,7 @@
             <div class="card text-center shadow-sm h-100">
                 <div class="card-body">
                     <h5 class="card-title">În Serviciu</h5>
-                    <p class="card-text fs-4 fw-bold mb-1">{{ services_today_count }} <span class="fs-6 fw-normal text-muted">azi</span></p>
+                    <p class="card-text fs-4 fw-bold mb-1">{{ leave_stats.services_today }} <span class="fs-6 fw-normal text-muted">azi</span></p>
                     {% if services_today_breakdown %}
                         <div class="mb-2">
                         {% for type, count in services_today_breakdown.items() %}
@@ -100,7 +100,7 @@
             <div class="card text-center shadow-sm bg-light">
                 <div class="card-body">
                     <h5 class="card-title text-danger">Total Plecați ACUM</h5>
-                    <p class="card-text fs-3 fw-bold text-danger">{{ total_on_leave_now_battalion }}</p>
+                    <p class="card-text fs-3 fw-bold text-danger">{{ leave_stats.total_on_leave_now }}</p>
                 </div>
             </div>
         </div>
@@ -108,7 +108,7 @@
             <div class="card text-center shadow-sm">
                 <div class="card-body">
                     <h5 class="card-title">În Permisie ACUM</h5>
-                    <p class="card-text fs-4 fw-bold">{{ permissions_active_now_battalion }}</p>
+                    <p class="card-text fs-4 fw-bold">{{ leave_stats.permissions_now }}</p>
                 </div>
             </div>
         </div>
@@ -116,12 +116,12 @@
             <div class="card text-center shadow-sm">
                 <div class="card-body">
                     <h5 class="card-title">În Serviciu ACUM</h5>
-                    <p class="card-text fs-4 fw-bold">{{ services_active_now_battalion }}</p>
+                    <p class="card-text fs-4 fw-bold">{{ leave_stats.services_now }}</p>
                 </div>
             </div>
         </div>
          <div class="col-12 mt-2">
-             <small class="text-muted">Detaliu plecați acum: Învoiri Zilnice: {{ daily_leaves_active_now_battalion }}, Învoiri Weekend: {{ weekend_leaves_active_now_battalion }}</small>
+             <small class="text-muted">Detaliu plecați acum: Învoiri Zilnice: {{ leave_stats.daily_leaves_now }}, Învoiri Weekend: {{ leave_stats.weekend_leaves_now }}</small>
         </div>
     </div>
 

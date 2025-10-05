@@ -5095,6 +5095,77 @@ def _calculate_presence_data(student_list, check_datetime):
     }
 
 
+def _get_unit_leave_stats(student_ids):
+    """Helper function to calculate leave statistics for a list of student IDs."""
+    if not student_ids:
+        return {
+            'permissions_today': 0, 'daily_leaves_today': 0, 'weekend_leaves_today': 0,
+            'total_leaves_today': 0, 'services_today': 0,
+            'permissions_now': 0, 'daily_leaves_now': 0, 'weekend_leaves_now': 0,
+            'total_on_leave_now': 0, 'services_now': 0
+        }
+
+    now_localized = get_localized_now()
+    today_localized = now_localized.date()
+    today_start = datetime.combine(today_localized, time.min)
+    today_end = datetime.combine(today_localized, time.max)
+    now_naive = now_localized.replace(tzinfo=None)
+
+    permissions_today = Permission.query.filter(
+        Permission.student_id.in_(student_ids), Permission.status == "Aprobată",
+        Permission.start_datetime <= today_end, Permission.end_datetime >= today_start
+    ).count()
+
+    daily_leaves_today = DailyLeave.query.filter(
+        DailyLeave.student_id.in_(student_ids), DailyLeave.status == "Aprobată",
+        DailyLeave.leave_date == today_localized
+    ).count()
+
+    weekend_leaves_today = 0
+    all_wl = WeekendLeave.query.filter(
+        WeekendLeave.student_id.in_(student_ids), WeekendLeave.status == "Aprobată"
+    ).all()
+    for wl in all_wl:
+        for interval in wl.get_intervals():
+            if interval["start"].date() <= today_localized <= interval["end"].date():
+                weekend_leaves_today += 1
+                break
+
+    services_today = ServiceAssignment.query.filter(
+        ServiceAssignment.student_id.in_(student_ids),
+        ServiceAssignment.service_date == today_localized
+    ).count()
+
+    permissions_now = Permission.query.filter(
+        Permission.student_id.in_(student_ids), Permission.status == "Aprobată",
+        Permission.start_datetime <= now_naive, Permission.end_datetime >= now_naive
+    ).count()
+
+    daily_leaves_now = sum(1 for dl in DailyLeave.query.filter(
+        DailyLeave.student_id.in_(student_ids), DailyLeave.status == "Aprobată"
+    ).all() if dl.is_active(now_localized))
+
+    weekend_leaves_now = sum(1 for wl in all_wl if wl.is_any_interval_active(now_localized))
+
+    services_now = ServiceAssignment.query.filter(
+        ServiceAssignment.student_id.in_(student_ids),
+        ServiceAssignment.start_datetime <= now_naive,
+        ServiceAssignment.end_datetime >= now_naive
+    ).count()
+
+    return {
+        'permissions_today': permissions_today,
+        'daily_leaves_today': daily_leaves_today,
+        'weekend_leaves_today': weekend_leaves_today,
+        'total_leaves_today': permissions_today + daily_leaves_today + weekend_leaves_today,
+        'services_today': services_today,
+        'permissions_now': permissions_now,
+        'daily_leaves_now': daily_leaves_now,
+        'weekend_leaves_now': weekend_leaves_now,
+        'total_on_leave_now': permissions_now + daily_leaves_now + weekend_leaves_now,
+        'services_now': services_now
+    }
+
 # --- Commander Dashboards ---
 @app.route("/dashboard/company")
 @login_required
@@ -5152,106 +5223,17 @@ def company_commander_dashboard():
     roll_call_datetime = get_standard_roll_call_datetime()
     roll_call_time_str = roll_call_datetime.strftime("%d %B %Y, %H:%M")
 
-    # Fetch all students in this specific company
-    students_in_company_all = Student.query.filter_by(
-        companie=company_id_str
-    ).all()
+    students_in_company_all = Student.query.filter_by(companie=company_id_str).all()
     student_ids_in_company = [s.id for s in students_in_company_all]
 
-    total_company_presence_roll_call = _calculate_presence_data(
-        students_in_company_all, roll_call_datetime
-    )  # For existing roll call report
+    total_company_presence_roll_call = _calculate_presence_data(students_in_company_all, roll_call_datetime)
 
-    # New stats for "today"
-    today_localized_company = get_localized_now().date()
-    today_start = datetime.combine(today_localized_company, time.min)
-    today_end = datetime.combine(today_localized_company, time.max)
-
-    permissions_today_company_count = Permission.query.filter(
-        Permission.student_id.in_(student_ids_in_company),
-        Permission.status == "Aprobată",
-        Permission.start_datetime <= today_end,
-        Permission.end_datetime >= today_start,
-    ).count()
-
-    daily_leaves_today_company_count = DailyLeave.query.filter(
-        DailyLeave.student_id.in_(student_ids_in_company),
-        DailyLeave.status == "Aprobată",
-        DailyLeave.leave_date == today_localized_company,
-    ).count()
-
-    weekend_leaves_today_company_count = 0
-    all_wl_company_for_today_stats = WeekendLeave.query.filter(
-        WeekendLeave.student_id.in_(student_ids_in_company),
-        WeekendLeave.status == "Aprobată",
-    ).all()
-    for wl_today in all_wl_company_for_today_stats:
-        for interval_today in wl_today.get_intervals():
-            if (
-                interval_today["start"].date() == today_localized_company
-                or interval_today["end"].date() == today_localized_company
-                or (
-                    interval_today["start"].date() < today_localized_company
-                    and interval_today["end"].date() > today_localized_company
-                )
-            ):
-                weekend_leaves_today_company_count += 1
-                break
-
-    total_leaves_today_company_count = (
-        daily_leaves_today_company_count + weekend_leaves_today_company_count
-    )
-
-    services_today_company_count = ServiceAssignment.query.filter(
-        ServiceAssignment.student_id.in_(student_ids_in_company),
-        ServiceAssignment.service_date == today_localized_company,
-    ).count()
-
-    # Stats for "NOW"
     now_localized = get_localized_now()
-    # Use naive timestamp for DB comparisons (columns are naive)
-    now_naive = now_localized.replace(tzinfo=None)
-    permissions_active_now_company = Permission.query.filter(
-        Permission.student_id.in_(student_ids_in_company),
-        Permission.status == "Aprobată",
-        Permission.start_datetime <= now_naive,
-        Permission.end_datetime >= now_naive,
-    ).count()
+    total_company_presence_now = _calculate_presence_data(students_in_company_all, now_localized)
 
-    daily_leaves_active_now_company = 0
-    all_dl_company = DailyLeave.query.filter(
-        DailyLeave.student_id.in_(student_ids_in_company),
-        DailyLeave.status == "Aprobată",
-    ).all()
-    for dl_now in all_dl_company:
-        if dl_now.is_active(now_localized):  # is_active now takes a datetime
-            daily_leaves_active_now_company += 1
+    leave_stats = _get_unit_leave_stats(student_ids_in_company)
 
-    weekend_leaves_active_now_company = 0
-    all_wl_company_for_now_stats = WeekendLeave.query.filter(
-        WeekendLeave.student_id.in_(student_ids_in_company),
-        WeekendLeave.status == "Aprobată",
-    ).all()
-    for wl_now in all_wl_company_for_now_stats:
-        if (
-            wl_now.is_any_interval_active(now_localized)
-        ):  # is_any_interval_active now takes a datetime
-            weekend_leaves_active_now_company += 1
-
-    total_on_leave_now_company = (
-        permissions_active_now_company
-        + daily_leaves_active_now_company
-        + weekend_leaves_active_now_company
-    )
-
-    services_active_now_company = ServiceAssignment.query.filter(
-        ServiceAssignment.student_id.in_(student_ids_in_company),
-        ServiceAssignment.start_datetime <= now_naive,
-        ServiceAssignment.end_datetime >= now_naive,
-    ).count()
-
-    # New service stats for company
-    seven_days_ago = get_localized_now().date() - timedelta(days=7)
+    seven_days_ago = now_localized.date() - timedelta(days=7)
     services_last_7_days_count = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids_in_company),
         ServiceAssignment.service_date > seven_days_ago,
@@ -5328,23 +5310,11 @@ def company_commander_dashboard():
         roll_call_time_str=roll_call_time_str,
         total_company_presence=total_company_presence_roll_call,
         platoons_data=platoons_data_roll_call,
-        platoons_data_now=platoons_data_now,  # Pass new data to template
-        # Statistici "Astăzi"
-        permissions_today_count=permissions_today_company_count,
-        daily_leaves_today_company=daily_leaves_today_company_count,  # Nume nou pentru claritate
-        weekend_leaves_today_company=weekend_leaves_today_company_count,  # Nume nou
-        total_leaves_today_count=total_leaves_today_company_count,
-        services_today_count=services_today_company_count,
+        platoons_data_now=total_company_presence_now,
+        leave_stats=leave_stats,
         total_students_company=len(student_ids_in_company),
-        # Statistici "ACUM"
-        permissions_active_now_company=permissions_active_now_company,
-        daily_leaves_active_now_company=daily_leaves_active_now_company,
-        weekend_leaves_active_now_company=weekend_leaves_active_now_company,
-        total_on_leave_now_company=total_on_leave_now_company,
-        services_active_now_company=services_active_now_company,
         current_time_for_display=now_localized,
         active_public_codes=active_public_codes,
-        # New service stats
         services_last_7_days_count=services_last_7_days_count,
         services_today_breakdown=services_today_breakdown,
         todays_services=todays_services_company,
@@ -5758,105 +5728,17 @@ def battalion_commander_dashboard():
     roll_call_datetime = get_standard_roll_call_datetime()
     roll_call_time_str = roll_call_datetime.strftime("%d %B %Y, %H:%M")
 
-    students_in_battalion_all = Student.query.filter_by(
-        batalion=battalion_id_str
-    ).all()
+    students_in_battalion_all = Student.query.filter_by(batalion=battalion_id_str).all()
     student_ids_in_battalion = [s.id for s in students_in_battalion_all]
 
-    total_battalion_presence_roll_call = _calculate_presence_data(
-        students_in_battalion_all, roll_call_datetime
-    )  # For existing roll call report
+    total_battalion_presence_roll_call = _calculate_presence_data(students_in_battalion_all, roll_call_datetime)
 
-    # New stats for "today"
-    today_localized_battalion = get_localized_now().date()
-    today_start = datetime.combine(today_localized_battalion, time.min)
-    today_end = datetime.combine(today_localized_battalion, time.max)
-
-    permissions_today_battalion_count = Permission.query.filter(
-        Permission.student_id.in_(student_ids_in_battalion),
-        Permission.status == "Aprobată",
-        Permission.start_datetime <= today_end,
-        Permission.end_datetime >= today_start,
-    ).count()
-
-    daily_leaves_today_battalion_count = DailyLeave.query.filter(
-        DailyLeave.student_id.in_(student_ids_in_battalion),
-        DailyLeave.status == "Aprobată",
-        DailyLeave.leave_date == today_localized_battalion,
-    ).count()
-
-    weekend_leaves_today_battalion_count = 0
-    all_wl_battalion_for_today_stats = WeekendLeave.query.filter(
-        WeekendLeave.student_id.in_(student_ids_in_battalion),
-        WeekendLeave.status == "Aprobată",
-    ).all()
-    for wl_today in all_wl_battalion_for_today_stats:
-        for interval_today in wl_today.get_intervals():
-            if (
-                interval_today["start"].date() == today_localized_battalion
-                or interval_today["end"].date() == today_localized_battalion
-                or (
-                    interval_today["start"].date() < today_localized_battalion
-                    and interval_today["end"].date()
-                    > today_localized_battalion
-                )
-            ):
-                weekend_leaves_today_battalion_count += 1
-                break
-
-    total_leaves_today_battalion_count = (
-        daily_leaves_today_battalion_count
-        + weekend_leaves_today_battalion_count
-    )
-
-    services_today_battalion_count = ServiceAssignment.query.filter(
-        ServiceAssignment.student_id.in_(student_ids_in_battalion),
-        ServiceAssignment.service_date == today_localized_battalion,
-    ).count()
-
-    # Stats for "NOW"
     now_localized_b = get_localized_now()
-    # Use naive timestamp for DB comparisons (columns are naive)
-    now_naive_b = now_localized_b.replace(tzinfo=None)
-    permissions_active_now_battalion = Permission.query.filter(
-        Permission.student_id.in_(student_ids_in_battalion),
-        Permission.status == "Aprobată",
-        Permission.start_datetime <= now_naive_b,
-        Permission.end_datetime >= now_naive_b,
-    ).count()
+    total_battalion_presence_now = _calculate_presence_data(students_in_battalion_all, now_localized_b)
 
-    daily_leaves_active_now_battalion = 0
-    all_dl_battalion = DailyLeave.query.filter(
-        DailyLeave.student_id.in_(student_ids_in_battalion),
-        DailyLeave.status == "Aprobată",
-    ).all()
-    for dl_now_b in all_dl_battalion:
-        if dl_now_b.is_active(now_localized_b):
-            daily_leaves_active_now_battalion += 1
+    leave_stats = _get_unit_leave_stats(student_ids_in_battalion)
 
-    weekend_leaves_active_now_battalion = 0
-    all_wl_battalion_for_now_stats = WeekendLeave.query.filter(
-        WeekendLeave.student_id.in_(student_ids_in_battalion),
-        WeekendLeave.status == "Aprobată",
-    ).all()
-    for wl_now_b in all_wl_battalion_for_now_stats:
-        if wl_now_b.is_any_interval_active(now_localized_b):
-            weekend_leaves_active_now_battalion += 1
-
-    total_on_leave_now_battalion = (
-        permissions_active_now_battalion
-        + daily_leaves_active_now_battalion
-        + weekend_leaves_active_now_battalion
-    )
-
-    services_active_now_battalion = ServiceAssignment.query.filter(
-        ServiceAssignment.student_id.in_(student_ids_in_battalion),
-        ServiceAssignment.start_datetime <= now_naive_b,
-        ServiceAssignment.end_datetime >= now_naive_b,
-    ).count()
-
-    # New service stats for battalion
-    seven_days_ago = get_localized_now().date() - timedelta(days=7)
+    seven_days_ago = now_localized_b.date() - timedelta(days=7)
     services_last_7_days_count = ServiceAssignment.query.filter(
         ServiceAssignment.student_id.in_(student_ids_in_battalion),
         ServiceAssignment.service_date > seven_days_ago,
@@ -5958,27 +5840,14 @@ def battalion_commander_dashboard():
         roll_call_time_str=roll_call_time_str,
         total_battalion_presence=total_battalion_presence_roll_call,
         companies_data=companies_data_roll_call,
-        companies_data_now=companies_data_now,  # Pass new data to template
-        # Statistici "Astăzi"
-        permissions_today_count=permissions_today_battalion_count,
-        daily_leaves_today_battalion=daily_leaves_today_battalion_count,  # Nume nou
-        weekend_leaves_today_battalion=weekend_leaves_today_battalion_count,  # Nume nou
-        total_leaves_today_count=total_leaves_today_battalion_count,
-        services_today_count=services_today_battalion_count,
+        companies_data_now=total_battalion_presence_now,
+        leave_stats=leave_stats,
         total_students_battalion=len(student_ids_in_battalion),
-        # Statistici "ACUM"
-        permissions_active_now_battalion=permissions_active_now_battalion,
-        daily_leaves_active_now_battalion=daily_leaves_active_now_battalion,
-        weekend_leaves_active_now_battalion=weekend_leaves_active_now_battalion,
-        total_on_leave_now_battalion=total_on_leave_now_battalion,
-        services_active_now_battalion=services_active_now_battalion,
         current_time_for_display=now_localized_b,
         active_public_codes=active_public_codes,
-        # New service stats
         services_last_7_days_count=services_last_7_days_count,
         services_today_breakdown=services_today_breakdown,
         todays_services=todays_services_battalion,
-        # New platoon data
         platoons_data=platoons_data_roll_call,
         platoons_data_now=platoons_data_now,
     )
@@ -8303,7 +8172,6 @@ def gradat_export_weekend_leaves_word():
         return redirect(url_for("dashboard"))
 
     now = get_localized_now()
-
     q = (
         WeekendLeave.query.join(Student, WeekendLeave.student_id == Student.id)
         .options(joinedload(WeekendLeave.student))
@@ -8320,88 +8188,103 @@ def gradat_export_weekend_leaves_word():
 
     leaves = q.all()
 
-    intervals = []
-    church_sunday = []
-
+    # Procesare date
+    all_intervals = []
+    church_intervals = []
     for w in leaves:
-        ivals = w.get_intervals()
-        for it in ivals:
-            # doar intervalele active/viitoare
+        # Adaugă intervalul de biserică dacă e cazul
+        if w.duminica_biserica and w.day3_date: # Presupunând că day3 este Duminica
+            church_intervals.append({
+                "student": w.student,
+                "date": w.day3_date,
+                "start_time": time(9, 0),
+                "end_time": time(11, 0)
+            })
+
+        # Adaugă intervalele normale
+        for it in w.get_intervals():
             if it["end"] >= now:
-                intervals.append({
+                all_intervals.append({
                     "student": w.student,
-                    "day_name": it["day_name"],
-                    "start": it["start"],
-                    "end": it["end"],
-                    "weekend_start_date": w.weekend_start_date,
-                    "is_church": bool(getattr(w, "duminica_biserica", False) and (it["day_name"] or "").lower() == "duminica"),
+                    "date": it["start"].date(),
+                    "start_time": it["start"].time(),
+                    "end_time": it["end"].time()
                 })
-                if getattr(w, "duminica_biserica", False) and (it["day_name"] or "").lower() == "duminica":
-                    church_sunday.append({
-                        "student": w.student,
-                        "start": it["start"],
-                        "end": it["end"],
-                        "weekend_start_date": w.weekend_start_date,
-                    })
 
-    # sortare
-    intervals.sort(key=lambda x: (str(getattr(x["student"], "pluton", "")), x["start"]))
-    church_sunday.sort(key=lambda x: (str(getattr(x["student"], "pluton", "")), x["start"]))
+    # Sortare și grupare pentru tabelul principal
+    all_intervals.sort(key=lambda x: (x["date"], str(getattr(x["student"], "pluton", "")), str(getattr(x["student"], "nume", ""))))
+    grouped_intervals = {}
+    for interval in all_intervals:
+        key = (interval["date"], str(getattr(interval["student"], "pluton", "")))
+        if key not in grouped_intervals:
+            grouped_intervals[key] = []
+        grouped_intervals[key].append(interval)
 
+    # Sortare pentru tabelul de biserică
+    church_intervals.sort(key=lambda x: (str(getattr(x["student"], "pluton", "")), str(getattr(x["student"], "nume", ""))))
+
+    # Creare document Word
     doc = Document()
-    doc.add_heading(f"Invoiri Weekend - Active/Viitoare (generat {now.strftime('%d %B %Y, %H:%M')})", level=1)
+    doc.add_heading(f"Raport Învoiri Weekend - Generat la {now.strftime('%d.%m.%Y %H:%M')}", level=1)
 
-    # tabel general
-    if intervals:
-        table = doc.add_table(rows=1, cols=7)
-        table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        hdr = table.rows[0].cells
-        hdr[0].text = "Nr."
-        hdr[1].text = "Pluton"
-        hdr[2].text = "Student"
-        hdr[3].text = "Zi"
-        hdr[4].text = "Data"
-        hdr[5].text = "De la"
-        hdr[6].text = "Până la"
+    # Tabel principal
+    if grouped_intervals:
+        doc.add_heading("Învoiri Weekend", level=2)
+        table = doc.add_table(rows=1, cols=5)
+        table.style = 'Table Grid'
+        hdr_cells = table.rows[0].cells
+        headers = ["Nr. crt.", "Grad", "Nume și Prenume", "Grupa", "Data"]
+        for i, header_text in enumerate(headers):
+            cell = hdr_cells[i]
+            cell.text = header_text
+            cell.paragraphs[0].runs[0].font.bold = True
 
-        for idx, item in enumerate(intervals, start=1):
-            st = item["student"]
-            name = f"{getattr(st, 'grad_militar', '')} {getattr(st, 'nume', '')} {getattr(st, 'prenume', '')}".strip()
-            cells = table.add_row().cells
-            cells[0].text = str(idx)
-            cells[1].text = str(getattr(st, "pluton", "") or "")
-            cells[2].text = name
-            cells[3].text = item["day_name"]
-            cells[4].text = item["start"].strftime("%d.%m")
-            cells[5].text = item["start"].strftime("%H:%M")
-            cells[6].text = item["end"].strftime("%H:%M")
+        crt = 1
+        for (date_val, pluton_val), items in grouped_intervals.items():
+            first_in_group = True
+            for item in items:
+                row_cells = table.add_row().cells
+                row_cells[0].text = str(crt)
+                row_cells[1].text = item['student'].grad_militar
+                row_cells[2].text = f"{item['student'].nume} {item['student'].prenume} ({item['start_time'].strftime('%H:%M')}-{item['end_time'].strftime('%H:%M')})"
+
+                if first_in_group:
+                    row_cells[3].text = pluton_val
+                    row_cells[4].text = date_val.strftime('%d.%m.%Y')
+                    first_in_group = False
+                crt += 1
+
+            # Merge cells for Grupa and Data
+            start_row_idx = len(table.rows) - len(items)
+            end_row_idx = len(table.rows) - 1
+            if len(items) > 1:
+                table.cell(start_row_idx, 3).merge(table.cell(end_row_idx, 3))
+                table.cell(start_row_idx, 4).merge(table.cell(end_row_idx, 4))
+                table.cell(start_row_idx, 3).vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
+                table.cell(start_row_idx, 4).vertical_alignment = WD_ALIGN_PARAGRAPH.CENTER
     else:
         doc.add_paragraph("Nu există învoiri de weekend active sau viitoare.")
 
-    # secțiune separată pentru Duminică - Biserică
-    if church_sunday:
-        doc.add_paragraph("")
-        doc.add_heading("Duminică - Biserică (separat)", level=2)
-        table2 = doc.add_table(rows=1, cols=5)
-        table2.alignment = WD_TABLE_ALIGNMENT.CENTER
-        h2 = table2.rows[0].cells
-        h2[0].text = "Nr."
-        h2[1].text = "Pluton"
-        h2[2].text = "Student"
-        h2[3].text = "De la"
-        h2[4].text = "Până la"
-        for idx, item in enumerate(church_sunday, start=1):
-            st = item["student"]
-            name = f"{getattr(st, 'grad_militar', '')} {getattr(st, 'nume', '')} {getattr(st, 'prenume', '')}".strip()
-            cells = table2.add_row().cells
-            cells[0].text = str(idx)
-            cells[1].text = str(getattr(st, "pluton", "") or "")
-            cells[2].text = name
-            cells[3].text = item["start"].strftime("%H:%M")
-            cells[4].text = item["end"].strftime("%H:%M")
-    else:
-        doc.add_paragraph("")
-        doc.add_paragraph("Nu există solicitări de tip 'Biserică' pentru Duminică.")
+    # Tabel biserică
+    if church_intervals:
+        doc.add_page_break()
+        doc.add_heading("Participare Biserică (Duminică)", level=2)
+        table_church = doc.add_table(rows=1, cols=5)
+        table_church.style = 'Table Grid'
+        hdr_cells_church = table_church.rows[0].cells
+        headers_church = ["Nr. crt.", "Grad", "Nume și Prenume", "Grupa", "Interval"]
+        for i, header_text in enumerate(headers_church):
+            cell = hdr_cells_church[i]
+            cell.text = header_text
+            cell.paragraphs[0].runs[0].font.bold = True
+
+        for idx, item in enumerate(church_intervals, 1):
+            row_cells = table_church.add_row().cells
+            row_cells[0].text = str(idx)
+            row_cells[1].text = item['student'].grad_militar
+            row_cells[2].text = f"{item['student'].nume} {item['student'].prenume}"
+            row_cells[3].text = str(getattr(item['student'], "pluton", ""))
+            row_cells[4].text = f"{item['start_time'].strftime('%H:%M')} - {item['end_time'].strftime('%H:%M')}"
 
     bio = io.BytesIO()
     doc.save(bio)
@@ -9587,6 +9470,43 @@ def delete_student(student_id):
 
 
 # --- Rute pentru Permisii ---
+@app.route("/gradat/permissions/ranking")
+@login_required
+def gradat_permissions_ranking():
+    if current_user.role != "gradat":
+        flash("Acces neautorizat.", "danger")
+        return redirect(url_for("dashboard"))
+
+    eff_user = get_current_user_or_scoped()
+    students_q = Student.query.filter_by(created_by_user_id=eff_user.id)
+    try:
+        if getattr(current_user, "parent_user_id", None) and getattr(g, "subuser_platoon", None):
+            students_q = students_q.filter(Student.pluton == str(g.subuser_platoon))
+    except Exception:
+        pass
+
+    students_managed = students_q.all()
+    if not students_managed:
+        return render_template("gradat_permissions_ranking.html", ranking=[])
+
+    # Build the ranking
+    count_expr = func.count(Permission.id).label("perm_count")
+    results = (
+        db.session.query(Student, count_expr)
+        .outerjoin(
+            Permission,
+            and_(Permission.student_id == Student.id, Permission.status == "Aprobată"),
+        )
+        .filter(Student.id.in_([s.id for s in students_managed]))
+        .group_by(Student.id)
+        .order_by(sa.desc("perm_count"), Student.nume.asc(), Student.prenume.asc())
+        .all()
+    )
+
+    ranking_data = [{"student": s, "perm_count": pc or 0} for s, pc in results]
+
+    return render_template("gradat_permissions_ranking.html", ranking=ranking_data)
+
 @app.route("/gradat/permissions")
 @login_required
 def list_permissions():
