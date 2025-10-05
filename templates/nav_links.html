@@ -10,6 +10,7 @@
         <li><a href="{{ url_for('list_services') }}">Servicii</a></li>
         <li><a href="{{ url_for('calendar_page') }}">Calendar</a></li>
         <li><a href="{{ url_for('calendar_links_manage') }}">Linkuri Calendar</a></li>
+        <li><a href="{{ url_for('permissions_links_manage') }}">Linkuri Clasament Permisii</a></li>
         <li><a href="{{ url_for('volunteer_home') }}">Voluntariat</a></li>
         <li><a href="{{ url_for('presence_report') }}">Raport Prezență</a></li>
     {% elif current_user.role == 'admin' %}
