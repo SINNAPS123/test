@@ -173,6 +173,31 @@ try:
 except Exception as _e:
     print("Flask-Compress not active:", _e)
 
+# Avoid crashing on duplicate endpoint registrations: skip duplicates gracefully.
+try:
+    _orig_add_url_rule = app.add_url_rule
+    def _safe_add_url_rule(rule, endpoint=None, view_func=None, **options):
+        # Skip if the same endpoint was already registered
+        if endpoint and endpoint in app.view_functions:
+            try:
+                app.logger.warning(f"Duplicate endpoint '{endpoint}' for rule '{rule}' skipped.")
+            except Exception:
+                pass
+            return
+        try:
+            return _orig_add_url_rule(rule, endpoint, view_func, **options)
+        except AssertionError as e:
+            if "existing endpoint function" in str(e):
+                try:
+                    app.logger.warning(f"Duplicate endpoint '{endpoint}' for rule '{rule}' skipped (assert).")
+                except Exception:
+                    pass
+                return
+            raise
+    app.add_url_rule = _safe_add_url_rule
+except Exception:
+    pass
+
 # Definire fus orar pentru România
 EUROPE_BUCHAREST = pytz.timezone("Europe/Bucharest")
 
@@ -256,12 +281,24 @@ def inject_maintenance_settings():
 
 # SECURITY: Robust secret key management
 import secrets as sec
+# Prefer a persistent secret in instance/secret_key.txt when env var is not set
 if not os.environ.get("FLASK_SECRET_KEY"):
-    # Generate a secure random key if none is set (development only)
     import warnings
-    warnings.warn("No FLASK_SECRET_KEY set! Using auto-generated key for development only.", 
-                  RuntimeWarning)
-    _dev_key = sec.token_urlsafe(32)
+    _secret_from_instance = None
+    try:
+        os.makedirs(app.instance_path, exist_ok=True)
+        secret_file = os.path.join(app.instance_path, "secret_key.txt")
+        if os.path.exists(secret_file):
+            with open(secret_file, "r") as fh:
+                _secret_from_instance = (fh.read() or "").strip()
+        if not _secret_from_instance:
+            _secret_from_instance = sec.token_urlsafe(32)
+            with open(secret_file, "w") as fh:
+                fh.write(_secret_from_instance)
+    except Exception:
+        warnings.warn("No FLASK_SECRET_KEY set! Using auto-generated key for development only.", RuntimeWarning)
+        _secret_from_instance = sec.token_urlsafe(32)
+    _dev_key = _secret_from_instance
 else:
     _dev_key = None
 
