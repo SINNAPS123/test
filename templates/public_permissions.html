@@ -16,7 +16,7 @@
         Clasamentul de mai jos arată numărul TOTAL de permisii aprobate pe fiecare student. Datele sunt doar pentru vizualizare publică.
     </div>
 
-    {% if students_with_counts %}
+    {% if ranking %}
     <div class="card shadow-sm">
         <div class="card-header">
             <strong><i class="fas fa-list-ol me-2"></i>Top Permisii</strong>
@@ -35,14 +35,18 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for s, total in students_with_counts %}
+                        {% for item in ranking %}
                         <tr>
                             <td class="text-muted">{{ loop.index }}</td>
-                            <td>{{ s.nume }} {{ s.prenume }}</td>
-                            <td>{{ s.pluton or '—' }}</td>
-                            <td>{{ s.companie or '—' }}</td>
-                            <td>{{ s.grad_militar or '—' }}</td>
-                            <td class="text-end"><strong>{{ total }}</strong></td>
+                            <td>
+                                <a href="{{ url_for('public_student_profile', student_id=item.student.id, code=access_code) }}">
+                                    {{ item.student.nume }} {{ item.student.prenume }}
+                                </a>
+                            </td>
+                            <td>{{ item.student.pluton or '—' }}</td>
+                            <td>{{ item.student.companie or '—' }}</td>
+                            <td>{{ item.student.grad_militar or '—' }}</td>
+                            <td class="text-end"><strong>{{ item.perm_count }}</strong></td>
                         </tr>
                         {% endfor %}
                     </tbody>
