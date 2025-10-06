@@ -362,7 +362,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const filterInput = document.createElement('input');
         filterInput.className = 'form-control form-control-sm table-filter-input';
         filterInput.type = 'search';
-        filterInput.placeholder = 'Filtrează rânduri (Shift+F)';
+        filterInput.placeholder = 'Filtrează rânduri';
         filterInput.autocomplete = 'off';
         tools.appendChild(filterInput);
         const densityBtn = document.createElement('button');
