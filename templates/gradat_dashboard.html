@@ -122,6 +122,28 @@ Absenti motivat:
                              <p class="mb-1"><i class="fas fa-hands-helping text-primary me-2"></i>Studenți cu peste 10p voluntariat: <strong>{{ students_with_high_points }}</strong></p>
                              <p class="mb-1"><i class="fas fa-shield-alt text-info me-2"></i>Total servicii planificate: <strong>{{ total_services_count }}</strong></p>
                              <p class="mb-1"><i class="fas fa-calendar-check text-success me-2"></i>Servicii în următoarele 7 zile: <strong>{{ upcoming_services_count }}</strong></p>
+
+                             <hr class="my-2">
+                             <h6 class="card-title"><i class="fas fa-chart-line me-2"></i>Azi (rezumat învoiri)</h6>
+                             <p class="mb-1">
+                                <i class="fas fa-road text-secondary me-2"></i>Permisii de azi:
+                                <strong>{{ permissions_today_count }}</strong>
+                                <a href="{{ url_for('list_permissions') }}" class="small ms-2">vezi</a>
+                             </p>
+                             <p class="mb-1">
+                                <i class="fas fa-walking text-secondary me-2"></i>Învoiri zilnice de azi:
+                                <strong>{{ daily_leaves_today_count }}</strong>
+                                <a href="{{ url_for('list_daily_leaves') }}" class="small ms-2">vezi</a>
+                             </p>
+                             <p class="mb-1">
+                                <i class="fas fa-church text-secondary me-2"></i>Învoiri weekend (active azi):
+                                <strong>{{ weekend_leaves_today_count }}</strong>
+                                <a href="{{ url_for('list_weekend_leaves') }}" class="small ms-2">vezi</a>
+                             </p>
+                             <p class="mb-1">
+                                <i class="fas fa-list text-secondary me-2"></i>Total învoiri azi:
+                                <strong>{{ permissions_today_count + daily_leaves_today_count + weekend_leaves_today_count }}</strong>
+                             </p>
                         </div>
                         <div class="col-md-6">
                             <h6 class="card-title"><i class="fas fa-shield-alt text-info me-2"></i>Serviciile de azi (plutonul meu)</h6>

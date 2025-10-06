@@ -72,8 +72,23 @@
 
 
     {% macro render_daily_leaves_table(leaves, table_title) %}
-        {% if leaves %}
-        <h4 class="mt-4">{{ table_title }} ({{ leaves|length }})</h4>
+        {# Pre-calculează numărul de înregistrări relevante pentru tabel (filtrate corect) #}
+        {% set ns = namespace(count=0) %}
+        {% for leave in leaves %}
+            {% set include_row = (
+                table_title.startswith('Învoiri Active') and leave.is_active()
+            ) or (
+                table_title.startswith('Învoiri Viitoare') and leave.is_upcoming
+            ) or (
+                table_title.startswith('Învoiri Trecute/Anulate') and (leave.is_past or leave.status == 'Anulată')
+            ) %}
+            {% if include_row %}
+                {% set ns.count = ns.count + 1 %}
+            {% endif %}
+        {% endfor %}
+
+        {% if ns.count > 0 %}
+        <h4 class="mt-4">{{ table_title }} ({{ ns.count }})</h4>
         <div class="table-responsive shadow-sm"> <!-- Added shadow-sm -->
             <table class="table table-striped table-hover table-sm">
                 <thead> <!-- Am eliminat clasa table-dark -->
@@ -90,56 +105,64 @@
                 </thead>
                 <tbody>
                     {% for leave in leaves %}
-                    <tr>
-                        <td>{{ leave.student.nume }} {{ leave.student.prenume }}</td>
-                        <td>{{ leave.leave_date|localdate('%d-%m-%y (%a)') }}</td>
-                        <td>{{ leave.start_time|localtime('%H:%M') }}</td>
-                        <td>{{ leave.end_time|localtime('%H:%M') }} {% if leave.end_datetime.date() > leave.leave_date %}<span class="badge bg-secondary">ziua următoare</span>{% endif %}</td>
-                        <td><span class="badge bg-secondary">{{ leave.leave_type_display }}</span></td>
-                        <td>{{ leave.reason if leave.reason else '-' }}</td>
-                        <td>
-                            {% if leave.status == 'Aprobată' %}
-                                {% if leave.is_active() %}
-                                    <span class="badge bg-secondary">Activă</span>
-                                {% elif leave.is_upcoming %}
-                                    <span class="badge bg-secondary">Urmează</span>
+                        {% set include_row = (
+                            table_title.startswith('Învoiri Active') and leave.is_active()
+                        ) or (
+                            table_title.startswith('Învoiri Viitoare') and leave.is_upcoming
+                        ) or (
+                            table_title.startswith('Învoiri Trecute/Anulate') and (leave.is_past or leave.status == 'Anulată')
+                        ) %}
+                        {% if include_row %}
+                        <tr>
+                            <td>{{ leave.student.nume }} {{ leave.student.prenume }}</td>
+                            <td>{{ leave.leave_date|localdate('%d-%m-%y (%a)') }}</td>
+                            <td>{{ leave.start_time|localtime('%H:%M') }}</td>
+                            <td>{{ leave.end_time|localtime('%H:%M') }} {% if leave.end_datetime.date() > leave.leave_date %}<span class="badge bg-secondary">ziua următoare</span>{% endif %}</td>
+                            <td><span class="badge bg-secondary">{{ leave.leave_type_display }}</span></td>
+                            <td>{{ leave.reason if leave.reason else '-' }}</td>
+                            <td>
+                                {% if leave.status == 'Aprobată' %}
+                                    {% if leave.is_active() %}
+                                        <span class="badge bg-secondary">Activă</span>
+                                    {% elif leave.is_upcoming %}
+                                        <span class="badge bg-secondary">Urmează</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Expirată</span>
+                                    {% endif %}
+                                {% elif leave.status == 'Anulată' %}
+                                    <span class="badge bg-secondary">Anulată</span>
                                 {% else %}
-                                    <span class="badge bg-secondary">Expirată</span>
+                                    <span class="badge bg-secondary">{{ leave.status }}</span>
                                 {% endif %}
-                            {% elif leave.status == 'Anulată' %}
-                                <span class="badge bg-secondary">Anulată</span>
-                            {% else %}
-                                <span class="badge bg-secondary">{{ leave.status }}</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <a href="{{ url_for('add_edit_daily_leave', leave_id=leave.id) }}" class="btn btn-sm btn-warning me-1 py-0 px-1" title="Editare Învoire Zilnică">
-                                <i class="fas fa-edit icon-rotate-hover"></i>
-                            </a>
-                            {% if leave.status == 'Aprobată' and (leave.is_active() or leave.is_upcoming) %}
-                            <form method="POST" action="{{ url_for('cancel_daily_leave', leave_id=leave.id) }}" class="d-inline" onsubmit="return confirm('Ești sigur că vrei să anulezi această învoire?');">
-                                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="Anulează Învoirea">
-                                    <i class="fas fa-times-circle icon-rotate-hover"></i>
-                                </button>
-                            </form>
-                            {% elif leave.status != 'Anulată' and leave.is_past %}
-                                <span class="text-muted fst-italic small">Expirată</span>
-                            {% elif leave.status == 'Anulată' %}
-                                <span class="text-muted fst-italic small">Anulată</span>
-                            {% endif %}
-                            {# Buton de ștergere permanentă #}
-                            <form method="POST" action="{{ url_for('delete_daily_leave', leave_id=leave.id) }}" class="d-inline" onsubmit="return confirm('Ești sigur că vrei să ȘTERGI PERMANENT această învoire zilnică? Această acțiune nu poate fi anulată.');">
-                                <button type="submit" class="btn btn-sm btn-danger py-0 px-1 ms-1" title="Șterge Învoirea Zilnică Permanent">
-                                    <i class="fas fa-trash-alt icon-rotate-hover"></i>
-                                </button>
-                            </form>
-                        </td>
-                    </tr>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('add_edit_daily_leave', leave_id=leave.id) }}" class="btn btn-sm btn-warning me-1 py-0 px-1" title="Editare Învoire Zilnică">
+                                    <i class="fas fa-edit icon-rotate-hover"></i>
+                                </a>
+                                {% if leave.status == 'Aprobată' and (leave.is_active() or leave.is_upcoming) %}
+                                <form method="POST" action="{{ url_for('cancel_daily_leave', leave_id=leave.id) }}" class="d-inline" onsubmit="return confirm('Ești sigur că vrei să anulezi această învoire?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="Anulează Învoirea">
+                                        <i class="fas fa-times-circle icon-rotate-hover"></i>
+                                    </button>
+                                </form>
+                                {% elif leave.status != 'Anulată' and leave.is_past %}
+                                    <span class="text-muted fst-italic small">Expirată</span>
+                                {% elif leave.status == 'Anulată' %}
+                                    <span class="text-muted fst-italic small">Anulată</span>
+                                {% endif %}
+                                {# Buton de ștergere permanentă #}
+                                <form method="POST" action="{{ url_for('delete_daily_leave', leave_id=leave.id) }}" class="d-inline" onsubmit="return confirm('Ești sigur că vrei să ȘTERGI PERMANENT această învoire zilnică? Această acțiune nu poate fi anulată.');">
+                                    <button type="submit" class="btn btn-sm btn-danger py-0 px-1 ms-1" title="Șterge Învoirea Zilnică Permanent">
+                                        <i class="fas fa-trash-alt icon-rotate-hover"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endif %}
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-        {# Am eliminat clauza else pentru a gestiona mesajul global #}
         {% endif %}
     {% endmacro %}
 
