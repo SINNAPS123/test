@@ -118,6 +118,23 @@
                             </a>
                         </li>
                     {% endif %}
+
+                    <!-- Countdown + Citatul zilei (vizibil imediat) -->
+                    <li class="nav-item dropdown d-flex align-items-center ms-2" id="academyCountdownContainer">
+                        <a class="nav-link no-loader d-flex flex-column p-0" href="#" id="academyCountdownToggle" role="button" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true" style="line-height:1.2;">
+                            <span class="badge bg-primary-subtle text-primary fw-semibold px-2 py-1" id="academyCountdown"
+                                  data-end="2026-07-31T23:59:59+03:00" data-tz="Europe/Bucharest">
+                                Se termină în: —
+                            </span>
+                            <small class="text-muted mt-1" id="quoteOfTheDay">—</small>
+                        </a>
+                        <div class="dropdown-menu dropdown-menu-end p-2" aria-labelledby="academyCountdownToggle" style="min-width: 320px;">
+                            <div class="mb-2"><strong>Desfășurător weekenduri până la final:</strong></div>
+                            <div id="academyWeekendList" class="small"></div>
+                            <div class="mt-2 text-muted small">Ora locală: București (Europe/Bucharest)</div>
+                        </div>
+                    </li>
+
                     <li class="nav-item d-flex align-items-center ms-lg-2"> <!-- Eliminat me-2 care putea cauza dubla spațiere dacă ultimul element -->
                         <button class="btn btn-outline-secondary btn-sm" id="darkModeToggle" type="button" title="Comută tema" aria-pressed="false">
                             <i class="fas fa-moon icon-rotate-hover"></i> <!-- Icon will be updated by JS, added class -->
@@ -236,6 +253,8 @@
     {% else %}
         <script src="{{ url_for('static', filename='js/main.min.js') }}" defer></script>
     {% endif %}
+    <!-- Academy countdown module (loads in both DEBUG and PROD) -->
+    <script src="{{ url_for('static', filename='js/countdown.js') }}" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/instant.page@5.2.0/instantpage.min.js" type="module" defer></script>
 
     <!-- Global client-side form validation (Bootstrap 5) -->
