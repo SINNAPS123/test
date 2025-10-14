@@ -5266,6 +5266,7 @@ def company_commander_dashboard():
     total_company_presence_roll_call = _calculate_presence_data(students_in_company_all, roll_call_datetime)
 
     now_localized = get_localized_now()
+    today_localized_company = now_localized.date()
     total_company_presence_now = _calculate_presence_data(students_in_company_all, now_localized)
 
     leave_stats = _get_unit_leave_stats(student_ids_in_company)
@@ -5771,6 +5772,7 @@ def battalion_commander_dashboard():
     total_battalion_presence_roll_call = _calculate_presence_data(students_in_battalion_all, roll_call_datetime)
 
     now_localized_b = get_localized_now()
+    today_localized_battalion = now_localized_b.date()
     total_battalion_presence_now = _calculate_presence_data(students_in_battalion_all, now_localized_b)
 
     leave_stats = _get_unit_leave_stats(student_ids_in_battalion)
