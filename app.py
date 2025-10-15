@@ -306,7 +306,7 @@ app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", _dev_key)
 # SECURITY: Database URI configuration with environment variable support
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
     "DATABASE_URL", 
-    "sqlite:////root/GradatFinal/instance/site.db"
+    "sqlite:///site.db"
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 # PERFORMANCE: Optimized session and caching configuration
