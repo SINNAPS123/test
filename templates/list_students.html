@@ -2,6 +2,7 @@
 
 
 {% block content %}
+{% set list_endpoint = 'admin_list_students' if is_admin_view else 'list_students' %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>
@@ -42,7 +43,7 @@
     </div>
 
     {% if is_admin_view %}
-    <form method="GET" action="{{ url_for('list_students') }}" class="mb-3 bg-light p-3 rounded">
+    <form method="GET" action="{{ url_for(list_endpoint) }}" class="mb-3 bg-light p-3 rounded">
         <div class="row g-2 align-items-end">
             <div class="col-md-3">
                 <label for="search" class="form-label form-label-sm">Caută:</label>
@@ -77,12 +78,12 @@
             </div>
             <div class="col-md-auto">
                 <button type="submit" class="btn btn-primary btn-sm">Filtrează</button>
-                <a href="{{ url_for('list_students') }}" class="btn btn-outline-secondary btn-sm">Resetează</a>
+                <a href="{{ url_for(list_endpoint) }}" class="btn btn-outline-secondary btn-sm">Resetează</a>
             </div>
         </div>
     </form>
     {% elif not is_admin_view %} {# Search form for gradat #}
-    <form method="GET" action="{{ url_for('list_students') }}" class="mb-3 bg-light p-3 rounded">
+    <form method="GET" action="{{ url_for(list_endpoint) }}" class="mb-3 bg-light p-3 rounded">
         <div class="row g-2 align-items-end">
             <div class="col-md-9">
                 <label for="search" class="form-label form-label-sm">Caută în studenții gestionați:</label>
@@ -90,7 +91,7 @@
             </div>
             <div class="col-md-3">
                 <button type="submit" class="btn btn-primary btn-sm w-100">Caută</button>
-                <a href="{{ url_for('list_students') }}" class="btn btn-outline-secondary btn-sm w-100 mt-1">Resetează Căutare</a>
+                <a href="{{ url_for(list_endpoint) }}" class="btn btn-outline-secondary btn-sm w-100 mt-1">Resetează Căutare</a>
             </div>
         </div>
     </form>
@@ -233,13 +234,13 @@
             {% endif %}
 
             <li class="page-item {% if not students_pagination.has_prev %}disabled{% endif %}">
-                <a class="page-link" href="{{ url_for('list_students', page=students_pagination.prev_num, **base_args) if students_pagination.has_prev else '#'}}">Precedenta</a>
+                <a class="page-link" href="{{ url_for(list_endpoint, page=students_pagination.prev_num, **base_args) if students_pagination.has_prev else '#'}}">Precedenta</a>
             </li>
 
             {% for page_num in students_pagination.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=1) %}
                 {% if page_num %}
                     <li class="page-item {% if students_pagination.page == page_num %}active{% endif %}">
-                        <a class="page-link" href="{{ url_for('list_students', page=page_num, **base_args) }}">{{ page_num }}</a>
+                        <a class="page-link" href="{{ url_for(list_endpoint, page=page_num, **base_args) }}">{{ page_num }}</a>
                     </li>
                 {% elif loop.index != 1 and loop.index != students_pagination.pages +1 %}
                      <li class="page-item disabled"><span class="page-link">...</span></li>
@@ -247,7 +248,7 @@
             {% endfor %}
 
             <li class="page-item {% if not students_pagination.has_next %}disabled{% endif %}">
-                <a class="page-link" href="{{ url_for('list_students', page=students_pagination.next_num, **base_args) if students_pagination.has_next else '#'}}">Următoarea</a>
+                <a class="page-link" href="{{ url_for(list_endpoint, page=students_pagination.next_num, **base_args) if students_pagination.has_next else '#'}}">Următoarea</a>
             </li>
         </ul>
     </nav>
