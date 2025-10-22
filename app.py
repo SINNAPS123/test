@@ -45,7 +45,6 @@ from sqlalchemy import (
     text,
 )  # Am adăugat text aici explicit, deși sa.text ar fi funcționat cu importul de mai sus
 import re
-from unidecode import unidecode
 import json
 import pytz  # Adăugat pentru fusuri orare
 from functools import wraps
@@ -4562,13 +4561,12 @@ def admin_list_permissions():
     # TODO: Add date range filters if needed
 
     if search_student_name:
-        # Search in student's nume sau prenume; aplicăm unidecode doar pe input, nu pe coloane SQL
-        search_input = unidecode(search_student_name.lower())
+        search_input = normalize_search_text(search_student_name)
         search_pattern = f"%{search_input}%"
         query = query.join(Permission.student).filter(
             or_(
-                func.lower(Student.nume).like(search_pattern),
-                func.lower(Student.prenume).like(search_pattern),
+                normalize_search_expression(Student.nume).like(search_pattern),
+                normalize_search_expression(Student.prenume).like(search_pattern),
             )
         )
 
@@ -4623,13 +4621,12 @@ def admin_list_daily_leaves():
     filter_date = request.args.get("filter_date", "").strip()
 
     if search_student_name:
-        # Aplicăm unidecode doar pe input, nu pe coloane SQL
-        search_input = unidecode(search_student_name.lower())
+        search_input = normalize_search_text(search_student_name)
         search_pattern = f"%{search_input}%"
         query = query.join(DailyLeave.student).filter(
             or_(
-                func.lower(Student.nume).like(search_pattern),
-                func.lower(Student.prenume).like(search_pattern),
+                normalize_search_expression(Student.nume).like(search_pattern),
+                normalize_search_expression(Student.prenume).like(search_pattern),
             )
         )
 
@@ -4696,13 +4693,12 @@ def admin_list_weekend_leaves():
     ).strip()  # This is the Friday
 
     if search_student_name:
-        # Aplicăm unidecode doar pe input, nu pe coloane SQL
-        search_input = unidecode(search_student_name.lower())
+        search_input = normalize_search_text(search_student_name)
         search_pattern = f"%{search_input}%"
         query = query.join(WeekendLeave.student).filter(
             or_(
-                func.lower(Student.nume).like(search_pattern),
-                func.lower(Student.prenume).like(search_pattern),
+                normalize_search_expression(Student.nume).like(search_pattern),
+                normalize_search_expression(Student.prenume).like(search_pattern),
             )
         )
 
@@ -4770,13 +4766,12 @@ def admin_list_services():
     filter_service_date = request.args.get("filter_service_date", "").strip()
 
     if search_student_name:
-        # Aplicăm unidecode doar pe input, nu pe coloane SQL
-        search_input = unidecode(search_student_name.lower())
+        search_input = normalize_search_text(search_student_name)
         search_pattern = f"%{search_input}%"
         query = query.join(ServiceAssignment.student).filter(
             or_(
-                func.lower(Student.nume).like(search_pattern),
-                func.lower(Student.prenume).like(search_pattern),
+                normalize_search_expression(Student.nume).like(search_pattern),
+                normalize_search_expression(Student.prenume).like(search_pattern),
             )
         )
 
@@ -8539,6 +8534,37 @@ def gradat_export_weekend_leaves_word():
 
 
 # --- Management Studenți ---
+
+# Search normalization utilities
+ROMANIAN_DIACRITIC_REPLACEMENTS = (
+    ("ă", "a"),
+    ("â", "a"),
+    ("î", "i"),
+    ("ș", "s"),
+    ("ş", "s"),
+    ("ț", "t"),
+    ("ţ", "t"),
+)
+
+
+def normalize_search_expression(expr):
+    """Return a SQL expression normalized for Romanian diacritics."""
+    normalized = func.lower(expr)
+    for source, target in ROMANIAN_DIACRITIC_REPLACEMENTS:
+        normalized = func.replace(normalized, source, target)
+    return normalized
+
+
+def normalize_search_text(value):
+    """Normalize plain text using the same logic as normalize_search_expression."""
+    if not value:
+        return ""
+    normalized = value.strip().lower()
+    for source, target in ROMANIAN_DIACRITIC_REPLACEMENTS:
+        normalized = normalized.replace(source, target)
+    return normalized
+
+
 @app.route("/gradat/import_services", methods=["GET", "POST"], endpoint="gradat_page_import_services")
 @login_required
 def gradat_page_import_services():
@@ -8563,7 +8589,7 @@ def gradat_page_import_services():
         created = 0
 
         def _norm(s):
-            return unidecode((s or "").strip().lower())
+            return normalize_search_text(s)
 
         students_norm = []
         for s in students_all:
@@ -8864,13 +8890,13 @@ def list_students():
         return redirect(url_for("dashboard"))
 
     if search_term:
-        processed_search_term = unidecode(search_term.lower())
+        processed_search_term = normalize_search_text(search_term)
         search_pattern = f"%{processed_search_term}%"
         students_query = students_query.filter(
             or_(
-                func.lower(Student.nume).ilike(search_pattern),
-                func.lower(Student.prenume).ilike(search_pattern),
-                func.lower(Student.id_unic_student).ilike(search_pattern),
+                normalize_search_expression(Student.nume).like(search_pattern),
+                normalize_search_expression(Student.prenume).like(search_pattern),
+                normalize_search_expression(Student.id_unic_student).like(search_pattern),
             )
         )
 
@@ -10018,7 +10044,7 @@ def find_student_for_bulk_import(name_line, students_or_user_id):
         ).all()
     else:
         students_managed = students_or_user_id
-    name_line_norm = unidecode(name_line.lower().strip())
+    name_line_norm = normalize_search_text(name_line)
     if not name_line_norm:
         return None, "Linie nume goală."
 
@@ -10042,16 +10068,16 @@ def find_student_for_bulk_import(name_line, students_or_user_id):
         r"\s+\d{1,2}:\d{2}(-\d{1,2}:\d{2})?$", "", student_name_str_bulk
     ).strip()
 
-    normalized_search_name_bulk = unidecode(student_name_str_bulk.lower())
+    normalized_search_name_bulk = normalize_search_text(student_name_str_bulk)
 
     matched_students = []
     # Pass 1: Exact match on normalized name and rank (if rank parsed)
     for s in students_managed:
-        s_fullname_norm = unidecode(f"{s.nume} {s.prenume}".lower())
-        s_grad_norm = unidecode(s.grad_militar.lower())
+        s_fullname_norm = normalize_search_text(f"{s.nume} {s.prenume}")
+        s_grad_norm = normalize_search_text(s.grad_militar)
 
         if parsed_grad_bulk:
-            parsed_grad_bulk_norm = unidecode(parsed_grad_bulk.lower())
+            parsed_grad_bulk_norm = normalize_search_text(parsed_grad_bulk)
             if (
                 normalized_search_name_bulk == s_fullname_norm
                 and parsed_grad_bulk_norm == s_grad_norm
@@ -10075,11 +10101,11 @@ def find_student_for_bulk_import(name_line, students_or_user_id):
     if not matched_students:  # Only if Pass 1 found nothing
         potential_matches = []
         for s in students_managed:
-            s_fullname_norm = unidecode(f"{s.nume} {s.prenume}".lower())
-            s_fullname_reversed_norm = unidecode(
-                f"{s.prenume} {s.nume}".lower()
+            s_fullname_norm = normalize_search_text(f"{s.nume} {s.prenume}")
+            s_fullname_reversed_norm = normalize_search_text(
+                f"{s.prenume} {s.nume}"
             )
-            s_grad_norm = unidecode(s.grad_militar.lower())
+            s_grad_norm = normalize_search_text(s.grad_militar)
 
             # Check if normalized_search_name_bulk (name from input without rank)
             # is a substring of student's full name in either order
@@ -10090,7 +10116,7 @@ def find_student_for_bulk_import(name_line, students_or_user_id):
 
             if name_match_direct or name_match_reversed:
                 if parsed_grad_bulk:  # If rank was parsed from input
-                    parsed_grad_bulk_norm = unidecode(parsed_grad_bulk.lower())
+                    parsed_grad_bulk_norm = normalize_search_text(parsed_grad_bulk)
                     # Check for rank similarity (e.g., "sdt" vs "sdt.", "cap" vs "cap.")
                     # A simple check: if parsed rank is a substring of DB rank or vice-versa
                     if (
@@ -10910,7 +10936,7 @@ def parse_leave_line(
             break
 
     if student_name_str:  # If there's any name left after stripping rank
-        normalized_name_search = unidecode(student_name_str.lower())
+        normalized_name_search = normalize_search_text(student_name_str)
     else:  # Only rank was found, or empty string
         return (
             None,
@@ -15721,11 +15747,11 @@ def view_scoped_permissions():
     ).strip()
 
     if search_student_name:
-        search_pattern = f"%{unidecode(search_student_name.lower())}%"
+        search_pattern = f"%{normalize_search_text(search_student_name)}%"
         query = query.join(Permission.student).filter(
             or_(
-                func.lower(Student.nume).like(search_pattern),
-                func.lower(Student.prenume).like(search_pattern),
+                normalize_search_expression(Student.nume).like(search_pattern),
+                normalize_search_expression(Student.prenume).like(search_pattern),
             )
         )
     if filter_status:
@@ -15832,11 +15858,11 @@ def view_scoped_daily_leaves():
     filter_date_str = request.args.get("filter_date", "").strip()
 
     if search_student_name:
-        search_pattern = f"%{unidecode(search_student_name.lower())}%"
+        search_pattern = f"%{normalize_search_text(search_student_name)}%"
         query = query.join(DailyLeave.student).filter(
             or_(
-                func.lower(Student.nume).like(search_pattern),
-                func.lower(Student.prenume).like(search_pattern),
+                normalize_search_expression(Student.nume).like(search_pattern),
+                normalize_search_expression(Student.prenume).like(search_pattern),
             )
         )
     if filter_status:
@@ -15929,11 +15955,11 @@ def view_scoped_weekend_leaves():
     ).strip()
 
     if search_student_name:
-        search_pattern = f"%{unidecode(search_student_name.lower())}%"
+        search_pattern = f"%{normalize_search_text(search_student_name)}%"
         query = query.join(WeekendLeave.student).filter(
             or_(
-                func.lower(Student.nume).like(search_pattern),
-                func.lower(Student.prenume).like(search_pattern),
+                normalize_search_expression(Student.nume).like(search_pattern),
+                normalize_search_expression(Student.prenume).like(search_pattern),
             )
         )
     if filter_status:
@@ -16029,11 +16055,11 @@ def view_scoped_services():
     ).strip()
 
     if search_student_name:
-        search_pattern = f"%{unidecode(search_student_name.lower())}%"
+        search_pattern = f"%{normalize_search_text(search_student_name)}%"
         query = query.join(ServiceAssignment.student).filter(
             or_(
-                func.lower(Student.nume).like(search_pattern),
-                func.lower(Student.prenume).like(search_pattern),
+                normalize_search_expression(Student.nume).like(search_pattern),
+                normalize_search_expression(Student.prenume).like(search_pattern),
             )
         )
     if filter_service_type:
