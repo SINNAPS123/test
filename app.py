@@ -4383,7 +4383,7 @@ def admin_edit_student(student_id):
     if not student_to_edit:
         flash("Studentul nu a fost găsit.", "danger")
         return redirect(
-            url_for("list_students", _anchor="admin_view_params_if_any")
+            url_for("admin_list_students", _anchor="admin_view_params_if_any")
         )  # Assuming admin view of list_students
 
     details_before_edit = model_to_dict(student_to_edit)
@@ -4491,8 +4491,8 @@ def admin_edit_student(student_id):
                 "success",
             )
             return redirect(
-                url_for("list_students")
-            )  # Redirects to admin view due to session/role context
+                url_for("admin_list_students")
+            )
         except Exception as e:
             db.session.rollback()
             flash_msg = (
@@ -8730,7 +8730,7 @@ def gradat_page_import_services():
     return render_template("gradat_import_services.html", error_details=None, success_details=None)
 
 @app.route("/gradat/students")
-@app.route("/admin/students")
+@app.route("/admin/students", endpoint="admin_list_students")
 @scoped_access_required
 def list_students():
     user = get_current_user_or_scoped()
@@ -8741,7 +8741,13 @@ def list_students():
             url_for("user_login")
         )  # Or scoped_login if we can determine context
 
-    is_admin_view = user.role == "admin" and request.path.startswith("/admin/")
+    admin_endpoint = request.endpoint == "admin_list_students"
+    is_admin_view = user.role == "admin" and (
+        request.path.startswith("/admin/") or admin_endpoint
+    )
+    if user.role == "admin" and not is_admin_view:
+        # Ensure legacy links still render with the admin context
+        is_admin_view = True
     page = request.args.get("page", 1, type=int)
     per_page = 15
 
@@ -8793,26 +8799,23 @@ def list_students():
     filter_companie = request.args.get("companie", "").strip()
     filter_pluton = request.args.get("pluton", "").strip()
 
-    if is_admin_view:
+    def _apply_admin_filters(query):
         if filter_batalion:
-            students_query = students_query.filter(
-                Student.batalion == filter_batalion
-            )
+            query = query.filter(Student.batalion == filter_batalion)
         if filter_companie:
-            students_query = students_query.filter(
-                Student.companie == filter_companie
-            )
+            query = query.filter(Student.companie == filter_companie)
         if filter_pluton:
-            students_query = students_query.filter(
-                Student.pluton == filter_pluton
-            )
-        students_query = students_query.order_by(
+            query = query.filter(Student.pluton == filter_pluton)
+        return query.order_by(
             Student.batalion,
             Student.companie,
             Student.pluton,
             Student.nume,
             Student.prenume,
         )
+
+    if is_admin_view:
+        students_query = _apply_admin_filters(students_query)
     elif user.role == "gradat":
         students_query = students_query.filter_by(created_by_user_id=user.id)
         # Gradat might not need sub-filters for platoon/company as they manage specific students
@@ -8857,6 +8860,8 @@ def list_students():
             students_query = students_query.filter(
                 Student.id == -1
             )  # No results
+    elif user.role == "admin":
+        students_query = _apply_admin_filters(students_query)
     else:  # Should not happen due to @login_required and role checks in other views
         flash(
             "Rol utilizator necunoscut pentru listarea studenților.", "danger"

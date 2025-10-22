@@ -184,7 +184,7 @@
                             <a class="btn btn-sm btn-outline-light" href="{{ url_for('list_situations') }}">Situații</a>
                         {% elif current_user.role == 'admin' %}
                              <a class="btn btn-sm btn-outline-light" href="{{ url_for('admin_dashboard_route') }}">Management Utilizatori</a>
-                             <a class="btn btn-sm btn-outline-light" href="{{ url_for('list_students') }}">Listă Studenți</a>
+                             <a class="btn btn-sm btn-outline-light" href="{{ url_for('admin_list_students') }}">Listă Studenți</a>
                              <a class="btn btn-sm btn-outline-light" href="{{ url_for('admin_insights') }}">Insights Sistem</a>
                              <a class="btn btn-sm btn-outline-light" href="{{ url_for('morning_invigoration_report') }}">Raport Înviorare</a>
                         {% elif current_user.role == 'comandant_companie' %}

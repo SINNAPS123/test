@@ -10,7 +10,7 @@
         <h2>
             Editare Student <span class="badge bg-info">Admin</span>
         </h2>
-        <a href="{{ url_for('list_students') }}" class="btn btn-sm btn-outline-secondary"> {# Assumes list_students handles admin context #}
+        <a href="{{ url_for('admin_list_students') }}" class="btn btn-sm btn-outline-secondary">
             <i class="fas fa-arrow-left me-1"></i> Înapoi la Listă Studenți (Admin)
         </a>
     </div>
@@ -140,7 +140,7 @@
 
                         <hr>
                         <div class="d-flex justify-content-between">
-                            <a href="{{ url_for('list_students') }}" class="btn btn-outline-secondary">
+                            <a href="{{ url_for('admin_list_students') }}" class="btn btn-outline-secondary">
                                 <i class="fas fa-times me-1"></i> Anulare
                             </a>
                             <button type="submit" class="btn btn-primary">
